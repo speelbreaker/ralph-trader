@@ -23,8 +23,12 @@ count_blocked() {
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' | wc -l | tr -d ' '
 }
 
-latest_blocked() {
-  ls -dt "$WORKTREE/.ralph"/blocked_* 2>/dev/null | head -n 1 || true
+count_blocked_incomplete() {
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_incomplete_*' | wc -l | tr -d ' '
+}
+
+latest_blocked_incomplete() {
+  ls -dt "$WORKTREE/.ralph"/blocked_incomplete_* 2>/dev/null | head -n 1 || true
 }
 
 write_valid_prd() {
@@ -181,6 +185,7 @@ run_in_worktree mkdir -p .ralph
 invalid_prd="$WORKTREE/.ralph/invalid_prd.json"
 write_invalid_prd "$invalid_prd"
 before_blocked="$(count_blocked)"
+before_blocked_incomplete="$(count_blocked_incomplete)"
 set +e
 run_in_worktree env PRD_FILE="$invalid_prd" PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" RPH_DRY_RUN=1 RPH_RATE_LIMIT_ENABLED=0 RPH_SELECTION_MODE=harness ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
@@ -257,11 +262,12 @@ if [[ "$after_blocked" -le "$before_blocked" ]]; then
   echo "FAIL: expected blocked artifact for premature COMPLETE" >&2
   exit 1
 fi
-latest_block="$(latest_blocked)"
-if [[ -z "$latest_block" || "$(basename "$latest_block")" != blocked_incomplete_* ]]; then
+after_blocked_incomplete="$(count_blocked_incomplete)"
+if [[ "$after_blocked_incomplete" -le "$before_blocked_incomplete" ]]; then
   echo "FAIL: expected blocked_incomplete_* artifact for premature COMPLETE" >&2
   exit 1
 fi
+latest_block="$(latest_blocked_incomplete)"
 reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
 if [[ "$reason" != "incomplete_completion" ]]; then
   echo "FAIL: expected incomplete_completion reason in blocked artifact" >&2
