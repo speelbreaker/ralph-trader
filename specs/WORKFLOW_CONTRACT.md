@@ -9,7 +9,9 @@ It is separate from the trading behavior contract:
 - **Trading Behavior Contract (source of truth):** `CONTRACT.md` (or `specs/CONTRACT.md` if that is canonical)
 - **Workflow Contract (source of truth):** this file
 
-If any doc conflicts with this file, **this file wins**.
+Precedence (fail-closed):
+- Trading behavior rules: `CONTRACT.md` is canonical. If this workflow contract conflicts with `CONTRACT.md` on behavior, STOP and set needs_human_decision=true.
+- Workflow/process rules: this file is canonical. If other workflow docs conflict with this file, this file wins.
 
 ---
 
@@ -59,6 +61,9 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 2) **Verification is mandatory.**
    - Every story MUST include `./plans/verify.sh` in its `verify[]`.
    - `passes=true` is allowed ONLY after verify is green.
+   - State transition rule (enforced by harness):
+     - The Ralph harness (`plans/ralph.sh`), not the agent, is the sole authority to flip passes=false → true.
+     - Ralph MUST NOT flip passes=true unless verify_post exits 0 in the same iteration AND a contract review gate has passed (see “Contract Alignment Gate”).
 
 3) **WIP = 1.**
    - Exactly one story per iteration.
@@ -70,6 +75,9 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 5) **No cheating.**
    - Do not delete/disable tests to “make green”.
    - Do not weaken fail-closed gates or staleness rules.
+
+Observable gate requirement:
+- plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.
 
 ---
 
@@ -93,6 +101,11 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
   "items": [ ... ]
 }
 ```
+
+Schema gating (fail closed, enforced by harness preflight):
+- Ralph MUST validate required top-level keys exist: project, source, rules, items.
+- Ralph MUST validate for every item: required fields per §3 are present; acceptance has ≥ 3 entries; steps has ≥ 5 entries; verify[] contains ./plans/verify.sh.
+- Ralph MUST validate: if needs_human_decision=true then human_blocker object is present.
 
 
 Each item MUST include:
@@ -265,9 +278,11 @@ default: stop (fail closed)
 
 optional: self-heal behavior (see §5.7)
 
-5.6 Story verify requirement gate
+Baseline integrity (fail closed):
+- If verify_pre fails, Ralph MUST NOT run implementation steps.
+- If RPH_SELF_HEAL=1, Ralph MAY attempt a reset and rerun verify_pre once, but MUST stop if verify_pre remains red.
 
-If RPH_REQUIRE_STORY_VERIFY=1:
+5.6 Story verify requirement gate
 
 Ralph MUST block any story missing ./plans/verify.sh in its verify[].
 
@@ -283,11 +298,16 @@ Self-heal must never continue building new features on top of a red baseline.
 
 5.8 Completion
 
-Ralph considers the run complete if either:
+Ralph considers the run complete if and only if:
+- all PRD items have passes=true, AND
+- the most recent verify_post is green (exit code 0), AND
+- required iteration artifacts for the final iteration exist.
 
-the agent outputs the exact sentinel: <promise>COMPLETE</promise> (single line), OR
+If an agent outputs the sentinel COMPLETE, Ralph MUST treat it only as a request to check the completion conditions above.
+If completion conditions are not met, Ralph MUST stop (non-zero) and write a .ralph/blocked_incomplete_* artifact explaining why.
 
-all PRD items have passes=true
+Anti-spin safeguard (fail closed):
+- Ralph MUST support RPH_MAX_ITERS (default 50) and MUST stop with a blocked artifact when exceeded.
 
 6) Iteration Artifacts (Required for Debuggability)
 
@@ -333,6 +353,11 @@ This is mandatory even if initially performed by a human reviewer.
 
 Rule: after a story is implemented and verify_post is green, a contract check MUST occur.
 
+Enforcement (fail closed, artifact-based):
+- Each iteration with verify_post green MUST produce: .ralph/iter_*/contract_review.json
+  with fields: {"status":"pass"|"fail","contract_path":"...","notes":"..."}.
+- If the contract review artifact is missing or status="fail", Ralph MUST stop and MUST NOT flip passes=true.
+
 Acceptable implementations:
 
 ./plans/contract_check.sh (deterministic checks) + optional LLM arbiter
@@ -360,6 +385,11 @@ Either CI calls ./plans/verify.sh directly, OR
 CI mirrors it, but then ./plans/verify.sh must be updated alongside CI changes.
 
 If CI and verify drift, the repo is lying to itself. Fix drift immediately.
+
+Drift observability requirement:
+- ./plans/verify.sh MUST print a single line at start: VERIFY_SH_SHA=<hash>.
+- Ralph MUST capture this line in .ralph/iter_*/verify_pre.log and verify_post.log.
+- CI logs (or CI artifacts) MUST contain the same VERIFY_SH_SHA line for the run.
 
 9) Progress Log (Shift Handoff)
 
@@ -404,3 +434,44 @@ made here first
 reflected in scripts (plans/ralph.sh, plans/verify.sh) second
 
 enforced in CI third
+
+12) Acceptance Tests (REQUIRED)
+
+Workflow Contract Acceptance Tests (checklist)
+
+Preflight / PRD validation
+
+[ ] Running ./plans/ralph.sh with missing plans/prd.json exits non-zero and writes a .ralph/* stop artifact.
+[ ] Running ./plans/ralph.sh with invalid JSON in plans/prd.json exits non-zero before any implementation work.
+[ ] Running ./plans/ralph.sh with a PRD item missing required fields (e.g., empty contract_refs, missing verify, acceptance < 3, steps < 5, missing ./plans/verify.sh in verify[]) exits non-zero.
+
+Baseline integrity
+
+[ ] If ./plans/verify.sh fails during verify_pre, Ralph performs no implementation steps and stops (observable via .ralph/iter_*/verify_pre.log + no code diff beyond reset).
+[ ] If RPH_SELF_HEAL=1 and verify_pre remains red after one reset attempt, Ralph stops non-zero.
+
+Pass flipping integrity
+
+[ ] If any PRD item flips passes from false→true, the same iteration contains .ralph/iter_*/verify_post.log showing exit code 0.
+[ ] If .ralph/iter_*/contract_review.json is missing or has "status":"fail", Ralph does not flip passes=true and stops non-zero.
+[ ] Exactly one PRD item’s passes flips per iteration (compare .ralph/iter_*/prd_before.json vs prd_after.json).
+
+Slice gating / blocked behavior
+
+[ ] With any passes=false item in slice N, Ralph never selects an item from slice > N (observable via .ralph/iter_*/selected.json).
+[ ] If the selected story has needs_human_decision=true, Ralph stops immediately and writes .ralph/blocked_*/blocked_item.json.
+
+Completion semantics (no fail-open)
+
+[ ] If the agent outputs COMPLETE while any PRD item has passes=false, Ralph stops non-zero and writes a .ralph/blocked_incomplete_* artifact.
+[ ] Ralph only exits “complete” when all items have passes=true and the most recent verify_post is green.
+
+Anti-spin
+
+[ ] With RPH_MAX_ITERS=2, a scenario that would otherwise continue past 2 iterations stops at the limit and writes a blocked artifact documenting the stop reason.
+
+CI / verify drift observability
+
+[ ] ./plans/verify.sh emits VERIFY_SH_SHA=... as the first line.
+[ ] .ralph/iter_*/verify_pre.log and verify_post.log contain that same VERIFY_SH_SHA=....
+[ ] CI logs/artifacts for a run contain the same VERIFY_SH_SHA=... line.
