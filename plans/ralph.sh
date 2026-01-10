@@ -25,6 +25,13 @@ if [[ -z "${RPH_PROMPT_FLAG+x}" ]]; then
   RPH_PROMPT_FLAG="-p"
 fi
 RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
+RPH_RATE_LIMIT_PER_HOUR="${RPH_RATE_LIMIT_PER_HOUR:-100}"
+RPH_RATE_LIMIT_FILE="${RPH_RATE_LIMIT_FILE:-.ralph/rate_limit.json}"
+RPH_RATE_LIMIT_ENABLED="${RPH_RATE_LIMIT_ENABLED:-1}"
+RPH_CIRCUIT_BREAKER_ENABLED="${RPH_CIRCUIT_BREAKER_ENABLED:-1}"
+RPH_MAX_SAME_FAILURE="${RPH_MAX_SAME_FAILURE:-3}"
+RPH_MAX_NO_PROGRESS="${RPH_MAX_NO_PROGRESS:-2}"
+RPH_STATE_FILE="${RPH_STATE_FILE:-.ralph/state.json}"
 
 mkdir -p .ralph
 mkdir -p plans/logs
@@ -32,6 +39,7 @@ mkdir -p plans/logs
 LOG_FILE="plans/logs/ralph.$(date +%Y%m%d-%H%M%S).log"
 LAST_GOOD_FILE=".ralph/last_good_ref"
 LAST_FAIL_FILE=".ralph/last_failure_path"
+STATE_FILE="$RPH_STATE_FILE"
 
 # --- preflight ---
 command -v git >/dev/null 2>&1 || { echo "ERROR: git required"; exit 1; }
@@ -43,6 +51,15 @@ jq . "$PRD_FILE" >/dev/null 2>&1 || { echo "ERROR: $PRD_FILE invalid JSON"; exit
 # progress file exists
 mkdir -p "$(dirname "$PROGRESS_FILE")"
 [[ -f "$PROGRESS_FILE" ]] || touch "$PROGRESS_FILE"
+
+# state file exists
+mkdir -p "$(dirname "$STATE_FILE")"
+if [[ ! -f "$STATE_FILE" ]]; then
+  echo '{}' > "$STATE_FILE"
+fi
+if ! jq -e . "$STATE_FILE" >/dev/null 2>&1; then
+  echo '{}' > "$STATE_FILE"
+fi
 
 # Fail if dirty at start (keeps history clean). Override only if you KNOW what you're doing.
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -149,6 +166,136 @@ write_blocked_artifacts() {
   echo "$block_dir"
 }
 
+sha256_file() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    echo ""
+    return 0
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+  else
+    shasum -a 256 "$file" | awk '{print $1}'
+  fi
+}
+
+sha256_tail_200() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    echo ""
+    return 0
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    tail -n 200 "$file" | sha256sum | awk '{print $1}'
+  else
+    tail -n 200 "$file" | shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+state_merge() {
+  local tmp
+  tmp="$(mktemp)"
+  jq "$@" "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+}
+
+write_blocked_with_state() {
+  local reason="$1"
+  local id="$2"
+  local priority="$3"
+  local desc="$4"
+  local needs_human="$5"
+  local iter_dir="$6"
+  local block_dir
+  block_dir="$(write_blocked_artifacts "$reason" "$id" "$priority" "$desc" "$needs_human")"
+  if [[ -n "$iter_dir" && -f "$iter_dir/verify_post.log" ]]; then
+    cp "$iter_dir/verify_post.log" "$block_dir/verify_post.log" || true
+  fi
+  if [[ -f "$STATE_FILE" ]]; then
+    cp "$STATE_FILE" "$block_dir/state.json" || true
+  fi
+  echo "$block_dir"
+}
+
+update_rate_limit_state_if_present() {
+  local window_start="$1"
+  local count="$2"
+  local limit="$3"
+  local last_sleep="$4"
+  local state_file="$STATE_FILE"
+  local tmp
+  if [[ -f "$state_file" ]]; then
+    tmp="$(mktemp)"
+    jq \
+      --argjson window_start_epoch "$window_start" \
+      --argjson count "$count" \
+      --argjson limit "$limit" \
+      --argjson last_sleep_seconds "$last_sleep" \
+      '.rate_limit = {window_start_epoch: $window_start_epoch, count: $count, limit: $limit, last_sleep_seconds: $last_sleep_seconds}' \
+      "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+  fi
+}
+
+rate_limit_before_call() {
+  if [[ "$RPH_RATE_LIMIT_ENABLED" != "1" ]]; then
+    return 0
+  fi
+
+  local now
+  local limit
+  local window_start
+  local count
+  local sleep_secs
+
+  now="$(date +%s)"
+  limit="$RPH_RATE_LIMIT_PER_HOUR"
+  if ! [[ "$limit" =~ ^[0-9]+$ ]] || [[ "$limit" -lt 1 ]]; then
+    limit=100
+  fi
+
+  mkdir -p "$(dirname "$RPH_RATE_LIMIT_FILE")"
+  if [[ ! -f "$RPH_RATE_LIMIT_FILE" ]]; then
+    jq -n --argjson now "$now" '{window_start_epoch: $now, count: 0}' > "$RPH_RATE_LIMIT_FILE"
+  fi
+  if ! jq -e . "$RPH_RATE_LIMIT_FILE" >/dev/null 2>&1; then
+    jq -n --argjson now "$now" '{window_start_epoch: $now, count: 0}' > "$RPH_RATE_LIMIT_FILE"
+  fi
+
+  window_start="$(jq -r '.window_start_epoch // 0' "$RPH_RATE_LIMIT_FILE")"
+  count="$(jq -r '.count // 0' "$RPH_RATE_LIMIT_FILE")"
+  if ! [[ "$window_start" =~ ^[0-9]+$ ]]; then window_start=0; fi
+  if ! [[ "$count" =~ ^[0-9]+$ ]]; then count=0; fi
+
+  if (( window_start <= 0 )); then
+    window_start="$now"
+    count=0
+  fi
+  if (( now - window_start >= 3600 )); then
+    window_start="$now"
+    count=0
+  fi
+
+  sleep_secs=0
+  if (( count >= limit )); then
+    sleep_secs=$(( (window_start + 3600 - now) + 2 ))
+    if (( sleep_secs < 0 )); then sleep_secs=0; fi
+    echo "RateLimit: sleeping ${sleep_secs}s (count=${count} limit=${limit})" | tee -a "$LOG_FILE"
+    if [[ "$RPH_DRY_RUN" != "1" ]]; then
+      sleep "$sleep_secs"
+    fi
+    now="$(date +%s)"
+    window_start="$now"
+    count=0
+  fi
+
+  count=$((count + 1))
+  jq -n \
+    --argjson window_start_epoch "$window_start" \
+    --argjson count "$count" \
+    '{window_start_epoch: $window_start_epoch, count: $count}' \
+    > "$RPH_RATE_LIMIT_FILE"
+  update_rate_limit_state_if_present "$window_start" "$count" "$limit" "$sleep_secs"
+}
+
 # --- main loop ---
 for ((i=1; i<=MAX_ITERS; i++)); do
   rotate_progress
@@ -159,6 +306,8 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   echo "Artifacts: $ITER_DIR" | tee -a "$LOG_FILE"
 
   save_iter_artifacts "$ITER_DIR"
+  HEAD_BEFORE="$(git rev-parse HEAD)"
+  PRD_HASH_BEFORE="$(sha256_file "$PRD_FILE")"
 
   ACTIVE_SLICE="$(jq -r '
     def items:
@@ -170,9 +319,30 @@ for ((i=1; i<=MAX_ITERS; i++)); do
     exit 0
   fi
 
+  LAST_FAILURE_HASH="$(jq -r '.last_failure_hash // empty' "$STATE_FILE" 2>/dev/null || true)"
+  LAST_FAILURE_STREAK="$(jq -r '.last_failure_streak // 0' "$STATE_FILE" 2>/dev/null || echo 0)"
+  NO_PROGRESS_STREAK="$(jq -r '.no_progress_streak // 0' "$STATE_FILE" 2>/dev/null || echo 0)"
+  if ! [[ "$LAST_FAILURE_STREAK" =~ ^[0-9]+$ ]]; then LAST_FAILURE_STREAK=0; fi
+  if ! [[ "$NO_PROGRESS_STREAK" =~ ^[0-9]+$ ]]; then NO_PROGRESS_STREAK=0; fi
+
   if [[ "$RPH_SELECTION_MODE" != "harness" && "$RPH_SELECTION_MODE" != "agent" ]]; then
     RPH_SELECTION_MODE="harness"
   fi
+
+  ACTIVE_SLICE_JSON="null"
+  if [[ -n "$ACTIVE_SLICE" ]]; then ACTIVE_SLICE_JSON="$ACTIVE_SLICE"; fi
+  LAST_GOOD_REF="$(cat "$LAST_GOOD_FILE" 2>/dev/null || true)"
+  state_merge \
+    --argjson iteration "$i" \
+    --argjson active_slice "$ACTIVE_SLICE_JSON" \
+    --arg selection_mode "$RPH_SELECTION_MODE" \
+    --arg iter_dir "$ITER_DIR" \
+    --arg last_good_ref "$LAST_GOOD_REF" \
+    '.iteration=$iteration | .active_slice=$active_slice | .selection_mode=$selection_mode | .last_iter_dir=$iter_dir | .last_good_ref=$last_good_ref'
+  state_merge \
+    --arg head_before "$HEAD_BEFORE" \
+    --arg prd_hash_before "$PRD_HASH_BEFORE" \
+    '.head_before=$head_before | .prd_hash_before=$prd_hash_before'
 
   NEXT_ITEM_JSON=""
   NEXT_ID=""
@@ -201,8 +371,10 @@ PROMPT
     SEL_OUT="${ITER_DIR}/selection.out"
     set +e
     if [[ -n "$RPH_PROMPT_FLAG" ]]; then
+      rate_limit_before_call
       ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     else
+      rate_limit_before_call
       ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     fi
     set -e
@@ -243,6 +415,16 @@ PROMPT
     --argjson needs_human_decision "$NEXT_NEEDS_HUMAN" \
     '{active_slice: $active_slice, selection_mode: $selection_mode, selected_id: $selected_id, selected_description: $selected_description, needs_human_decision: $needs_human_decision}' \
     > "${ITER_DIR}/selected.json"
+
+  NEEDS_HUMAN_JSON="$NEXT_NEEDS_HUMAN"
+  if [[ "$NEEDS_HUMAN_JSON" != "true" && "$NEEDS_HUMAN_JSON" != "false" ]]; then
+    NEEDS_HUMAN_JSON="false"
+  fi
+  state_merge \
+    --arg selected_id "$NEXT_ID" \
+    --arg selected_description "$NEXT_DESC" \
+    --argjson needs_human_decision "$NEEDS_HUMAN_JSON" \
+    '.selected_id=$selected_id | .selected_description=$selected_description | .needs_human_decision=$needs_human_decision'
 
   if [[ -z "$NEXT_ITEM_JSON" ]]; then
     BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
@@ -295,7 +477,18 @@ PROMPT
     exit 3
   fi
 
-  if ! run_verify "${ITER_DIR}/verify_pre.log"; then
+  verify_pre_rc=0
+  if run_verify "${ITER_DIR}/verify_pre.log"; then
+    verify_pre_rc=0
+  else
+    verify_pre_rc=$?
+  fi
+  state_merge \
+    --argjson last_verify_pre_rc "$verify_pre_rc" \
+    --arg verify_pre_log "${ITER_DIR}/verify_pre.log" \
+    '.last_verify_pre_rc=$last_verify_pre_rc | .last_verify_pre_log=$verify_pre_log'
+
+  if (( verify_pre_rc != 0 )); then
     echo "Baseline verify failed." | tee -a "$LOG_FILE"
 
     if [[ "$RPH_SELF_HEAL" == "1" ]]; then
@@ -303,7 +496,18 @@ PROMPT
       if ! revert_to_last_good; then exit 4; fi
 
       # Re-run baseline verify after revert
-      if ! run_verify "${ITER_DIR}/verify_pre_after_heal.log"; then
+      verify_pre_after_rc=0
+      if run_verify "${ITER_DIR}/verify_pre_after_heal.log"; then
+        verify_pre_after_rc=0
+      else
+        verify_pre_after_rc=$?
+      fi
+      state_merge \
+        --argjson last_verify_pre_after_rc "$verify_pre_after_rc" \
+        --arg verify_pre_after_log "${ITER_DIR}/verify_pre_after_heal.log" \
+        '.last_verify_pre_after_rc=$last_verify_pre_after_rc | .last_verify_pre_after_log=$verify_pre_after_log'
+
+      if (( verify_pre_after_rc != 0 )); then
         echo "Baseline still failing after self-heal. Stop." | tee -a "$LOG_FILE"
         exit 5
       fi
@@ -357,34 +561,133 @@ PROMPT
 
   set +e
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
+    rate_limit_before_call
     ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
   else
+    rate_limit_before_call
     ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
   fi
   AGENT_RC=${PIPESTATUS[0]}
   set -e
   echo "Agent exit code: $AGENT_RC" | tee -a "$LOG_FILE"
 
+  HEAD_AFTER="$(git rev-parse HEAD)"
+  PRD_HASH_AFTER="$(sha256_file "$PRD_FILE")"
+  PROGRESS_MADE=0
+  if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" || "$PRD_HASH_AFTER" != "$PRD_HASH_BEFORE" ]]; then
+    PROGRESS_MADE=1
+  fi
+
   # 4) Post-verify
-  if ! run_verify "${ITER_DIR}/verify_post.log"; then
+  verify_post_rc=0
+  if run_verify "${ITER_DIR}/verify_post.log"; then
+    verify_post_rc=0
+  else
+    verify_post_rc=$?
+  fi
+  state_merge \
+    --argjson last_verify_post_rc "$verify_post_rc" \
+    --arg verify_post_log "${ITER_DIR}/verify_post.log" \
+    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log'
+
+  POST_VERIFY_FAILED=0
+  POST_VERIFY_EXIT=0
+  POST_VERIFY_CONTINUE=0
+  if (( verify_post_rc != 0 )); then
+    POST_VERIFY_FAILED=1
     echo "Post-iteration verify failed." | tee -a "$LOG_FILE"
     save_iter_after "$ITER_DIR"
     echo "$ITER_DIR" > "$LAST_FAIL_FILE"
+
+    FAILURE_SIG="$(sha256_tail_200 "${ITER_DIR}/verify_post.log")"
+    if [[ -n "$FAILURE_SIG" && "$FAILURE_SIG" == "$LAST_FAILURE_HASH" ]]; then
+      LAST_FAILURE_STREAK=$((LAST_FAILURE_STREAK + 1))
+    else
+      LAST_FAILURE_HASH="$FAILURE_SIG"
+      LAST_FAILURE_STREAK=1
+    fi
+    state_merge \
+      --arg last_failure_hash "$LAST_FAILURE_HASH" \
+      --argjson last_failure_streak "$LAST_FAILURE_STREAK" \
+      '.last_failure_hash=$last_failure_hash | .last_failure_streak=$last_failure_streak'
+
+    MAX_SAME_FAILURE="$RPH_MAX_SAME_FAILURE"
+    if ! [[ "$MAX_SAME_FAILURE" =~ ^[0-9]+$ ]] || [[ "$MAX_SAME_FAILURE" -lt 1 ]]; then
+      MAX_SAME_FAILURE=3
+    fi
+
+    if [[ "$RPH_CIRCUIT_BREAKER_ENABLED" == "1" && "$LAST_FAILURE_STREAK" -ge "$MAX_SAME_FAILURE" ]]; then
+      if [[ "$RPH_DRY_RUN" == "1" ]]; then
+        echo "DRY RUN: would block for circuit breaker (streak=${LAST_FAILURE_STREAK} max=${MAX_SAME_FAILURE})" | tee -a "$LOG_FILE"
+      else
+        BLOCK_DIR="$(write_blocked_with_state "circuit_breaker" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+        echo "<promise>BLOCKED_CIRCUIT_BREAKER</promise>" | tee -a "$LOG_FILE"
+        echo "Blocked: circuit breaker in $BLOCK_DIR" | tee -a "$LOG_FILE"
+        exit 0
+      fi
+    fi
 
     if [[ "$RPH_SELF_HEAL" == "1" ]]; then
       # If agent committed a broken state, rollback to last known green
       if ! revert_to_last_good; then exit 7; fi
       echo "Rolled back to last good; continuing." | tee -a "$LOG_FILE"
-      continue
+      POST_VERIFY_CONTINUE=1
     else
       echo "Fail-closed: stop. Fix the failure then rerun." | tee -a "$LOG_FILE"
+      POST_VERIFY_EXIT=1
+    fi
+  else
+    LAST_FAILURE_HASH=""
+    LAST_FAILURE_STREAK=0
+    state_merge \
+      --arg last_failure_hash "$LAST_FAILURE_HASH" \
+      --argjson last_failure_streak "$LAST_FAILURE_STREAK" \
+      '.last_failure_hash=$last_failure_hash | .last_failure_streak=$last_failure_streak'
+  fi
+
+  if (( PROGRESS_MADE == 1 )); then
+    NO_PROGRESS_STREAK=0
+  else
+    NO_PROGRESS_STREAK=$((NO_PROGRESS_STREAK + 1))
+  fi
+  state_merge \
+    --arg head_after "$HEAD_AFTER" \
+    --arg prd_hash_after "$PRD_HASH_AFTER" \
+    --argjson last_progress "$PROGRESS_MADE" \
+    --argjson no_progress_streak "$NO_PROGRESS_STREAK" \
+    '.head_after=$head_after | .prd_hash_after=$prd_hash_after | .last_progress=$last_progress | .no_progress_streak=$no_progress_streak'
+
+  MAX_NO_PROGRESS="$RPH_MAX_NO_PROGRESS"
+  if ! [[ "$MAX_NO_PROGRESS" =~ ^[0-9]+$ ]] || [[ "$MAX_NO_PROGRESS" -lt 1 ]]; then
+    MAX_NO_PROGRESS=2
+  fi
+
+  if [[ "$RPH_CIRCUIT_BREAKER_ENABLED" == "1" && "$NO_PROGRESS_STREAK" -ge "$MAX_NO_PROGRESS" ]]; then
+    if [[ "$RPH_DRY_RUN" == "1" ]]; then
+      echo "DRY RUN: would block for no progress (streak=${NO_PROGRESS_STREAK} max=${MAX_NO_PROGRESS})" | tee -a "$LOG_FILE"
+    else
+      BLOCK_DIR="$(write_blocked_with_state "no_progress" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+      echo "<promise>BLOCKED_NO_PROGRESS</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: no progress in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 0
+    fi
+  fi
+
+  if (( POST_VERIFY_FAILED == 1 )); then
+    if (( POST_VERIFY_EXIT == 1 )); then
       exit 8
+    fi
+    if (( POST_VERIFY_CONTINUE == 1 )); then
+      continue
     fi
   fi
 
   # 5) If green, update last_good_ref
   git rev-parse HEAD > "$LAST_GOOD_FILE"
   rm -f "$LAST_FAIL_FILE" || true
+  state_merge \
+    --arg last_good_ref "$HEAD_AFTER" \
+    '.last_good_ref=$last_good_ref'
 
   save_iter_after "$ITER_DIR"
 

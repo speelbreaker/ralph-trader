@@ -1,5 +1,14 @@
 # Agent Guide (High-Signal)
 
+## Non-negotiable: Contract Alignment
+- Every code change MUST be 100% aligned with CONTRACT.md.
+- If any instruction, story, or implementation detail conflicts with CONTRACT.md:
+  - STOP immediately
+  - output: <promise>BLOCKED_CONTRACT_CONFLICT</promise>
+  - explain the conflict and what contract section it violates
+- NEVER “fix” a conflict by weakening gates, staleness rules, evidence requirements, or tests.
+- If uncertain which contract section applies, treat it as needs_human_decision and stop.
+
 ## Modes
 - Plan Mode is mandatory for non-trivial changes.
 - Plan mode first; execution second.
