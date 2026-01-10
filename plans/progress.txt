@@ -17,3 +17,6 @@
 - S1-004: added OrderSize canonical sizing with deterministic notional_usd, execution module wiring, and order size tests.
 - Commands: ./plans/init.sh; ./plans/verify.sh full (fails fmt); cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-004 true.
 - Next: proceed to S1-005.
+- S1-005: mapped OrderSize to Deribit amount selection, added mismatch rejection counter + tests for amount mapping and contract mismatch.
+- Commands: ./plans/verify.sh full; ./plans/update_task.sh S1-005 true.
+- Next: proceed to S1-006.

@@ -339,7 +339,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2-000",
