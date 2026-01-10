@@ -13,20 +13,28 @@ trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-extract_iter_dir() {
-  local out_file="$1"
-  local iter
-  iter="$(grep -oE '\\.ralph/iter_[^ ]+' "$out_file" | tail -n1 || true)"
-  [[ -n "$iter" ]] || return 1
-  echo "$ROOT/$iter"
-}
-
 find_recent_blocked() {
   local start_ts="$1"
   local latest=""
   local latest_m=0
   local dir m
   for dir in .ralph/blocked_*; do
+    [[ -d "$dir" ]] || continue
+    m="$(stat -f %m "$dir" 2>/dev/null || echo 0)"
+    if (( m >= start_ts && m >= latest_m )); then
+      latest_m=$m
+      latest="$dir"
+    fi
+  done
+  [[ -n "$latest" ]] && echo "$latest"
+}
+
+find_recent_iter() {
+  local start_ts="$1"
+  local latest=""
+  local latest_m=0
+  local dir m
+  for dir in .ralph/iter_*; do
     [[ -d "$dir" ]] || continue
     m="$(stat -f %m "$dir" 2>/dev/null || echo 0)"
     if (( m >= start_ts && m >= latest_m )); then
@@ -53,10 +61,12 @@ EOF
 chmod +x "$TMP_DIR/select_agent.sh"
 
 out1="$TMP_DIR/out1.txt"
+start_ts="$(date +%s)"
 RPH_SELECTION_MODE=agent RPH_DRY_RUN=1 RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" RPH_AGENT_ARGS= RPH_PROMPT_FLAG= \
   PRD_FILE="$TMP_DIR/prd1.json" PROGRESS_FILE="$TMP_DIR/progress1.txt" ./plans/ralph.sh 1 >"$out1" 2>&1 || fail "test1 non-zero exit"
 grep -q "DRY RUN: would run A1 - first" "$out1" || fail "test1 missing dry-run output"
-iter_dir="$(extract_iter_dir "$out1")" || fail "test1 missing iter dir"
+iter_dir="$(find_recent_iter "$start_ts")"
+[[ -n "$iter_dir" ]] || fail "test1 missing iter dir"
 jq -e '.active_slice==1 and .selection_mode=="agent" and .selected_id=="A1"' "$iter_dir/selected.json" >/dev/null \
   || fail "test1 selected.json mismatch"
 
