@@ -15,6 +15,8 @@ ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choice)
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
+RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
+RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-claude}"       # claude|codex|opencode|etc
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
   RPH_AGENT_ARGS="--permission-mode acceptEdits"
@@ -101,10 +103,20 @@ revert_to_last_good() {
 }
 
 select_next_item() {
-  jq -c '
+  local slice="$1"
+  jq -c --argjson s "$slice" '
     def items:
       if type=="array" then . else (.items // []) end;
-    items | map(select(.passes==false)) | sort_by(.priority) | reverse | .[0] // empty
+    items | map(select(.passes==false and .slice==$s)) | sort_by(.priority) | reverse | .[0] // empty
+  ' "$PRD_FILE"
+}
+
+item_by_id() {
+  local id="$1"
+  jq -c --arg id "$id" '
+    def items:
+      if type=="array" then . else (.items // []) end;
+    items[] | select(.id==$id)
   ' "$PRD_FILE"
 }
 
@@ -114,6 +126,27 @@ all_items_passed() {
       if type=="array" then . else (.items // []) end;
     (items | length) > 0 and all(items[]; .passes == true)
   ' "$PRD_FILE" >/dev/null
+}
+
+write_blocked_artifacts() {
+  local reason="$1"
+  local id="$2"
+  local priority="$3"
+  local desc="$4"
+  local needs_human="$5"
+  local block_dir
+  block_dir=".ralph/blocked_$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$block_dir"
+  cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true
+  jq -n \
+    --arg reason "$reason" \
+    --arg id "$id" \
+    --argjson priority "$priority" \
+    --arg description "$desc" \
+    --argjson needs_human_decision "$needs_human" \
+    '{reason: $reason, id: $id, priority: $priority, description: $description, needs_human_decision: $needs_human_decision}' \
+    > "$block_dir/blocked_item.json"
+  echo "$block_dir"
 }
 
 # --- main loop ---
@@ -127,38 +160,127 @@ for ((i=1; i<=MAX_ITERS; i++)); do
 
   save_iter_artifacts "$ITER_DIR"
 
-  NEXT_ITEM_JSON="$(select_next_item)"
-  if [[ -z "$NEXT_ITEM_JSON" ]]; then
+  ACTIVE_SLICE="$(jq -r '
+    def items:
+      if type=="array" then . else (.items // []) end;
+    [items[] | select(.passes==false) | .slice] | min // empty
+  ' "$PRD_FILE")"
+  if [[ -z "$ACTIVE_SLICE" ]]; then
     echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
     exit 0
   fi
 
-  NEXT_ID="$(jq -r '.id // empty' <<<"$NEXT_ITEM_JSON")"
-  NEXT_PRIORITY="$(jq -r '.priority // 0' <<<"$NEXT_ITEM_JSON")"
-  NEXT_DESC="$(jq -r '.description // ""' <<<"$NEXT_ITEM_JSON")"
-  NEXT_NEEDS_HUMAN="$(jq -r '.needs_human_decision // false' <<<"$NEXT_ITEM_JSON")"
+  if [[ "$RPH_SELECTION_MODE" != "harness" && "$RPH_SELECTION_MODE" != "agent" ]]; then
+    RPH_SELECTION_MODE="harness"
+  fi
+
+  NEXT_ITEM_JSON=""
+  NEXT_ID=""
+  NEXT_PRIORITY=0
+  NEXT_DESC=""
+  NEXT_NEEDS_HUMAN=false
+
+  if [[ "$RPH_SELECTION_MODE" == "agent" ]]; then
+    CANDIDATE_LINES="$(jq -r --argjson s "$ACTIVE_SLICE" '
+      def items:
+        if type=="array" then . else (.items // []) end;
+      items[] | select(.passes==false and .slice==$s) | "\(.id) - \(.description)"
+    ' "$PRD_FILE")"
+
+    IFS= read -r -d '' SEL_PROMPT <<PROMPT || true
+@${PRD_FILE} @${PROGRESS_FILE}
+
+Active slice: ${ACTIVE_SLICE}
+Candidates:
+${CANDIDATE_LINES}
+
+Output ONLY:
+<selected_id>ITEM_ID</selected_id>
+PROMPT
+
+    SEL_OUT="${ITER_DIR}/selection.out"
+    set +e
+    if [[ -n "$RPH_PROMPT_FLAG" ]]; then
+      ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+    else
+      ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+    fi
+    set -e
+
+    sel_line=""
+    has_extra=0
+    {
+      IFS= read -r sel_line || true
+      if IFS= read -r _; then
+        has_extra=1
+      fi
+    } < "$SEL_OUT"
+    sel_line="${sel_line//$'\r'/}"
+
+    if [[ "$has_extra" -eq 0 && "$sel_line" =~ ^<selected_id>[^<]+</selected_id>$ ]]; then
+      NEXT_ID="${sel_line#<selected_id>}"
+      NEXT_ID="${NEXT_ID%</selected_id>}"
+      NEXT_ITEM_JSON="$(item_by_id "$NEXT_ID")"
+    fi
+  else
+    NEXT_ITEM_JSON="$(select_next_item "$ACTIVE_SLICE")"
+    if [[ -n "$NEXT_ITEM_JSON" ]]; then
+      NEXT_ID="$(jq -r '.id // empty' <<<"$NEXT_ITEM_JSON")"
+    fi
+  fi
+
+  if [[ -n "$NEXT_ITEM_JSON" ]]; then
+    NEXT_PRIORITY="$(jq -r '.priority // 0' <<<"$NEXT_ITEM_JSON")"
+    NEXT_DESC="$(jq -r '.description // ""' <<<"$NEXT_ITEM_JSON")"
+    NEXT_NEEDS_HUMAN="$(jq -r '.needs_human_decision // false' <<<"$NEXT_ITEM_JSON")"
+  fi
+
+  jq -n \
+    --argjson active_slice "$ACTIVE_SLICE" \
+    --arg selection_mode "$RPH_SELECTION_MODE" \
+    --arg selected_id "$NEXT_ID" \
+    --arg selected_description "$NEXT_DESC" \
+    --argjson needs_human_decision "$NEXT_NEEDS_HUMAN" \
+    '{active_slice: $active_slice, selection_mode: $selection_mode, selected_id: $selected_id, selected_description: $selected_description, needs_human_decision: $needs_human_decision}' \
+    > "${ITER_DIR}/selected.json"
+
+  if [[ -z "$NEXT_ITEM_JSON" ]]; then
+    BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+    echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked selection: $NEXT_ID" | tee -a "$LOG_FILE"
+    exit 0
+  fi
+
+  if [[ "$RPH_SELECTION_MODE" == "agent" ]]; then
+    SEL_SLICE="$(jq -r '.slice // empty' <<<"$NEXT_ITEM_JSON")"
+    SEL_PASSES="$(jq -r '.passes // true' <<<"$NEXT_ITEM_JSON")"
+    if [[ -z "$NEXT_ID" || -z "$NEXT_ITEM_JSON" || "$SEL_PASSES" != "false" || "$SEL_SLICE" != "$ACTIVE_SLICE" ]]; then
+      BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+      echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked selection: $NEXT_ID" | tee -a "$LOG_FILE"
+      exit 0
+    fi
+  fi
 
   if [[ "$NEXT_NEEDS_HUMAN" == "true" ]]; then
-    BLOCK_DIR=".ralph/blocked_$(date +%Y%m%d-%H%M%S)"
-    mkdir -p "$BLOCK_DIR"
-    cp "$PRD_FILE" "$BLOCK_DIR/prd_snapshot.json" || true
-    jq -n \
-      --arg id "$NEXT_ID" \
-      --argjson priority "$NEXT_PRIORITY" \
-      --arg description "$NEXT_DESC" \
-      --argjson needs_human_decision true \
-      '{id: $id, priority: $priority, description: $description, needs_human_decision: $needs_human_decision}' \
-      > "$BLOCK_DIR/blocked_item.json"
-
+    BLOCK_DIR="$(write_blocked_artifacts "needs_human_decision" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" true)"
     if [[ "$RPH_DRY_RUN" != "1" ]]; then
       if [[ -x "$VERIFY_SH" ]]; then
         run_verify "$BLOCK_DIR/verify_pre.log" || true
       fi
     fi
-
     echo "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" | tee -a "$LOG_FILE"
     echo "Blocked item: $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
     exit 0
+  fi
+
+  if [[ "$RPH_REQUIRE_STORY_VERIFY" == "1" ]]; then
+    if ! jq -e '(.verify // []) | index("./plans/verify.sh") != null' <<<"$NEXT_ITEM_JSON" >/dev/null; then
+      BLOCK_DIR="$(write_blocked_artifacts "missing_verify_sh_in_story" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+      echo "<promise>BLOCKED_MISSING_VERIFY_SH_IN_STORY</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked item: $NEXT_ID - missing ./plans/verify.sh in verify[]" | tee -a "$LOG_FILE"
+      exit 0
+    fi
   fi
 
   if [[ "$RPH_DRY_RUN" == "1" ]]; then
