@@ -1,473 +1,317 @@
 {
-    "project": "StoicTrader",
-    "source": {
-        "implementation_plan_path": "IMPLEMENTATION_PLAN.md"
+  "project": "StoicTrader",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true,
+    "contract_refs_required": true
+  },
+  "items": [
+    {
+      "id": "S1-000",
+      "priority": 100,
+      "phase": 1,
+      "slice": 0,
+      "slice_ref": "Bootstrap",
+      "story_ref": "Setup",
+      "category": "ops",
+      "description": "Validate existing plans/verify.sh as the canonical verification script.",
+      "scope": {
+        "touch": [
+          "plans/verify.sh"
+        ],
+        "avoid": [
+          "crates/**"
+        ]
+      },
+      "acceptance": [
+        "plans/verify.sh exists and is executable",
+        "plans/verify.sh runs successfully"
+      ],
+      "steps": [
+        "Review existing plans/verify.sh contents against the CI gates",
+        "Update plans/verify.sh if it diverges from the canonical CI gates",
+        "Ensure plans/verify.sh is executable"
+      ],
+      "verify": [
+        "bash -n plans/verify.sh",
+        "chmod +x plans/verify.sh",
+        "./plans/verify.sh"
+      ],
+      "evidence": [
+        "Execution output of ./plans/verify.sh"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_refs": [
+        "CONTRACT.md (general)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+      ]
     },
-    "rules": {
-        "one_story_per_iteration": true,
-        "one_commit_per_story": true,
-        "no_prd_rewrite": true,
-        "passes_only_flips_after_verify_green": true
+    {
+      "id": "S1-001",
+      "priority": 90,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "S1.0",
+      "category": "ops",
+      "description": "Initialize Rust workspace with soldier_core and soldier_infra crates.",
+      "scope": {
+        "touch": [
+          "Cargo.toml",
+          "crates/soldier_core/**",
+          "crates/soldier_infra/**",
+          "plans/verify.sh"
+        ],
+        "avoid": [
+          "src/**"
+        ]
+      },
+      "acceptance": [
+        "Workspace builds successfully",
+        "Tests pass (empty test suite)"
+      ],
+      "steps": [
+        "Create 'crates' directory",
+        "Initialize 'crates/soldier_core' as a library",
+        "Initialize 'crates/soldier_infra' as a library",
+        "Create root 'Cargo.toml' defining the workspace",
+        "Update 'plans/verify.sh' to run 'cargo test --workspace'"
+      ],
+      "verify": [
+        "./plans/verify.sh"
+      ],
+      "evidence": [
+        "Output of cargo test --workspace"
+      ],
+      "dependencies": [
+        "S1-000"
+      ],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_refs": [
+        "CONTRACT.md (general)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+      ]
     },
-    "items": [
-        {
-            "id": "S1-000",
-            "priority": 100,
-            "phase": 1,
-            "slice": 1,
-            "slice_ref": "Slice 1 - Instrument Units + Dispatcher Invariants",
-            "story_ref": "S1-000 Bootstrap verify script",
-            "category": "workflow",
-            "description": "Create plans/verify.sh that mirrors repo CI gates and is executable (read CI config, do not modify it).",
-            "scope": {
-                "touch": [
-                    "plans/verify.sh"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN the repo CI configuration WHEN verify.sh is generated THEN it mirrors CI gates and order",
-                "GIVEN verify.sh is created WHEN executed THEN it is executable and fails fast",
-                "GIVEN .github/workflows are read for CI gates WHEN generating verify.sh THEN no CI config is modified",
-                "GIVEN CI gates cannot be determined with high confidence WHEN drafting verify.sh THEN output exactly <promise>BLOCKED_CI_COMMANDS</promise> and do not mark passes=true"
-            ],
-            "steps": [
-                "Read .github/workflows/* to determine CI gates and order.",
-                "Read Makefile/Taskfile and scripts/ for test/format/lint entrypoints.",
-                "Read docs/ and README for CI guidance.",
-                "Draft plans/verify.sh with fail-fast shell settings and the CI gate order.",
-                "If CI gates are unclear, emit the required BLOCKED promise and stop."
-            ],
-            "verify": [
-                "bash -n plans/verify.sh",
-                "chmod +x plans/verify.sh",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "plans/verify.sh exists with CI gate order and fail-fast settings",
-                "Command output from bash -n plans/verify.sh"
-            ],
-            "dependencies": [],
-            "est_size": "XS",
-            "risk": "low",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S1-001a",
-            "priority": 92,
-            "phase": 1,
-            "slice": 1,
-            "slice_ref": "Slice 1 - Instrument Units + Dispatcher Invariants",
-            "story_ref": "S1.1a InstrumentKind derivation",
-            "category": "execution",
-            "description": "Derive InstrumentKind from venue metadata and treat linear perpetuals as linear_future.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/venue/**",
-                    "crates/soldier_infra/deribit/public/**",
-                    "crates/soldier_core/tests/test_instrument_kind_mapping.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN venue metadata for option, linear_future, inverse_future, and perpetual WHEN InstrumentKind is derived THEN the correct kind is produced",
-                "GIVEN a linear perpetual (USDC-margined) WHEN InstrumentKind is derived THEN it maps to linear_future"
-            ],
-            "steps": [
-                "Locate instrument metadata structures in crates/soldier_core/venue/** and crates/soldier_infra/deribit/public/**.",
-                "Implement InstrumentKind derivation from venue metadata.",
-                "Apply linear perpetual mapping to linear_future in the sizing path.",
-                "Add unit test test_linear_perp_treated_as_linear_future in crates/soldier_core/tests/test_instrument_kind_mapping.rs.",
-                "Run the targeted test and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_instrument_kind_mapping test_linear_perp_treated_as_linear_future",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Test output from cargo test -p soldier_core --test test_instrument_kind_mapping test_linear_perp_treated_as_linear_future",
-                "Code change showing InstrumentKind derived from venue metadata"
-            ],
-            "dependencies": [
-                "S1-000"
-            ],
-            "est_size": "S",
-            "risk": "med",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S1-001b",
-            "priority": 90,
-            "phase": 1,
-            "slice": 1,
-            "slice_ref": "Slice 1 - Instrument Units + Dispatcher Invariants",
-            "story_ref": "S1.1b Instrument cache TTL fail-closed",
-            "category": "risk",
-            "description": "Fail-closed on instrument cache TTL breach by setting RiskState::Degraded and emitting a structured log.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/venue/**",
-                    "crates/soldier_infra/deribit/public/**",
-                    "crates/soldier_core/risk/state.rs",
-                    "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN instrument cache age exceeds the TTL WHEN the cache is checked THEN RiskState::Degraded is set",
-                "GIVEN the instrument cache is stale WHEN the TTL breach is detected THEN a structured log is emitted"
-            ],
-            "steps": [
-                "Locate instrument cache TTL configuration and age calculation in the venue metadata path.",
-                "Implement a TTL breach check for the instrument cache.",
-                "On stale cache, set RiskState::Degraded via crates/soldier_core/risk/state.rs and emit a structured log.",
-                "Add unit test test_stale_instrument_cache_sets_degraded in crates/soldier_core/tests/test_instrument_cache_ttl.rs.",
-                "Run the targeted test and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_instrument_cache_ttl test_stale_instrument_cache_sets_degraded",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Test output from cargo test -p soldier_core --test test_instrument_cache_ttl test_stale_instrument_cache_sets_degraded",
-                "Structured log line showing instrument cache TTL breach"
-            ],
-            "dependencies": [
-                "S1-001a"
-            ],
-            "est_size": "S",
-            "risk": "med",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S2-001",
-            "priority": 90,
-            "phase": 1,
-            "slice": 2,
-            "slice_ref": "Slice 2 - Quantization + Labeling + Idempotency",
-            "story_ref": "S2.1 Integer tick/step quantization",
-            "category": "execution",
-            "description": "Implement integer tick/step quantization with safe rounding and reject too-small orders after quantization.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/execution/quantize.rs",
-                    "crates/soldier_core/tests/test_quantize.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN raw_qty aligned to amount_step WHEN quantized THEN qty_q equals round_down(raw_qty, amount_step)",
-                "GIVEN a BUY limit price WHEN quantized THEN limit_price_q rounds down to the nearest tick; GIVEN a SELL limit price WHEN quantized THEN limit_price_q rounds up to the nearest tick",
-                "GIVEN qty_q < min_amount WHEN post-quantization validation runs THEN the intent is rejected and quantization_reject_too_small_total increments"
-            ],
-            "steps": [
-                "Inspect crates/soldier_core/execution/quantize.rs for current rounding helpers and tick/step types.",
-                "Implement qty_q round_down to amount_step and price rounding by side (BUY down, SELL up).",
-                "Enforce min_amount after quantization and increment quantization_reject_too_small_total on reject.",
-                "Instrument an in-memory metrics registry/mock for quantization_reject_too_small_total assertions in tests.",
-                "Add tests test_quantization_rounding_buy_sell and test_rejects_too_small_after_quantization in crates/soldier_core/tests/test_quantize.rs.",
-                "Run the targeted tests and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_quantize test_quantization_rounding_buy_sell",
-                "cargo test -p soldier_core --test test_quantize test_rejects_too_small_after_quantization",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Unit test asserts metric increment via in-memory metrics registry/mock for quantization_reject_too_small_total",
-                "Test output from cargo test -p soldier_core --test test_quantize test_quantization_rounding_buy_sell",
-                "Test output from cargo test -p soldier_core --test test_quantize test_rejects_too_small_after_quantization"
-            ],
-            "dependencies": [
-                "S1-000"
-            ],
-            "est_size": "S",
-            "risk": "med",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S1-001c",
-            "priority": 88,
-            "phase": 1,
-            "slice": 1,
-            "slice_ref": "Slice 1 - Instrument Units + Dispatcher Invariants",
-            "story_ref": "S1.1c Instrument cache observability",
-            "category": "ops",
-            "description": "Add instrument cache observability metrics for hits, staleness, and cache age.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/venue/**",
-                    "crates/soldier_core/**"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN the instrument cache serves a hit WHEN the cache is accessed THEN instrument_cache_hits_total increments",
-                "GIVEN the instrument cache is stale WHEN staleness is detected THEN instrument_cache_stale_total increments",
-                "GIVEN cache age is computed WHEN reported THEN instrument_cache_age_s records the age in seconds"
-            ],
-            "steps": [
-                "Locate the metrics/telemetry interface used in crates/soldier_core/**.",
-                "Emit instrument_cache_hits_total and instrument_cache_stale_total counters in the cache access path.",
-                "Record instrument_cache_age_s gauge from computed cache age in seconds.",
-                "Instrument an in-memory metrics registry/mock for counter and gauge assertions in tests.",
-                "Add unit test test_instrument_cache_metrics_emits_counters in the appropriate soldier_core tests module.",
-                "Ensure metric names and labels align with existing telemetry conventions.",
-                "Run the targeted test and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core test_instrument_cache_metrics_emits_counters",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Unit test asserts metric increment via in-memory metrics registry/mock for instrument_cache_hits_total",
-                "Unit test asserts metric increment via in-memory metrics registry/mock for instrument_cache_stale_total",
-                "Unit test asserts metric increment via in-memory metrics registry/mock for instrument_cache_age_s",
-                "Test output from cargo test -p soldier_core test_instrument_cache_metrics_emits_counters"
-            ],
-            "dependencies": [
-                "S1-001b"
-            ],
-            "est_size": "XS",
-            "risk": "low",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S1-002",
-            "priority": 80,
-            "phase": 1,
-            "slice": 1,
-            "slice_ref": "Slice 1 - Instrument Units + Dispatcher Invariants",
-            "story_ref": "S1.2 OrderSize canonical sizing",
-            "category": "execution",
-            "description": "Implement OrderSize canonical sizing and notional_usd invariant.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/execution/order_size.rs",
-                    "crates/soldier_core/tests/test_order_size.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN an option or linear_future WHEN OrderSize is computed THEN qty_coin is the canonical quantity",
-                "GIVEN a perpetual or inverse_future WHEN OrderSize is computed THEN qty_usd is the canonical quantity",
-                "GIVEN any supported instrument WHEN OrderSize is computed THEN notional_usd is populated deterministically"
-            ],
-            "steps": [
-                "Review crates/soldier_core/execution/order_size.rs and existing sizing logic.",
-                "Implement OrderSize fields and canonical amount selection by InstrumentKind.",
-                "Compute notional_usd deterministically for all instrument kinds.",
-                "Add unit test test_order_size_option_perp_canonical_amount in crates/soldier_core/tests/test_order_size.rs.",
-                "Run the targeted test and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_order_size test_order_size_option_perp_canonical_amount",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Test output from cargo test -p soldier_core --test test_order_size test_order_size_option_perp_canonical_amount",
-                "OrderSize notional_usd computation shown in code or test assertion"
-            ],
-            "dependencies": [
-                "S1-001a"
-            ],
-            "est_size": "S",
-            "risk": "med",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S2-002",
-            "priority": 80,
-            "phase": 1,
-            "slice": 2,
-            "slice_ref": "Slice 2 - Quantization + Labeling + Idempotency",
-            "story_ref": "S2.2 Intent hash from quantized fields",
-            "category": "execution",
-            "description": "Derive intent hashes solely from quantized fields to ensure deterministic idempotency across codepaths.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/idempotency/hash.rs",
-                    "crates/soldier_core/tests/test_idempotency.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN two codepaths producing the same quantized economic intent WHEN the hash is computed THEN the hashes are identical",
-                "GIVEN a wall-clock timestamp input WHEN the hash is computed THEN it does not affect the resulting hash"
-            ],
-            "steps": [
-                "Review crates/soldier_core/idempotency/hash.rs for hash inputs and canonical fields.",
-                "Restrict hash inputs to quantized economic fields only and remove any time-based inputs.",
-                "Add test test_intent_hash_deterministic_from_quantized in crates/soldier_core/tests/test_idempotency.rs.",
-                "Run the targeted test and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_idempotency test_intent_hash_deterministic_from_quantized",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Test output from cargo test -p soldier_core --test test_idempotency test_intent_hash_deterministic_from_quantized",
-                "Code diff showing hash inputs restricted to quantized fields"
-            ],
-            "dependencies": [
-                "S1-000",
-                "S2-001"
-            ],
-            "est_size": "XS",
-            "risk": "med",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S1-003",
-            "priority": 70,
-            "phase": 1,
-            "slice": 1,
-            "slice_ref": "Slice 1 - Instrument Units + Dispatcher Invariants",
-            "story_ref": "S1.3 Dispatcher amount mapping",
-            "category": "execution",
-            "description": "Map dispatcher amounts to one canonical field and reject mismatches by degrading risk state.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/execution/dispatch_map.rs",
-                    "crates/soldier_core/execution/order_size.rs",
-                    "crates/soldier_core/risk/state.rs",
-                    "crates/soldier_core/tests/test_dispatch_map.rs",
-                    "crates/soldier_core/tests/test_order_size.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN an outbound Deribit request WHEN mapping amounts THEN exactly one canonical amount field is sent",
-                "GIVEN both contracts and canonical amount exist and mismatch WHEN mapping occurs THEN the intent is rejected and RiskState::Degraded is set",
-                "GIVEN a unit mismatch WHEN rejection occurs THEN order_intent_reject_unit_mismatch_total increments"
-            ],
-            "steps": [
-                "Review crates/soldier_core/execution/dispatch_map.rs and Deribit request mapping.",
-                "Select the canonical amount field using OrderSize and InstrumentKind.",
-                "Detect amount mismatch; on mismatch reject the intent, set RiskState::Degraded, and increment order_intent_reject_unit_mismatch_total.",
-                "Instrument an in-memory metrics registry/mock for order_intent_reject_unit_mismatch_total assertions in tests.",
-                "Add tests test_dispatch_amount_field_coin_vs_usd and test_order_size_mismatch_rejects_and_degrades in their respective test files.",
-                "Run the targeted tests and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_dispatch_map test_dispatch_amount_field_coin_vs_usd",
-                "cargo test -p soldier_core --test test_order_size test_order_size_mismatch_rejects_and_degrades",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Unit test asserts metric increment via in-memory metrics registry/mock for order_intent_reject_unit_mismatch_total",
-                "Test output from cargo test -p soldier_core --test test_dispatch_map test_dispatch_amount_field_coin_vs_usd",
-                "Test output from cargo test -p soldier_core --test test_order_size test_order_size_mismatch_rejects_and_degrades"
-            ],
-            "dependencies": [
-                "S1-002"
-            ],
-            "est_size": "M",
-            "risk": "high",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S2-003",
-            "priority": 70,
-            "phase": 1,
-            "slice": 2,
-            "slice_ref": "Slice 2 - Quantization + Labeling + Idempotency",
-            "story_ref": "S2.3 Compact label schema encode/decode",
-            "category": "execution",
-            "description": "Implement compact label schema encode/decode with 64-character cap and safe truncation rules.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/execution/label.rs",
-                    "crates/soldier_core/tests/test_label.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN label fields sid8/gid12/li/ih16 WHEN encoded THEN the schema is s4:{sid8}:{gid12}:{li}:{ih16} and length does not exceed 64 characters",
-                "GIVEN an overlength label WHEN encoding THEN only hashed fields are truncated and structural fields remain intact"
-            ],
-            "steps": [
-                "Inspect crates/soldier_core/execution/label.rs for current label format and parsing.",
-                "Implement compact encode/decode with the s4:{sid8}:{gid12}:{li}:{ih16} schema and length cap.",
-                "Apply truncation rules to hashed fields only when length exceeds 64 characters.",
-                "Add test test_label_compact_schema_length_limit in crates/soldier_core/tests/test_label.rs.",
-                "Run the targeted test and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_label test_label_compact_schema_length_limit",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Test output from cargo test -p soldier_core --test test_label test_label_compact_schema_length_limit",
-                "Example label encode/decode assertion from the test"
-            ],
-            "dependencies": [
-                "S1-000",
-                "S2-002"
-            ],
-            "est_size": "S",
-            "risk": "low",
-            "needs_human_decision": false,
-            "passes": false
-        },
-        {
-            "id": "S2-004",
-            "priority": 60,
-            "phase": 1,
-            "slice": 2,
-            "slice_ref": "Slice 2 - Quantization + Labeling + Idempotency",
-            "story_ref": "S2.4 Label match disambiguation and ambiguity handling",
-            "category": "risk",
-            "description": "Disambiguate label matches deterministically and fail-closed on ambiguity by degrading risk state.",
-            "scope": {
-                "touch": [
-                    "crates/soldier_core/recovery/label_match.rs",
-                    "crates/soldier_core/tests/test_label_match.rs",
-                    "crates/soldier_core/risk/state.rs"
-                ],
-                "avoid": []
-            },
-            "acceptance": [
-                "GIVEN multiple label candidates WHEN the disambiguation rules apply THEN a single deterministic match is selected",
-                "GIVEN ambiguous label matches WHEN ambiguity is detected THEN RiskState::Degraded is set and opens are blocked",
-                "GIVEN the opens-blocked latch is missing or cannot be confirmed WHEN attempting implementation THEN output exactly <promise>BLOCKED_MISSING_LATCH</promise> and do not mark passes=true"
-            ],
-            "steps": [
-                "Locate and confirm the existing opens-blocked latch behavior and how RiskState::Degraded triggers it.",
-                "If the latch cannot be confirmed, output <promise>BLOCKED_MISSING_LATCH</promise> and stop work on this story.",
-                "Review crates/soldier_core/recovery/label_match.rs for current matching rules and tie-breakers.",
-                "Implement deterministic disambiguation per contract tie-breakers.",
-                "On ambiguity, set RiskState::Degraded, ensure the opens-blocked latch is triggered, and increment label_match_ambiguity_total.",
-                "Instrument an in-memory metrics registry/mock for label_match_ambiguity_total assertions in tests.",
-                "Add tests test_label_match_disambiguation and test_label_match_ambiguous_degrades in crates/soldier_core/tests/test_label_match.rs.",
-                "Run the targeted tests and plans/verify.sh."
-            ],
-            "verify": [
-                "cargo test -p soldier_core --test test_label_match test_label_match_disambiguation",
-                "cargo test -p soldier_core --test test_label_match test_label_match_ambiguous_degrades",
-                "./plans/verify.sh"
-            ],
-            "evidence": [
-                "Unit test asserts metric increment via in-memory metrics registry/mock for label_match_ambiguity_total",
-                "Test output from cargo test -p soldier_core --test test_label_match test_label_match_disambiguation",
-                "Test output from cargo test -p soldier_core --test test_label_match test_label_match_ambiguous_degrades"
-            ],
-            "dependencies": [
-                "S1-000",
-                "S2-003"
-            ],
-            "est_size": "S",
-            "risk": "med",
-            "needs_human_decision": true,
-            "passes": false
-        }
-    ]
+    {
+      "id": "S1-002",
+      "priority": 80,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "S1.1",
+      "category": "logic",
+      "description": "Implement InstrumentKind derivation and RiskState definitions.",
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/src/risk/state.rs",
+          "crates/soldier_infra/src/deribit/public/**"
+        ],
+        "avoid": [
+          "crates/soldier_core/src/execution/**"
+        ]
+      },
+      "acceptance": [
+        "InstrumentKind derives correct enum variant from venue metadata",
+        "Linear perpetuals (USDC-margined) map to linear_future",
+        "RiskState enum exists with Normal and Degraded variants"
+      ],
+      "steps": [
+        "Define 'RiskState' enum in 'crates/soldier_core/src/risk/state.rs'",
+        "Define 'InstrumentKind' enum in 'crates/soldier_core/src/venue/types.rs'",
+        "Define minimal Deribit public instrument structs in 'crates/soldier_infra'",
+        "Implement conversion logic from Deribit instrument to 'InstrumentKind'",
+        "Add unit tests in 'crates/soldier_core/tests/test_instrument_kind_mapping.rs'"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_instrument_kind_mapping"
+      ],
+      "evidence": [
+        "Test output showing 'test_linear_perp_treated_as_linear_future' passing"
+      ],
+      "dependencies": [
+        "S1-001"
+      ],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_refs": [
+        "CONTRACT.md (general)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+      ]
+    },
+    {
+      "id": "S1-003",
+      "priority": 70,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "S1.1",
+      "category": "enforcement",
+      "description": "Implement Instrument Cache with TTL and staleness enforcement.",
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/venue/**"
+        ],
+        "avoid": [
+          "crates/soldier_core/src/execution/**"
+        ]
+      },
+      "acceptance": [
+        "Instrument cache respects TTL",
+        "Stale cache triggers RiskState::Degraded"
+      ],
+      "steps": [
+        "Implement 'InstrumentCache' struct in 'crates/soldier_core/src/venue/cache.rs'",
+        "Add TTL logic to cache retrieval",
+        "Return 'RiskState::Degraded' when TTL is breached",
+        "Add counter 'instrument_cache_stale_total'",
+        "Add unit tests in 'crates/soldier_core/tests/test_instrument_cache_ttl.rs'"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_instrument_cache_ttl"
+      ],
+      "evidence": [
+        "Test output showing 'test_stale_instrument_cache_sets_degraded' passing"
+      ],
+      "dependencies": [
+        "S1-002"
+      ],
+      "est_size": "M",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_refs": [
+        "CONTRACT.md (general)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+      ]
+    },
+    {
+      "id": "S1-004",
+      "priority": 60,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "S1.2",
+      "category": "logic",
+      "description": "Implement OrderSize canonical sizing logic.",
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/order_size.rs"
+        ],
+        "avoid": [
+          "crates/soldier_infra/**"
+        ]
+      },
+      "acceptance": [
+        "OrderSize struct implemented with contracts, qty_coin, qty_usd, notional_usd",
+        "Canonical units derived correctly for options/futures (coin) vs perps (usd)",
+        "notional_usd always populated"
+      ],
+      "steps": [
+        "Create 'crates/soldier_core/src/execution/order_size.rs'",
+        "Define 'OrderSize' struct",
+        "Implement constructor/builder with canonical unit logic using 'InstrumentKind'",
+        "Add log 'OrderSizeComputed'",
+        "Add unit tests in 'crates/soldier_core/tests/test_order_size.rs'"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_order_size"
+      ],
+      "evidence": [
+        "Test output showing 'test_order_size_option_perp_canonical_amount' passing"
+      ],
+      "dependencies": [
+        "S1-002"
+      ],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_refs": [
+        "CONTRACT.md (general)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+      ]
+    },
+    {
+      "id": "S1-005",
+      "priority": 50,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "S1.3",
+      "category": "enforcement",
+      "description": "Implement Dispatcher amount mapping and mismatch enforcement.",
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/dispatch_map.rs"
+        ],
+        "avoid": [
+          "crates/soldier_core/src/risk/**"
+        ]
+      },
+      "acceptance": [
+        "Outbound request maps to exactly one canonical amount field",
+        "Mismatch between contracts and canonical amount rejects intent",
+        "Mismatch triggers RiskState::Degraded"
+      ],
+      "steps": [
+        "Create 'crates/soldier_core/src/execution/dispatch_map.rs'",
+        "Implement mapping logic from 'OrderSize' to outbound request fields",
+        "Add validation: if both contracts and canonical amount exist and mismatch, return error and Degraded state",
+        "Add counter 'order_intent_reject_unit_mismatch_total'",
+        "Add unit tests in 'crates/soldier_core/tests/test_dispatch_map.rs'",
+        "Add unit tests in 'crates/soldier_core/tests/test_order_size.rs' for mismatch degradation"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_dispatch_map",
+        "cargo test -p soldier_core --test test_order_size"
+      ],
+      "evidence": [
+        "Test output showing 'test_dispatch_amount_field_coin_vs_usd' and 'test_order_size_mismatch_rejects_and_degrades' passing"
+      ],
+      "dependencies": [
+        "S1-004",
+        "S1-003"
+      ],
+      "est_size": "M",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_refs": [
+        "CONTRACT.md (general)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+      ]
+    }
+  ]
 }
