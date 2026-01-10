@@ -14,3 +14,6 @@
 - S1-003: added InstrumentCache with TTL checks, stale metric counter + structured log, and tests for fresh/stale behavior.
 - Commands: ./plans/init.sh; ./plans/verify.sh full (fails fmt); cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-003 true.
 - Next: proceed to S1-004.
+- S1-004: added OrderSize canonical sizing with deterministic notional_usd, execution module wiring, and order size tests.
+- Commands: ./plans/init.sh; ./plans/verify.sh full (fails fmt); cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-004 true.
+- Next: proceed to S1-005.
