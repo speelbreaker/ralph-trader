@@ -10,12 +10,14 @@
 #   ./plans/verify.sh [quick|full]
 #
 # Philosophy:
-#   - quick: run on every Ralph iteration / PR. Fast, deterministic gates.
-#   - full: heavier checks (broader tests, optional integration smoke).
+#   - quick: same core gates as full (CI parity), no optional heavy gates.
+#   - full: same core gates + optional heavy gates (explicitly enabled).
 #   - promotion: optional release gate checks (e.g., F1 cert) ONLY when explicitly enabled.
 #
 # CI alignment:
-#   Prefer wiring GitHub Actions to run this script directly.
+#   - If CI runs this script as the sole gate, set CI_GATES_SOURCE=verify.
+#   - Otherwise, this script expects .github/workflows to exist so it can mirror CI.
+#   - If neither is true, it emits <promise>BLOCKED_CI_COMMANDS</promise> and exits non-zero.
 # =============================================================================
 
 set -euo pipefail
@@ -25,32 +27,18 @@ VERIFY_MODE="${VERIFY_MODE:-}"     # set to "promotion" for release-grade gates
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# -----------------------------------------------------------------------------
-# CI gate discovery (fail closed if CI config is missing/unclear)
-# -----------------------------------------------------------------------------
-ci_files=()
-if [[ -d "$ROOT/.github/workflows" ]]; then
-  while IFS= read -r -d '' file; do
-    ci_files+=("$file")
-  done < <(find "$ROOT/.github/workflows" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+CI_GATES_SOURCE="${CI_GATES_SOURCE:-auto}"
+if [[ "$CI_GATES_SOURCE" == "auto" ]]; then
+  if [[ -d "$ROOT/.github/workflows" ]]; then
+    CI_GATES_SOURCE="github"
+  else
+    CI_GATES_SOURCE=""
+  fi
 fi
 
-for file in \
-  "$ROOT/.gitlab-ci.yml" \
-  "$ROOT/.circleci/config.yml" \
-  "$ROOT/azure-pipelines.yml" \
-  "$ROOT/.azure-pipelines.yml" \
-  "$ROOT/.buildkite/pipeline.yml" \
-  "$ROOT/.buildkite/pipeline.yaml" \
-  "$ROOT/.drone.yml"; do
-  if [[ -f "$file" ]]; then
-    ci_files+=("$file")
-  fi
-done
-
-if [[ ${#ci_files[@]} -eq 0 ]]; then
+if [[ "$CI_GATES_SOURCE" != "github" && "$CI_GATES_SOURCE" != "verify" ]]; then
   echo "<promise>BLOCKED_CI_COMMANDS</promise>"
-  exit 1
+  exit 2
 fi
 
 # -----------------------------------------------------------------------------
@@ -69,6 +57,91 @@ is_ci(){ [[ -n "${CI:-}" ]]; }
 need() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
+
+node_script_exists() {
+  local script="$1"
+  command -v node >/dev/null 2>&1 || return 1
+  node -e "const s=require('./package.json').scripts||{}; process.exit(s['$script']?0:1)" >/dev/null 2>&1
+}
+
+node_run_script() {
+  local script="$1"
+  case "$NODE_PM" in
+    pnpm) pnpm -s run "$script" --if-present ;;
+    npm) npm run -s "$script" --if-present ;;
+    yarn) yarn -s run "$script" --if-present ;;
+    *) fail "No node package manager selected (missing lockfile)" ;;
+  esac
+}
+
+node_run_bin() {
+  local bin="$1"
+  shift
+  if [[ -x "./node_modules/.bin/$bin" ]]; then
+    "./node_modules/.bin/$bin" "$@"
+    return 0
+  fi
+  if command -v "$bin" >/dev/null 2>&1; then
+    "$bin" "$@"
+    return 0
+  fi
+  case "$NODE_PM" in
+    pnpm) pnpm -s exec "$bin" -- "$@" ;;
+    npm) npx --no-install "$bin" -- "$@" ;;
+    yarn) yarn -s "$bin" "$@" ;;
+    *) return 1 ;;
+  esac
+}
+
+has_playwright_config() {
+  [[ -f playwright.config.ts || -f playwright.config.js || -f playwright.config.mjs || -f playwright.config.cjs ]]
+}
+
+has_cypress_config() {
+  [[ -f cypress.config.ts || -f cypress.config.js || -f cypress.config.mjs || -f cypress.config.cjs ]]
+}
+
+capture_e2e_artifacts() {
+  local found=0
+
+  if [[ -d "playwright-report" ]]; then
+    mkdir -p "$E2E_ARTIFACTS_DIR/playwright-report"
+    cp -R "playwright-report"/. "$E2E_ARTIFACTS_DIR/playwright-report/"
+    found=1
+  fi
+
+  if [[ -d "test-results" ]]; then
+    mkdir -p "$E2E_ARTIFACTS_DIR/playwright-test-results"
+    cp -R "test-results"/. "$E2E_ARTIFACTS_DIR/playwright-test-results/"
+    found=1
+  fi
+
+  if [[ -d "cypress/screenshots" ]]; then
+    mkdir -p "$E2E_ARTIFACTS_DIR/cypress-screenshots"
+    cp -R "cypress/screenshots"/. "$E2E_ARTIFACTS_DIR/cypress-screenshots/"
+    found=1
+  fi
+
+  if [[ -d "cypress/videos" ]]; then
+    mkdir -p "$E2E_ARTIFACTS_DIR/cypress-videos"
+    cp -R "cypress/videos"/. "$E2E_ARTIFACTS_DIR/cypress-videos/"
+    found=1
+  fi
+
+  if [[ "$found" == "0" ]]; then
+    warn "No E2E artifacts found to capture"
+  fi
+}
+
+case "$MODE" in
+  quick|full) ;;
+  *) fail "Unknown mode: $MODE (expected quick or full)" ;;
+esac
+
+NODE_PM=""
+if [[ -f pnpm-lock.yaml ]]; then NODE_PM="pnpm"; fi
+if [[ -z "$NODE_PM" && -f package-lock.json ]]; then NODE_PM="npm"; fi
+if [[ -z "$NODE_PM" && -f yarn.lock ]]; then NODE_PM="yarn"; fi
 
 # -----------------------------------------------------------------------------
 # 0) Repo sanity + reproducibility basics
@@ -166,12 +239,7 @@ if [[ -f Cargo.toml ]]; then
   cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   log "2c) Rust tests"
-  if [[ "$MODE" == "full" ]]; then
-    cargo test --workspace --all-features --locked
-  else
-    # Faster: library tests only (skips integration tests in tests/)
-    cargo test --workspace --lib --locked
-  fi
+  cargo test --workspace --all-features --locked
 
   echo "✓ rust gates passed"
 fi
@@ -200,12 +268,7 @@ if [[ -f pyproject.toml || -f requirements.txt ]]; then
   # Pytest: required in CI if present in toolchain
   if command -v pytest >/dev/null 2>&1; then
     log "3c) Python tests"
-    if [[ "$MODE" == "full" ]]; then
-      pytest -q
-    else
-      # Try excluding slow/integration if markers exist; fallback to normal run
-      pytest -q -m "not integration and not slow" 2>/dev/null || pytest -q
-    fi
+    pytest -q
   else
     if is_ci; then
       fail "pytest not found in CI (install it or adjust verify.sh)"
@@ -238,34 +301,14 @@ fi
 if [[ -f package.json ]]; then
   log "4) Node/TS gates"
 
-  # Choose package manager based on lockfile
-  PM=""
-  if [[ -f pnpm-lock.yaml ]]; then PM="pnpm"; fi
-  if [[ -z "$PM" && -f package-lock.json ]]; then PM="npm"; fi
-  if [[ -z "$PM" && -f yarn.lock ]]; then PM="yarn"; fi
-
-  if [[ -z "$PM" ]]; then
+  if [[ -z "$NODE_PM" ]]; then
     warn "No recognized lockfile; skipping node gates"
   else
-    need "$PM"
-    case "$PM" in
-      pnpm)
-        pnpm -s run lint --if-present
-        pnpm -s run typecheck --if-present
-        pnpm -s run test --if-present
-        ;;
-      npm)
-        npm run -s lint --if-present
-        npm run -s typecheck --if-present
-        npm run -s test --if-present
-        ;;
-      yarn)
-        yarn -s lint || true
-        yarn -s typecheck || true
-        yarn -s test || true
-        ;;
-    esac
-    echo "✓ node gates passed ($PM)"
+    need "$NODE_PM"
+    node_run_script lint
+    node_run_script typecheck
+    node_run_script test
+    echo "✓ node gates passed ($NODE_PM)"
   fi
 fi
 
@@ -278,6 +321,9 @@ fi
 #   RUN_F1_CERT=1           -> generate F1 cert if tooling exists
 #   REQUIRE_VQ_EVIDENCE=1   -> require venue facts evidence check if tool exists
 #   INTEGRATION_SMOKE=1     -> run docker-compose smoke in full mode
+#   E2E=1                   -> run UI E2E gate (Playwright/Cypress or E2E_CMD)
+#   E2E_CMD="..."           -> explicit E2E command to run
+#   E2E_ARTIFACTS_DIR=...   -> where to collect E2E artifacts (default: artifacts/e2e)
 #
 log "5) Optional gates (only when enabled)"
 
@@ -354,6 +400,54 @@ if [[ "$MODE" == "full" && "$INTEGRATION_SMOKE" == "1" ]]; then
   else
     warn "docker compose not available; skipping integration smoke"
   fi
+fi
+
+# 5d) UI end-to-end verification (opt-in)
+E2E="${E2E:-0}"
+E2E_CMD="${E2E_CMD:-}"
+E2E_ARTIFACTS_DIR="${E2E_ARTIFACTS_DIR:-$ROOT/artifacts/e2e}"
+
+if [[ "$E2E" == "1" ]]; then
+  log "5d) UI E2E (opt-in)"
+  mkdir -p "$E2E_ARTIFACTS_DIR"
+
+  e2e_ran=0
+
+  if [[ -n "$E2E_CMD" ]]; then
+    bash -lc "$E2E_CMD"
+    e2e_ran=1
+  else
+    if [[ -f package.json ]]; then
+      if node_script_exists "e2e"; then
+        node_run_script "e2e"
+        e2e_ran=1
+      elif node_script_exists "test:e2e"; then
+        node_run_script "test:e2e"
+        e2e_ran=1
+      fi
+    fi
+
+    if [[ "$e2e_ran" == "0" ]]; then
+      if has_playwright_config || [[ -x "./node_modules/.bin/playwright" ]]; then
+        if ! node_run_bin playwright test; then
+          fail "Playwright config found but Playwright is not available (install deps or set E2E_CMD)"
+        fi
+        e2e_ran=1
+      elif has_cypress_config || [[ -x "./node_modules/.bin/cypress" ]]; then
+        if ! node_run_bin cypress run; then
+          fail "Cypress config found but Cypress is not available (install deps or set E2E_CMD)"
+        fi
+        e2e_ran=1
+      fi
+    fi
+  fi
+
+  if [[ "$e2e_ran" == "0" ]]; then
+    fail "E2E=1 but no E2E harness found. Set E2E_CMD or add Playwright/Cypress config."
+  fi
+
+  capture_e2e_artifacts
+  echo "✓ e2e gate passed"
 fi
 
 log "VERIFY OK (mode=$MODE)"

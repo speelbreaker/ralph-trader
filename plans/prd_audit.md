@@ -1,0 +1,17 @@
+Decision: PASS
+
+Blocker failures:
+- None.
+
+Warnings:
+- None.
+
+Summary stats:
+- total_items: 4
+- phase: 1
+- slice: 2
+- schema_ok: true
+- bootstrap_ok: true
+- acceptance_format_ok: true
+- metric_evidence_ok: true
+- implicit_dependency_ok: true
