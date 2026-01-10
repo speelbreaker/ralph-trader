@@ -139,7 +139,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
     fi
   fi
 
-  PROMPT="$(cat <<PROMPT
+  IFS= read -r -d '' PROMPT <<PROMPT || true
 @${PRD_FILE} @${PROGRESS_FILE}
 
 You are running inside the Ralph harness.
@@ -165,7 +165,6 @@ ${LAST_FAIL_NOTE}
 
 If ALL items pass, output exactly: ${RPH_COMPLETE_SENTINEL}
 PROMPT
-)"
 
   # 3) Run agent
   echo "$PROMPT" > "${ITER_DIR}/prompt.txt"
