@@ -5,3 +5,6 @@
 - S1-000: confirmed plans/verify.sh is runnable and includes cargo test --workspace; validated bash syntax.
 - Commands: ./plans/init.sh; ./plans/verify.sh full; bash -n plans/verify.sh; ./plans/verify.sh; ./plans/update_task.sh S1-000 true.
 - Next: proceed to S1-001.
+- S1-001: initialized Rust workspace with soldier_core and soldier_infra crates, added root Cargo.toml workspace and generated Cargo.lock.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; cargo new --lib crates/soldier_core --vcs none; cargo new --lib crates/soldier_infra --vcs none; cargo test --workspace; ./plans/verify.sh full; ./plans/update_task.sh S1-001 true.
+- Next: proceed to S1-002.
