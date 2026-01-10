@@ -288,7 +288,7 @@ if [[ "$VERIFY_MODE" == "promotion" || "$REQUIRE_F1_CERT" == "1" ]]; then
   echo "✓ F1 cert PASS"
 else
   # Not required; show info if present
-  if [[ -f "$F1_CERT" && command -v jq >/dev/null 2>&1 ]]; then
+  if [[ -f "$F1_CERT" ]] && command -v jq >/dev/null 2>&1; then
     status="$(jq -r '.status // "UNKNOWN"' "$F1_CERT" 2>/dev/null || echo UNKNOWN)"
     echo "info: F1 cert present (status=$status) [not required]"
   fi
