@@ -1,0 +1,29 @@
+{
+  "decision": "PASS",
+  "blockers": [],
+  "warnings": [
+    {
+      "check": "W3",
+      "item": "S2-001",
+      "issue": "Evidence cites a metric increment without specifying how it is asserted.",
+      "suggestion": "Specify the assertion method (e.g., unit test assertion on counter, log capture with expected value)."
+    },
+    {
+      "check": "W3",
+      "item": "S2-004",
+      "issue": "Evidence cites a metric increment without specifying how it is asserted.",
+      "suggestion": "Specify the assertion method (e.g., unit test assertion on counter, log capture with expected value)."
+    }
+  ],
+  "stats": {
+    "total_items": 4,
+    "ids_ok": true,
+    "priorities_ok": true,
+    "dependencies_ok": true,
+    "bootstrap_ok": true,
+    "verify_rule_ok": true,
+    "sizing_ok": true,
+    "acceptance_steps_ok": true,
+    "no_hallucinations_ok": true
+  }
+}
