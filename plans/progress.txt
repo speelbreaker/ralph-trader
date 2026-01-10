@@ -1,0 +1,4 @@
+
+- S1-000: added CI config discovery to plans/verify.sh and fail-closed when no CI config is present, emitting BLOCKED_CI_COMMANDS.
+- Commands: ./plans/verify.sh full
+- Next: provide CI config (.github/workflows or equivalent) so verify.sh can mirror actual CI gates.

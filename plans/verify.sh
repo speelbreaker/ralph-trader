@@ -26,6 +26,34 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # -----------------------------------------------------------------------------
+# CI gate discovery (fail closed if CI config is missing/unclear)
+# -----------------------------------------------------------------------------
+ci_files=()
+if [[ -d "$ROOT/.github/workflows" ]]; then
+  while IFS= read -r -d '' file; do
+    ci_files+=("$file")
+  done < <(find "$ROOT/.github/workflows" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+fi
+
+for file in \
+  "$ROOT/.gitlab-ci.yml" \
+  "$ROOT/.circleci/config.yml" \
+  "$ROOT/azure-pipelines.yml" \
+  "$ROOT/.azure-pipelines.yml" \
+  "$ROOT/.buildkite/pipeline.yml" \
+  "$ROOT/.buildkite/pipeline.yaml" \
+  "$ROOT/.drone.yml"; do
+  if [[ -f "$file" ]]; then
+    ci_files+=("$file")
+  fi
+done
+
+if [[ ${#ci_files[@]} -eq 0 ]]; then
+  echo "<promise>BLOCKED_CI_COMMANDS</promise>"
+  exit 1
+fi
+
+# -----------------------------------------------------------------------------
 # Logging & Utilities
 # -----------------------------------------------------------------------------
 RED='\033[0;31m'
