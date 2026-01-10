@@ -25,6 +25,9 @@ if [[ -z "${RPH_PROMPT_FLAG+x}" ]]; then
   RPH_PROMPT_FLAG="-p"
 fi
 RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
+RPH_RATE_LIMIT_PER_HOUR="${RPH_RATE_LIMIT_PER_HOUR:-100}"
+RPH_RATE_LIMIT_FILE="${RPH_RATE_LIMIT_FILE:-.ralph/rate_limit.json}"
+RPH_RATE_LIMIT_ENABLED="${RPH_RATE_LIMIT_ENABLED:-1}"
 
 mkdir -p .ralph
 mkdir -p plans/logs
@@ -149,6 +152,86 @@ write_blocked_artifacts() {
   echo "$block_dir"
 }
 
+update_rate_limit_state_if_present() {
+  local window_start="$1"
+  local count="$2"
+  local limit="$3"
+  local last_sleep="$4"
+  local state_file=".ralph/state.json"
+  local tmp
+  if [[ -f "$state_file" ]]; then
+    tmp="$(mktemp)"
+    jq \
+      --argjson window_start_epoch "$window_start" \
+      --argjson count "$count" \
+      --argjson limit "$limit" \
+      --argjson last_sleep_seconds "$last_sleep" \
+      '.rate_limit = {window_start_epoch: $window_start_epoch, count: $count, limit: $limit, last_sleep_seconds: $last_sleep_seconds}' \
+      "$state_file" > "$tmp" && mv "$tmp" "$state_file"
+  fi
+}
+
+rate_limit_before_call() {
+  if [[ "$RPH_RATE_LIMIT_ENABLED" != "1" ]]; then
+    return 0
+  fi
+
+  local now
+  local limit
+  local window_start
+  local count
+  local sleep_secs
+
+  now="$(date +%s)"
+  limit="$RPH_RATE_LIMIT_PER_HOUR"
+  if ! [[ "$limit" =~ ^[0-9]+$ ]] || [[ "$limit" -lt 1 ]]; then
+    limit=100
+  fi
+
+  mkdir -p "$(dirname "$RPH_RATE_LIMIT_FILE")"
+  if [[ ! -f "$RPH_RATE_LIMIT_FILE" ]]; then
+    jq -n --argjson now "$now" '{window_start_epoch: $now, count: 0}' > "$RPH_RATE_LIMIT_FILE"
+  fi
+  if ! jq -e . "$RPH_RATE_LIMIT_FILE" >/dev/null 2>&1; then
+    jq -n --argjson now "$now" '{window_start_epoch: $now, count: 0}' > "$RPH_RATE_LIMIT_FILE"
+  fi
+
+  window_start="$(jq -r '.window_start_epoch // 0' "$RPH_RATE_LIMIT_FILE")"
+  count="$(jq -r '.count // 0' "$RPH_RATE_LIMIT_FILE")"
+  if ! [[ "$window_start" =~ ^[0-9]+$ ]]; then window_start=0; fi
+  if ! [[ "$count" =~ ^[0-9]+$ ]]; then count=0; fi
+
+  if (( window_start <= 0 )); then
+    window_start="$now"
+    count=0
+  fi
+  if (( now - window_start >= 3600 )); then
+    window_start="$now"
+    count=0
+  fi
+
+  sleep_secs=0
+  if (( count >= limit )); then
+    sleep_secs=$(( (window_start + 3600 - now) + 2 ))
+    if (( sleep_secs < 0 )); then sleep_secs=0; fi
+    echo "RateLimit: sleeping ${sleep_secs}s (count=${count} limit=${limit})" | tee -a "$LOG_FILE"
+    if [[ "$RPH_DRY_RUN" != "1" ]]; then
+      sleep "$sleep_secs"
+    fi
+    now="$(date +%s)"
+    window_start="$now"
+    count=0
+  fi
+
+  count=$((count + 1))
+  jq -n \
+    --argjson window_start_epoch "$window_start" \
+    --argjson count "$count" \
+    '{window_start_epoch: $window_start_epoch, count: $count}' \
+    > "$RPH_RATE_LIMIT_FILE"
+  update_rate_limit_state_if_present "$window_start" "$count" "$limit" "$sleep_secs"
+}
+
 # --- main loop ---
 for ((i=1; i<=MAX_ITERS; i++)); do
   rotate_progress
@@ -201,8 +284,10 @@ PROMPT
     SEL_OUT="${ITER_DIR}/selection.out"
     set +e
     if [[ -n "$RPH_PROMPT_FLAG" ]]; then
+      rate_limit_before_call
       ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     else
+      rate_limit_before_call
       ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     fi
     set -e
@@ -357,8 +442,10 @@ PROMPT
 
   set +e
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
+    rate_limit_before_call
     ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
   else
+    rate_limit_before_call
     ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
   fi
   AGENT_RC=${PIPESTATUS[0]}
