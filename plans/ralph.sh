@@ -116,47 +116,47 @@ jq . "$PRD_FILE" >/dev/null 2>&1 || block_preflight "invalid_prd_json" "$PRD_FIL
 
 # PRD schema sanity check (fail-closed)
 if ! jq -e '
-  def is_nonempty_str: type=="string" and length>0;
-  def is_str_array: type=="array" and (length==0 or all(.[]; type=="string"));
-  def has_verify_sh: (type=="array") and (index("./plans/verify.sh") != null);
-  def has_human_blocker:
-    (has("human_blocker") and (.human_blocker|type=="object") and
-     (.human_blocker|has("why") and (.human_blocker.why|is_nonempty_str)) and
-     (.human_blocker|has("question") and (.human_blocker.question|is_nonempty_str)) and
-     (.human_blocker|has("options") and (.human_blocker.options|type=="array") and (.human_blocker.options|length>0) and all(.human_blocker.options[]; type=="string")) and
-     (.human_blocker|has("recommended") and (.human_blocker.recommended|is_nonempty_str)) and
-     (.human_blocker|has("unblock_steps") and (.human_blocker.unblock_steps|type=="array") and (.human_blocker.unblock_steps|length>0) and all(.human_blocker.unblock_steps[]; type=="string"))
+  def is_nonempty_str($v): ($v|type=="string" and ($v|length>0));
+  def is_str_array($v): ($v|type=="array" and (($v|length)==0 or ($v|all(.[]; type=="string"))));
+  def has_verify_sh($v): ($v|type=="array" and ($v|index("./plans/verify.sh") != null));
+  def has_human_blocker($i):
+    ($i|has("human_blocker") and ($i.human_blocker|type=="object") and
+     ($i.human_blocker|has("why") and (is_nonempty_str($i.human_blocker.why))) and
+     ($i.human_blocker|has("question") and (is_nonempty_str($i.human_blocker.question))) and
+     ($i.human_blocker|has("options") and ($i.human_blocker.options|type=="array") and (($i.human_blocker.options|length)>0) and all($i.human_blocker.options[]; type=="string")) and
+     ($i.human_blocker|has("recommended") and (is_nonempty_str($i.human_blocker.recommended))) and
+     ($i.human_blocker|has("unblock_steps") and ($i.human_blocker.unblock_steps|type=="array") and (($i.human_blocker.unblock_steps|length)>0) and all($i.human_blocker.unblock_steps[]; type=="string"))
     );
-  def item_ok:
-    (has("id") and (.id|is_nonempty_str)) and
-    (has("priority") and (.priority|type=="number")) and
-    (has("phase") and (.phase|type=="number")) and
-    (has("slice") and (.slice|type=="number")) and
-    (has("slice_ref") and (.slice_ref|is_nonempty_str)) and
-    (has("story_ref") and (.story_ref|is_nonempty_str)) and
-    (has("category") and (.category|is_nonempty_str)) and
-    (has("description") and (.description|is_nonempty_str)) and
-    (has("contract_refs") and (.contract_refs|is_str_array) and (.contract_refs|length>=1)) and
-    (has("plan_refs") and (.plan_refs|is_str_array) and (.plan_refs|length>=1)) and
-    (has("scope") and (.scope|type=="object") and (.scope|has("touch") and (.scope.touch|is_str_array)) and (.scope|has("avoid") and (.scope.avoid|is_str_array))) and
-    (has("acceptance") and (.acceptance|is_str_array) and (.acceptance|length>=3)) and
-    (has("steps") and (.steps|is_str_array) and (.steps|length>=5)) and
-    (has("verify") and (.verify|is_str_array) and (.verify|has_verify_sh)) and
-    (has("evidence") and (.evidence|is_str_array)) and
-    (has("dependencies") and (.dependencies|is_str_array)) and
-    (has("est_size") and (.est_size|is_nonempty_str)) and
-    (has("risk") and (.risk|is_nonempty_str)) and
-    (has("needs_human_decision") and (.needs_human_decision|type=="boolean")) and
-    (has("passes") and (.passes|type=="boolean")) and
-    (if .needs_human_decision==true then has_human_blocker else true end);
+  def item_ok($i):
+    ($i|has("id") and is_nonempty_str($i.id)) and
+    ($i|has("priority") and ($i.priority|type=="number")) and
+    ($i|has("phase") and ($i.phase|type=="number")) and
+    ($i|has("slice") and ($i.slice|type=="number")) and
+    ($i|has("slice_ref") and is_nonempty_str($i.slice_ref)) and
+    ($i|has("story_ref") and is_nonempty_str($i.story_ref)) and
+    ($i|has("category") and is_nonempty_str($i.category)) and
+    ($i|has("description") and is_nonempty_str($i.description)) and
+    ($i|has("contract_refs") and is_str_array($i.contract_refs) and ($i.contract_refs|length>=1)) and
+    ($i|has("plan_refs") and is_str_array($i.plan_refs) and ($i.plan_refs|length>=1)) and
+    ($i|has("scope") and ($i.scope|type=="object") and ($i.scope|has("touch") and is_str_array($i.scope.touch)) and ($i.scope|has("avoid") and is_str_array($i.scope.avoid))) and
+    ($i|has("acceptance") and is_str_array($i.acceptance) and ($i.acceptance|length>=3)) and
+    ($i|has("steps") and is_str_array($i.steps) and ($i.steps|length>=5)) and
+    ($i|has("verify") and is_str_array($i.verify) and has_verify_sh($i.verify)) and
+    ($i|has("evidence") and is_str_array($i.evidence)) and
+    ($i|has("dependencies") and is_str_array($i.dependencies)) and
+    ($i|has("est_size") and is_nonempty_str($i.est_size)) and
+    ($i|has("risk") and is_nonempty_str($i.risk)) and
+    ($i|has("needs_human_decision") and ($i.needs_human_decision|type=="boolean")) and
+    ($i|has("passes") and ($i.passes|type=="boolean")) and
+    (if $i.needs_human_decision==true then has_human_blocker($i) else true end);
   (type=="object") and
-  (has("project") and (.project|is_nonempty_str)) and
+  (has("project") and is_nonempty_str(.project)) and
   (has("source") and (.source|type=="object") and
-    (.source|has("implementation_plan_path") and (.source.implementation_plan_path|is_nonempty_str)) and
-    (.source|has("contract_path") and (.source.contract_path|is_nonempty_str))
+    (.source|has("implementation_plan_path") and is_nonempty_str(.source.implementation_plan_path)) and
+    (.source|has("contract_path") and is_nonempty_str(.source.contract_path))
   ) and
   (has("rules") and (.rules|type=="object")) and
-  (has("items") and (.items|type=="array") and (all(.items[]; item_ok)))
+  (has("items") and (.items|type=="array") and (all(.items[]; item_ok(.))))
 ' "$PRD_FILE" >/dev/null 2>&1; then
   block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid"
 fi
