@@ -30,7 +30,12 @@ else
 fi
 echo "VERIFY_SH_SHA=$VERIFY_SH_SHA"
 
-MODE="${1:-quick}"                 # quick | full
+MODE="${1:-quick}"                 # quick | full | promotion
+# Allow "promotion" as a mode alias (full + VERIFY_MODE=promotion)
+if [[ "$MODE" == "promotion" ]]; then
+  MODE="full"
+  export VERIFY_MODE="promotion"
+fi
 VERIFY_MODE="${VERIFY_MODE:-}"     # set to "promotion" for release-grade gates
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"

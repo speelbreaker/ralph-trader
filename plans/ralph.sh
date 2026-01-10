@@ -164,6 +164,10 @@ if ! jq -e '
   block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid"
 fi
 
+# Required harness helpers (fail-closed with blocked artifacts)
+[[ -x "$VERIFY_SH" ]] || block_preflight "missing_verify_sh" "$VERIFY_SH missing or not executable"
+[[ -x "./plans/update_task.sh" ]] || block_preflight "missing_update_task_sh" "plans/update_task.sh missing or not executable"
+
 if [[ ! -f "$CONTRACT_FILE" ]]; then
   block_preflight "missing_contract_file" "CONTRACT_FILE missing: $CONTRACT_FILE"
 fi
@@ -413,7 +417,7 @@ completion_requirements_met() {
     return 1
   fi
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log; do
+  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing=1
     fi
@@ -430,7 +434,7 @@ verify_iteration_artifacts() {
   local missing=()
   local f
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log; do
+  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing+=("$f")
     fi
@@ -442,6 +446,88 @@ verify_iteration_artifacts() {
 
   if (( ${#missing[@]} > 0 )); then
     printf '%s\n' "${missing[@]}"
+    return 1
+  fi
+  return 0
+}
+
+file_in_list() {
+  local file="$1"
+  shift
+  local item
+  for item in "$@"; do
+    if [[ "$file" == "$item" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+file_matches_any() {
+  local file="$1"
+  shift
+  local pattern
+  for pattern in "$@"; do
+    if [[ "$file" == $pattern ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+scope_gate() {
+  local head_before="$1"
+  local head_after="$2"
+  local item_json="$3"
+  local -a touch_patterns=()
+  local -a avoid_patterns=()
+  local -a changed_files=()
+  local -a out_of_scope=()
+
+  mapfile -t touch_patterns < <(jq -r '.scope.touch[]?' <<<"$item_json")
+  mapfile -t avoid_patterns < <(jq -r '.scope.avoid[]?' <<<"$item_json")
+  mapfile -t changed_files < <(git diff --name-only "$head_before" "$head_after")
+
+  local -a ignore_files=(
+    "plans/prd.json"
+    "plans/progress.txt"
+    "plans/progress_archive.txt"
+  )
+  local -a ignore_patterns=(
+    ".ralph/**"
+    "plans/logs/**"
+  )
+
+  local globstar_state
+  local nullglob_state
+  globstar_state="$(shopt -p globstar)"
+  nullglob_state="$(shopt -p nullglob)"
+  shopt -s globstar nullglob
+
+  local file
+  for file in "${changed_files[@]}"; do
+    [[ -z "$file" ]] && continue
+    if file_in_list "$file" "${ignore_files[@]}"; then
+      continue
+    fi
+    if file_matches_any "$file" "${ignore_patterns[@]}"; then
+      continue
+    fi
+    if file_matches_any "$file" "${avoid_patterns[@]}"; then
+      out_of_scope+=("$file (scope.avoid)")
+      continue
+    fi
+    if ! file_matches_any "$file" "${touch_patterns[@]}"; then
+      out_of_scope+=("$file (not in scope.touch)")
+      continue
+    fi
+  done
+
+  eval "$globstar_state"
+  eval "$nullglob_state"
+
+  if (( ${#out_of_scope[@]} > 0 )); then
+    printf '%s\n' "${out_of_scope[@]}"
     return 1
   fi
   return 0
@@ -887,6 +973,24 @@ PROMPT
     save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
     BLOCK_DIR="$(write_blocked_with_state "agent_prd_edit" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
     echo "Blocked: agent edited PRD in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+
+  if [[ "$RPH_ALLOW_VERIFY_SH_EDIT" != "1" ]]; then
+    if git diff --name-only "$HEAD_BEFORE" "$HEAD_AFTER" | grep -qx "plans/verify.sh"; then
+      BLOCK_DIR="$(write_blocked_with_state "verify_sh_modified" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+      echo "<promise>BLOCKED_VERIFY_SH_MODIFIED</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: plans/verify.sh was modified in this iteration (human-reviewed change required) in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 1
+    fi
+  fi
+
+  out_of_scope=""
+  if ! out_of_scope="$(scope_gate "$HEAD_BEFORE" "$HEAD_AFTER" "$NEXT_ITEM_JSON")"; then
+    BLOCK_DIR="$(write_blocked_with_state "scope_violation" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "ERROR: scope violation detected." | tee -a "$LOG_FILE"
+    echo "$out_of_scope" | tee -a "$LOG_FILE"
+    echo "Blocked: scope violation in $BLOCK_DIR" | tee -a "$LOG_FILE"
     exit 1
   fi
 
