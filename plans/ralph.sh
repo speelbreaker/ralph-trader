@@ -25,6 +25,23 @@ if [[ -z "${RPH_PROMPT_FLAG+x}" ]]; then
   RPH_PROMPT_FLAG="-p"
 fi
 RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
+
+# Disallow agent from editing PRD directly (preferred; harness flips passes via <mark_pass>).
+RPH_ALLOW_AGENT_PRD_EDIT="${RPH_ALLOW_AGENT_PRD_EDIT:-0}"  # 0|1 (legacy compatibility)
+# Optional contract alignment review gate (runs only when marking a story pass).
+CONTRACT_FILE="${CONTRACT_FILE:-CONTRACT.md}"
+RPH_REQUIRE_CONTRACT_REVIEW="${RPH_REQUIRE_CONTRACT_REVIEW:-0}"  # 0|1
+# Agent pass-mark tags: print exactly <mark_pass>ID</mark_pass>
+RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
+RPH_MARK_PASS_CLOSE="${RPH_MARK_PASS_CLOSE:-</mark_pass>}"
+
+# Parse RPH_AGENT_ARGS (space-delimited) into an array (global IFS excludes spaces).
+RPH_AGENT_ARGS_ARR=()
+if [[ -n "${RPH_AGENT_ARGS:-}" ]]; then
+  _old_ifs="$IFS"; IFS=' '
+  read -r -a RPH_AGENT_ARGS_ARR <<<"$RPH_AGENT_ARGS"
+  IFS="$_old_ifs"
+fi
 RPH_RATE_LIMIT_PER_HOUR="${RPH_RATE_LIMIT_PER_HOUR:-100}"
 RPH_RATE_LIMIT_FILE="${RPH_RATE_LIMIT_FILE:-.ralph/rate_limit.json}"
 RPH_RATE_LIMIT_ENABLED="${RPH_RATE_LIMIT_ENABLED:-1}"
@@ -47,6 +64,23 @@ command -v jq  >/dev/null 2>&1 || { echo "ERROR: jq required"; exit 1; }
 
 [[ -f "$PRD_FILE" ]] || { echo "ERROR: missing $PRD_FILE"; exit 1; }
 jq . "$PRD_FILE" >/dev/null 2>&1 || { echo "ERROR: $PRD_FILE invalid JSON"; exit 1; }
+
+# Minimal PRD schema sanity check (fail-closed)
+if ! jq -e '
+  (has("project")) and (has("items") and (.items|type=="array")) and
+  (.items | all(
+    (has("id") and (.id|type=="string") and (.id|length>0)) and
+    (has("passes") and (.passes|type=="boolean")) and
+    (has("slice")) and (has("priority")) and
+    (has("needs_human_decision") and (.needs_human_decision|type=="boolean"))
+  ))
+' "$PRD_FILE" >/dev/null 2>&1; then
+  echo "ERROR: $PRD_FILE schema invalid"; exit 1
+fi
+
+if [[ "$RPH_REQUIRE_CONTRACT_REVIEW" == "1" ]] && [[ ! -f "$CONTRACT_FILE" ]]; then
+  echo "ERROR: CONTRACT_FILE missing: $CONTRACT_FILE"; exit 1
+fi
 
 # progress file exists
 mkdir -p "$(dirname "$PROGRESS_FILE")"
@@ -101,10 +135,16 @@ save_iter_artifacts() {
 
 save_iter_after() {
   local iter_dir="$1"
+  local head_before="${2:-}"
+  local head_after="${3:-}"
   cp "$PRD_FILE" "${iter_dir}/prd_after.json" || true
   tail -n 200 "$PROGRESS_FILE" > "${iter_dir}/progress_tail_after.txt" || true
   git rev-parse HEAD > "${iter_dir}/head_after.txt" || true
-  git diff > "${iter_dir}/diff.patch" || true
+  if [[ -n "$head_before" && -n "$head_after" ]]; then
+    git diff "$head_before" "$head_after" > "${iter_dir}/diff.patch" || true
+  else
+    git diff > "${iter_dir}/diff.patch" || true
+  fi
 }
 
 revert_to_last_good() {
@@ -190,6 +230,11 @@ sha256_tail_200() {
   else
     tail -n 200 "$file" | shasum -a 256 | awk '{print $1}'
   fi
+}
+
+extract_mark_pass_id() {
+  local file="$1"
+  sed -n "s/.*${RPH_MARK_PASS_OPEN}\([^<]*\)${RPH_MARK_PASS_CLOSE}.*/\1/p" "$file" | head -n 1
 }
 
 state_merge() {
@@ -372,10 +417,10 @@ PROMPT
     set +e
     if [[ -n "$RPH_PROMPT_FLAG" ]]; then
       rate_limit_before_call
-      ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     else
       rate_limit_before_call
-      ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     fi
     set -e
 
@@ -535,9 +580,11 @@ NON-NEGOTIABLE RULES:
 - Work on EXACTLY ONE PRD item per iteration.
 - Do NOT mark passes=true unless ${VERIFY_SH} ${RPH_VERIFY_MODE} is GREEN.
 - Do NOT delete/disable tests or loosen gates to make green.
-- Update PRD ONLY via: ./plans/update_task.sh <id> true  (never edit JSON directly).
+- Do NOT edit PRD directly unless explicitly allowed (RPH_ALLOW_AGENT_PRD_EDIT=1).
+- To mark a story pass, print exactly: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
 - Append to progress.txt (do not rewrite it).
 
+Selected story ID (ONLY): ${NEXT_ID}
 You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
 Do not choose a different item even if it looks easier.
 
@@ -549,9 +596,9 @@ ${LAST_FAIL_NOTE}
 3) Choose the highest-priority PRD item where passes=false.
 4) Implement with minimal diff + add/adjust tests as needed.
 5) Verify until green: ${VERIFY_SH} ${RPH_VERIFY_MODE}
-6) Mark pass: ./plans/update_task.sh <id> true
+6) Mark pass by printing: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
 7) Append to progress.txt: what changed, commands run, what’s next.
-8) Commit: git add -A && git commit -m "PRD: <id> - <short description>"
+8) Commit: git add -A && git commit -m "PRD: ${NEXT_ID} - <short description>"
 
 If ALL items pass, output exactly: ${RPH_COMPLETE_SENTINEL}
 PROMPT
@@ -562,10 +609,10 @@ PROMPT
   set +e
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
     rate_limit_before_call
-    ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
   else
     rate_limit_before_call
-    ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
   fi
   AGENT_RC=${PIPESTATUS[0]}
   set -e
@@ -573,9 +620,19 @@ PROMPT
 
   HEAD_AFTER="$(git rev-parse HEAD)"
   PRD_HASH_AFTER="$(sha256_file "$PRD_FILE")"
-  PROGRESS_MADE=0
-  if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" || "$PRD_HASH_AFTER" != "$PRD_HASH_BEFORE" ]]; then
-    PROGRESS_MADE=1
+  MARK_PASS_ID=""
+  if [[ -f "${ITER_DIR}/agent.out" ]]; then
+    MARK_PASS_ID="$(extract_mark_pass_id "${ITER_DIR}/agent.out" || true)"
+  fi
+  if [[ -n "$MARK_PASS_ID" && "$MARK_PASS_ID" != "$NEXT_ID" ]]; then
+    echo "ERROR: mark_pass id mismatch (got=$MARK_PASS_ID expected=$NEXT_ID)." | tee -a "$LOG_FILE"
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    exit 9
+  fi
+  if [[ "$RPH_ALLOW_AGENT_PRD_EDIT" != "1" && "$PRD_HASH_AFTER" != "$PRD_HASH_BEFORE" ]]; then
+    echo "ERROR: PRD was modified by agent but RPH_ALLOW_AGENT_PRD_EDIT=0." | tee -a "$LOG_FILE"
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    exit 9
   fi
 
   # 4) Post-verify
@@ -596,7 +653,7 @@ PROMPT
   if (( verify_post_rc != 0 )); then
     POST_VERIFY_FAILED=1
     echo "Post-iteration verify failed." | tee -a "$LOG_FILE"
-    save_iter_after "$ITER_DIR"
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
     echo "$ITER_DIR" > "$LAST_FAIL_FILE"
 
     FAILURE_SIG="$(sha256_tail_200 "${ITER_DIR}/verify_post.log")"
@@ -645,6 +702,27 @@ PROMPT
       '.last_failure_hash=$last_failure_hash | .last_failure_streak=$last_failure_streak'
   fi
 
+  if [[ -n "$MARK_PASS_ID" ]]; then
+    if (( POST_VERIFY_FAILED == 1 )); then
+      echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
+    else
+      ./plans/update_task.sh "$MARK_PASS_ID" true
+      git add -A
+      if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" ]]; then
+        git commit --amend --no-edit
+      else
+        git commit -m "PRD: ${MARK_PASS_ID} - ${NEXT_DESC}"
+      fi
+      HEAD_AFTER="$(git rev-parse HEAD)"
+      PRD_HASH_AFTER="$(sha256_file "$PRD_FILE")"
+    fi
+  fi
+
+  PROGRESS_MADE=0
+  if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" || "$PRD_HASH_AFTER" != "$PRD_HASH_BEFORE" ]]; then
+    PROGRESS_MADE=1
+  fi
+
   if (( PROGRESS_MADE == 1 )); then
     NO_PROGRESS_STREAK=0
   else
@@ -689,12 +767,15 @@ PROMPT
     --arg last_good_ref "$HEAD_AFTER" \
     '.last_good_ref=$last_good_ref'
 
-  save_iter_after "$ITER_DIR"
+  save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
 
   # 6) Completion detection: sentinel OR PRD all-pass
   if grep -qxF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
-    echo "COMPLETE sentinel detected. Done after $i iterations." | tee -a "$LOG_FILE"
-    exit 0
+    if all_items_passed; then
+      echo "Agent signaled COMPLETE and PRD is fully passed. Exiting." | tee -a "$LOG_FILE"
+      exit 0
+    fi
+    echo "WARNING: Agent signaled COMPLETE but PRD is not fully passed; ignoring." | tee -a "$LOG_FILE"
   fi
 
   if all_items_passed; then
