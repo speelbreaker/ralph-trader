@@ -35,6 +35,8 @@ RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
 
 # Disallow agent from editing PRD directly (preferred; harness flips passes via <mark_pass>).
 RPH_ALLOW_AGENT_PRD_EDIT="${RPH_ALLOW_AGENT_PRD_EDIT:-0}"  # 0|1 (legacy compatibility)
+# Disallow verify.sh edits unless explicitly enabled (human-reviewed change).
+RPH_ALLOW_VERIFY_SH_EDIT="${RPH_ALLOW_VERIFY_SH_EDIT:-0}"  # 0|1
 # Contract alignment review gate (mandatory).
 CONTRACT_FILE="${CONTRACT_FILE:-CONTRACT.md}"
 RPH_REQUIRE_CONTRACT_REVIEW="${RPH_REQUIRE_CONTRACT_REVIEW:-1}"  # 0|1 (mandatory)
@@ -127,6 +129,10 @@ if ! jq -e '
      ($i.human_blocker|has("recommended") and (is_nonempty_str($i.human_blocker.recommended))) and
      ($i.human_blocker|has("unblock_steps") and ($i.human_blocker.unblock_steps|type=="array") and (($i.human_blocker.unblock_steps|length)>0) and all($i.human_blocker.unblock_steps[]; type=="string"))
     );
+  def source_ok($s):
+    ($s|type=="object") and
+    ($s|has("implementation_plan_path") and is_nonempty_str($s.implementation_plan_path)) and
+    ($s|has("contract_path") and is_nonempty_str($s.contract_path));
   def item_ok($i):
     ($i|has("id") and is_nonempty_str($i.id)) and
     ($i|has("priority") and ($i.priority|type=="number")) and
@@ -151,10 +157,7 @@ if ! jq -e '
     (if $i.needs_human_decision==true then has_human_blocker($i) else true end);
   (type=="object") and
   (has("project") and is_nonempty_str(.project)) and
-  (has("source") and (.source|type=="object") and
-    (.source|has("implementation_plan_path") and is_nonempty_str(.source.implementation_plan_path)) and
-    (.source|has("contract_path") and is_nonempty_str(.source.contract_path))
-  ) and
+  (has("source") and source_ok(.source)) and
   (has("rules") and (.rules|type=="object")) and
   (has("items") and (.items|type=="array") and (all(.items[]; item_ok(.))))
 ' "$PRD_FILE" >/dev/null 2>&1; then
