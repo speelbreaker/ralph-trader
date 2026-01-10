@@ -217,7 +217,7 @@ PROMPT
     } < "$SEL_OUT"
     sel_line="${sel_line//$'\r'/}"
 
-    if [[ "$has_extra" -eq 0 && "$sel_line" =~ ^<selected_id>[^<]+</selected_id>$ ]]; then
+    if [[ "$has_extra" -eq 0 ]] && echo "$sel_line" | grep -qE '^<selected_id>[^<]+</selected_id>$'; then
       NEXT_ID="${sel_line#<selected_id>}"
       NEXT_ID="${NEXT_ID%</selected_id>}"
       NEXT_ITEM_JSON="$(item_by_id "$NEXT_ID")"
