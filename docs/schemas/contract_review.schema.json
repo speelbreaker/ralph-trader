@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Contract Review Result",
+  "type": "object",
+  "required": [
+    "selected_story_id",
+    "decision",
+    "confidence",
+    "contract_refs_checked",
+    "scope_check",
+    "verify_check",
+    "pass_flip_check",
+    "violations",
+    "required_followups",
+    "rationale"
+  ],
+  "properties": {
+    "selected_story_id": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED"] },
+    "confidence": { "type": "string", "enum": ["high", "med", "low"] },
+    "contract_refs_checked": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "scope_check": {
+      "type": "object",
+      "required": ["changed_files", "out_of_scope_files", "notes"],
+      "properties": {
+        "changed_files": { "type": "array", "items": { "type": "string" } },
+        "out_of_scope_files": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "verify_check": {
+      "type": "object",
+      "required": ["verify_post_present", "verify_post_green", "notes"],
+      "properties": {
+        "verify_post_present": { "type": "boolean" },
+        "verify_post_green": { "type": "boolean" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "pass_flip_check": {
+      "type": "object",
+      "required": [
+        "requested_mark_pass_id",
+        "prd_passes_before",
+        "prd_passes_after",
+        "evidence_required",
+        "evidence_found",
+        "evidence_missing",
+        "decision_on_pass_flip"
+      ],
+      "properties": {
+        "requested_mark_pass_id": { "type": "string" },
+        "prd_passes_before": { "type": "boolean" },
+        "prd_passes_after": { "type": "boolean" },
+        "evidence_required": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_found": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_missing": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "decision_on_pass_flip": {
+          "type": "string",
+          "enum": ["ALLOW", "DENY", "BLOCKED"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "violations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "severity",
+          "contract_ref",
+          "description",
+          "evidence_in_diff",
+          "changed_files",
+          "recommended_action"
+        ],
+        "properties": {
+          "severity": { "type": "string", "enum": ["CRITICAL", "MAJOR", "MINOR"] },
+          "contract_ref": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "evidence_in_diff": { "type": "string", "minLength": 1 },
+          "changed_files": { "type": "array", "items": { "type": "string" } },
+          "recommended_action": {
+            "type": "string",
+            "enum": ["REVERT", "PATCH_CONTRACT", "PATCH_CODE", "NEEDS_HUMAN"]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required_followups": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "rationale": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": false
+}

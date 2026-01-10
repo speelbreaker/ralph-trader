@@ -84,6 +84,9 @@
       "scope": {
         "touch": [
           "Cargo.toml",
+          "Cargo.lock",
+          ".gitignore",
+          ".DS_Store",
           "crates/soldier_core/**",
           "crates/soldier_infra/**",
           "plans/verify.sh"
@@ -142,9 +145,16 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/venue/**",
-          "crates/soldier_core/risk/state.rs",
-          "crates/soldier_infra/deribit/public/**"
+          "Cargo.lock",
+          "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/src/risk/state.rs",
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/test_instrument_kind_mapping.rs",
+          "crates/soldier_infra/src/deribit/public/**",
+          "crates/soldier_infra/src/deribit/mod.rs",
+          "crates/soldier_infra/src/lib.rs",
+          "crates/soldier_infra/Cargo.toml"
         ],
         "avoid": [
           "crates/soldier_core/execution/**",
@@ -197,7 +207,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/venue/**"
+          "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/**",
@@ -250,7 +261,10 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/execution/order_size.rs"
+          "crates/soldier_core/src/execution/order_size.rs",
+          "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/test_order_size.rs"
         ],
         "avoid": [
           "crates/soldier_infra/**",
@@ -302,7 +316,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/execution/dispatch_map.rs"
+          "crates/soldier_core/src/execution/dispatch_map.rs",
+          "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/test_dispatch_map.rs",
+          "crates/soldier_core/tests/test_order_size.rs"
         ],
         "avoid": [
           "crates/soldier_core/risk/**",

@@ -2,3 +2,4 @@
 target/
 plans/logs/
 plans/progress_archive.txt
+.DS_Store

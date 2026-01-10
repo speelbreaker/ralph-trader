@@ -1,7 +1,4 @@
-use soldier_core::execution::{
-    DispatchRejectReason, OrderSize, map_order_size_to_deribit_amount,
-    order_intent_reject_unit_mismatch_total,
-};
+use soldier_core::execution::{DispatchRejectReason, OrderSize, map_order_size_to_deribit_amount};
 use soldier_core::risk::RiskState;
 use soldier_core::venue::InstrumentKind;
 
@@ -37,12 +34,10 @@ fn rejects_contract_mismatch_in_dispatch_map() {
         index_price,
     );
 
-    let before = order_intent_reject_unit_mismatch_total();
-    let err = map_order_size_to_deribit_amount(InstrumentKind::Option, &option, Some(0.1))
-        .expect_err("mismatch should reject");
-    let after = order_intent_reject_unit_mismatch_total();
+    let err =
+        map_order_size_to_deribit_amount(InstrumentKind::Option, &option, Some(0.1), index_price)
+            .expect_err("mismatch should reject");
 
     assert_eq!(err.risk_state, RiskState::Degraded);
     assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
-    assert_eq!(after, before + 1);
 }

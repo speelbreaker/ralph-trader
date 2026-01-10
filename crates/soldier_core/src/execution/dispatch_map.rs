@@ -12,6 +12,7 @@ static ORDER_INTENT_REJECT_UNIT_MISMATCH_TOTAL: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeribitOrderAmount {
     pub amount: f64,
+    pub derived_qty_coin: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,14 +30,25 @@ pub fn map_order_size_to_deribit_amount(
     instrument_kind: InstrumentKind,
     order_size: &OrderSize,
     contract_multiplier: Option<f64>,
+    index_price: f64,
 ) -> Result<DeribitOrderAmount, DispatchReject> {
     if order_size.qty_coin.is_some() && order_size.qty_usd.is_some() {
         return reject_unit_mismatch("both_qty");
     }
 
-    let canonical_amount = match instrument_kind {
-        InstrumentKind::Option | InstrumentKind::LinearFuture => order_size.qty_coin,
-        InstrumentKind::Perpetual | InstrumentKind::InverseFuture => order_size.qty_usd,
+    let (canonical_amount, derived_qty_coin) = match instrument_kind {
+        InstrumentKind::Option | InstrumentKind::LinearFuture => {
+            let amount = order_size.qty_coin;
+            (amount, amount)
+        }
+        InstrumentKind::Perpetual | InstrumentKind::InverseFuture => {
+            if index_price <= 0.0 {
+                return reject_unit_mismatch("invalid_index_price");
+            }
+            let amount = order_size.qty_usd;
+            let derived_qty_coin = amount.map(|qty_usd| qty_usd / index_price);
+            (amount, derived_qty_coin)
+        }
     };
 
     let canonical_amount = match canonical_amount {
@@ -57,6 +69,7 @@ pub fn map_order_size_to_deribit_amount(
 
     Ok(DeribitOrderAmount {
         amount: canonical_amount,
+        derived_qty_coin,
     })
 }
 
