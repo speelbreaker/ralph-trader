@@ -8,3 +8,6 @@
 - S1-001: initialized Rust workspace with soldier_core and soldier_infra crates, added root Cargo.toml workspace and generated Cargo.lock.
 - Commands: ./plans/init.sh; ./plans/verify.sh full; cargo new --lib crates/soldier_core --vcs none; cargo new --lib crates/soldier_infra --vcs none; cargo test --workspace; ./plans/verify.sh full; ./plans/update_task.sh S1-001 true.
 - Next: proceed to S1-002.
+- S1-002: added RiskState and InstrumentKind enums, Deribit metadata structs, and mapping logic; added instrument kind mapping tests.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-002 true.
+- Next: proceed to S1-003.

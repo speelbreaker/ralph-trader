@@ -9,3 +9,6 @@ version = "0.1.0"
 [[package]]
 name = "soldier_infra"
 version = "0.1.0"
+dependencies = [
+ "soldier_core",
+]
