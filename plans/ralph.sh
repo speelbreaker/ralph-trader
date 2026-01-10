@@ -253,7 +253,7 @@ PROMPT
 
   if [[ "$RPH_SELECTION_MODE" == "agent" ]]; then
     SEL_SLICE="$(jq -r '.slice // empty' <<<"$NEXT_ITEM_JSON")"
-    SEL_PASSES="$(jq -r '.passes // empty' <<<"$NEXT_ITEM_JSON")"
+    SEL_PASSES="$(jq -r 'if has("passes") then .passes else "" end' <<<"$NEXT_ITEM_JSON")"
     if [[ -z "$NEXT_ID" || -z "$NEXT_ITEM_JSON" || "$SEL_PASSES" != "false" || "$SEL_SLICE" != "$ACTIVE_SLICE" ]]; then
       BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
       echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
