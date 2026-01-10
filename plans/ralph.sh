@@ -15,7 +15,12 @@ ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choice)
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-claude}"       # claude|codex|opencode|etc
-RPH_AGENT_ARGS="${RPH_AGENT_ARGS:---permission-mode acceptEdits}"
+if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
+  RPH_AGENT_ARGS="--permission-mode acceptEdits"
+fi
+if [[ -z "${RPH_PROMPT_FLAG+x}" ]]; then
+  RPH_PROMPT_FLAG="-p"
+fi
 RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
 
 mkdir -p .ralph
@@ -170,7 +175,11 @@ PROMPT
   echo "$PROMPT" > "${ITER_DIR}/prompt.txt"
 
   set +e
-  ($RPH_AGENT_CMD $RPH_AGENT_ARGS -p "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+  if [[ -n "$RPH_PROMPT_FLAG" ]]; then
+    ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+  else
+    ($RPH_AGENT_CMD $RPH_AGENT_ARGS "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+  fi
   AGENT_RC=${PIPESTATUS[0]}
   set -e
   echo "Agent exit code: $AGENT_RC" | tee -a "$LOG_FILE"
