@@ -117,7 +117,7 @@ jq . "$PRD_FILE" >/dev/null 2>&1 || block_preflight "invalid_prd_json" "$PRD_FIL
 # PRD schema sanity check (fail-closed)
 if ! jq -e '
   def is_nonempty_str: type=="string" and length>0;
-  def is_str_array: type=="array" and all(.[]; type=="string");
+  def is_str_array: type=="array" and (length==0 or all(.[]; type=="string"));
   def has_verify_sh: (type=="array") and (index("./plans/verify.sh") != null);
   def has_human_blocker:
     (has("human_blocker") and (.human_blocker|type=="object") and
