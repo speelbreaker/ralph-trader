@@ -14,6 +14,7 @@ ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choice)
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
+RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-claude}"       # claude|codex|opencode|etc
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
   RPH_AGENT_ARGS="--permission-mode acceptEdits"
@@ -99,6 +100,22 @@ revert_to_last_good() {
   git clean -fd
 }
 
+select_next_item() {
+  jq -c '
+    def items:
+      if type=="array" then . else (.items // []) end;
+    items | map(select(.passes==false)) | sort_by(.priority) | reverse | .[0] // empty
+  ' "$PRD_FILE"
+}
+
+all_items_passed() {
+  jq -e '
+    def items:
+      if type=="array" then . else (.items // []) end;
+    (items | length) > 0 and all(items[]; .passes == true)
+  ' "$PRD_FILE" >/dev/null
+}
+
 # --- main loop ---
 for ((i=1; i<=MAX_ITERS; i++)); do
   rotate_progress
@@ -109,6 +126,45 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   echo "Artifacts: $ITER_DIR" | tee -a "$LOG_FILE"
 
   save_iter_artifacts "$ITER_DIR"
+
+  NEXT_ITEM_JSON="$(select_next_item)"
+  if [[ -z "$NEXT_ITEM_JSON" ]]; then
+    echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
+    exit 0
+  fi
+
+  NEXT_ID="$(jq -r '.id // empty' <<<"$NEXT_ITEM_JSON")"
+  NEXT_PRIORITY="$(jq -r '.priority // 0' <<<"$NEXT_ITEM_JSON")"
+  NEXT_DESC="$(jq -r '.description // ""' <<<"$NEXT_ITEM_JSON")"
+  NEXT_NEEDS_HUMAN="$(jq -r '.needs_human_decision // false' <<<"$NEXT_ITEM_JSON")"
+
+  if [[ "$NEXT_NEEDS_HUMAN" == "true" ]]; then
+    BLOCK_DIR=".ralph/blocked_$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BLOCK_DIR"
+    cp "$PRD_FILE" "$BLOCK_DIR/prd_snapshot.json" || true
+    jq -n \
+      --arg id "$NEXT_ID" \
+      --argjson priority "$NEXT_PRIORITY" \
+      --arg description "$NEXT_DESC" \
+      --argjson needs_human_decision true \
+      '{id: $id, priority: $priority, description: $description, needs_human_decision: $needs_human_decision}' \
+      > "$BLOCK_DIR/blocked_item.json"
+
+    if [[ "$RPH_DRY_RUN" != "1" ]]; then
+      if [[ -x "$VERIFY_SH" ]]; then
+        run_verify "$BLOCK_DIR/verify_pre.log" || true
+      fi
+    fi
+
+    echo "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked item: $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
+    exit 0
+  fi
+
+  if [[ "$RPH_DRY_RUN" == "1" ]]; then
+    echo "DRY RUN: would run $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
+    exit 0
+  fi
 
   # 1) Pre-verify baseline
   if [[ ! -x "$VERIFY_SH" ]]; then
@@ -155,6 +211,9 @@ NON-NEGOTIABLE RULES:
 - Do NOT delete/disable tests or loosen gates to make green.
 - Update PRD ONLY via: ./plans/update_task.sh <id> true  (never edit JSON directly).
 - Append to progress.txt (do not rewrite it).
+
+You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
+Do not choose a different item even if it looks easier.
 
 PROCEDURE:
 0) Get bearings: pwd; git log --oneline -10; read prd.json + progress.txt.
@@ -208,12 +267,12 @@ PROMPT
   save_iter_after "$ITER_DIR"
 
   # 6) Completion detection: sentinel OR PRD all-pass
-  if grep -qF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
+  if grep -qxF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
     echo "COMPLETE sentinel detected. Done after $i iterations." | tee -a "$LOG_FILE"
     exit 0
   fi
 
-  if jq -e '(.items | length) > 0 and all(.items[]; .passes == true)' "$PRD_FILE" >/dev/null; then
+  if all_items_passed; then
     echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
     exit 0
   fi
