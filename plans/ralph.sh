@@ -141,7 +141,7 @@ if ! jq -e '
     (has("scope") and (.scope|type=="object") and (.scope|has("touch") and (.scope.touch|is_str_array)) and (.scope|has("avoid") and (.scope.avoid|is_str_array))) and
     (has("acceptance") and (.acceptance|is_str_array) and (.acceptance|length>=3)) and
     (has("steps") and (.steps|is_str_array) and (.steps|length>=5)) and
-    (has("verify") and (.verify|is_str_array) and has_verify_sh) and
+    (has("verify") and (.verify|is_str_array) and (.verify|has_verify_sh)) and
     (has("evidence") and (.evidence|is_str_array)) and
     (has("dependencies") and (.dependencies|is_str_array)) and
     (has("est_size") and (.est_size|is_nonempty_str)) and
