@@ -186,6 +186,7 @@ fi
 printf '{"status":"pass","contract_path":"%s","notes":"acceptance stub"}\n' "${CONTRACT_FILE:-CONTRACT.md}" > "$out"
 EOF
 chmod +x "$WORKTREE/plans/contract_check.sh"
+run_in_worktree git update-index --assume-unchanged plans/contract_check.sh >/dev/null 2>&1 || true
 
 echo "Test 1: schema-violating PRD stops preflight"
 run_in_worktree mkdir -p .ralph
