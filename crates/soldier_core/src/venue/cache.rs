@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 use crate::risk::RiskState;
 
 static INSTRUMENT_CACHE_STALE_TOTAL: AtomicU64 = AtomicU64::new(0);
+static INSTRUMENT_CACHE_HITS_TOTAL: AtomicU64 = AtomicU64::new(0);
+static INSTRUMENT_CACHE_AGE_MS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
 struct InstrumentCacheEntry<T> {
@@ -53,7 +55,9 @@ impl<T> InstrumentCache<T> {
 
     pub fn get(&self, instrument: &str) -> Option<CacheRead<'_, T>> {
         let entry = self.entries.get(instrument)?;
+        INSTRUMENT_CACHE_HITS_TOTAL.fetch_add(1, Ordering::Relaxed);
         let age = Instant::now().saturating_duration_since(entry.updated_at);
+        INSTRUMENT_CACHE_AGE_MS.store(age.as_millis() as u64, Ordering::Relaxed);
         if age > self.ttl {
             record_stale(instrument, age, self.ttl);
             Some(CacheRead {
@@ -75,6 +79,14 @@ impl<T> InstrumentCache<T> {
 
 pub fn instrument_cache_stale_total() -> u64 {
     INSTRUMENT_CACHE_STALE_TOTAL.load(Ordering::Relaxed)
+}
+
+pub fn instrument_cache_hits_total() -> u64 {
+    INSTRUMENT_CACHE_HITS_TOTAL.load(Ordering::Relaxed)
+}
+
+pub fn instrument_cache_age_s() -> f64 {
+    INSTRUMENT_CACHE_AGE_MS.load(Ordering::Relaxed) as f64 / 1000.0
 }
 
 fn record_stale(instrument: &str, age: Duration, ttl: Duration) {
