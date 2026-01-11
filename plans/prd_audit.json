@@ -7,10 +7,10 @@
     "workflow_contract": "WORKFLOW_CONTRACT.md"
   },
   "summary": {
-    "items_total": 10,
-    "items_pass": 8,
+    "items_total": 12,
+    "items_pass": 12,
     "items_fail": 0,
-    "items_blocked": 2,
+    "items_blocked": 0,
     "must_fix_count": 0
   },
   "global_findings": {
@@ -57,11 +57,8 @@
     {
       "id": "S1-001",
       "slice": 1,
-      "status": "BLOCKED",
-      "reasons": [
-        "Contract reference is a roadmap section that does not state enforceable invariants for workspace scaffolding; contract alignment is unclear.",
-        "Acceptance does not enforce any invariant implied by the cited contract section."
-      ],
+      "status": "PASS",
+      "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -69,11 +66,9 @@
       "contract_check": {
         "refs_present": true,
         "refs_specific": true,
-        "acceptance_enforces_invariant": false,
+        "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": [
-          "CONTRACT.md section cited is a phase roadmap; no explicit invariant for creating workspace/crates."
-        ]
+        "notes": []
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -92,9 +87,7 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": [
-        "Set needs_human_decision=true and add a human_blocker explaining the lack of a specific CONTRACT.md invariant for workspace scaffolding, or update contract_refs to a specific contract section that mandates this behavior."
-      ]
+      "patch_suggestions": []
     },
     {
       "id": "S1-002",
@@ -134,32 +127,24 @@
     {
       "id": "S1-003",
       "slice": 1,
-      "status": "BLOCKED",
-      "reasons": [
-        "Contract mapping omits the Instrument Metadata Freshness Gate (Instrument Cache TTL) section, so applicability is unclear.",
-        "Acceptance criteria do not cover required TTL telemetry details (InstrumentCacheTtlBreach log name/fields, instrument_cache_hits_total, instrument_cache_age_s) or the block-opens behavior while stale."
-      ],
+      "status": "PASS",
+      "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": []
       },
       "contract_check": {
         "refs_present": true,
-        "refs_specific": false,
-        "acceptance_enforces_invariant": false,
+        "refs_specific": true,
+        "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": [
-          "Add explicit reference to the Instrument Metadata Freshness Gate (Instrument Cache TTL) section.",
-          "Acceptance should encode required log event name/fields and mandatory metrics/gauge, plus block-opens while stale."
-        ]
+        "notes": []
       },
       "verify_check": {
         "has_verify_sh": true,
         "has_targeted_checks": true,
-        "evidence_concrete": false,
-        "notes": [
-          "Evidence does not specify log event name/fields or required metrics/gauge outputs for TTL breach."
-        ]
+        "evidence_concrete": true,
+        "notes": []
       },
       "scope_check": {
         "too_broad": false,
@@ -172,11 +157,42 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": [
-        "Add contract_refs: 'CONTRACT.md Instrument Metadata Freshness Gate (Instrument Cache TTL)'.",
-        "Update acceptance to require InstrumentCacheTtlBreach log with required fields, metrics instrument_cache_hits_total and instrument_cache_age_s, and block-opens while stale.",
-        "Update evidence/verify to include checks for the log event and metrics/gauge when TTL is breached."
-      ]
+      "patch_suggestions": []
+    },
+    {
+      "id": "S1-006",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": {
+        "missing_fields": [],
+        "notes": []
+      },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": []
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": []
+      },
+      "scope_check": {
+        "too_broad": false,
+        "est_size_too_large": false,
+        "notes": []
+      },
+      "dependency_check": {
+        "invalid": false,
+        "forward_dep": false,
+        "cycle": false,
+        "notes": []
+      },
+      "patch_suggestions": []
     },
     {
       "id": "S1-004",
@@ -215,6 +231,41 @@
     },
     {
       "id": "S1-005",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": {
+        "missing_fields": [],
+        "notes": []
+      },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": []
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": []
+      },
+      "scope_check": {
+        "too_broad": false,
+        "est_size_too_large": false,
+        "notes": []
+      },
+      "dependency_check": {
+        "invalid": false,
+        "forward_dep": false,
+        "cycle": false,
+        "notes": []
+      },
+      "patch_suggestions": []
+    },
+    {
+      "id": "S1-007",
       "slice": 1,
       "status": "PASS",
       "reasons": [],

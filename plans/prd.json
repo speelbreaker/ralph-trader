@@ -76,7 +76,7 @@
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
       "contract_refs": [
-        "CONTRACT.md §6 Implementation Roadmap v4.0 (Phase 1: The Foundation)"
+        "CONTRACT.md §0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Phase 1 Entry Criteria (Rust workspace exists with crates/soldier_core, crates/soldier_infra)"
@@ -199,8 +199,65 @@
       "category": "risk",
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
-        "CONTRACT.md Definitions (RiskState)",
-        "CONTRACT.md §1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract)"
+        "CONTRACT.md §1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
+        "CONTRACT.md §2.2 PolicyGuard (Single Authoritative TradingMode Resolver)",
+        "CONTRACT.md Definitions (RiskState)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/src/policy/**",
+          "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
+        ],
+        "avoid": [
+          "crates/soldier_core/execution/**",
+          "crates/soldier_infra/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN cached instrument metadata older than the configured TTL WHEN accessed THEN RiskState::Degraded is returned for that lookup.",
+        "GIVEN cached metadata within TTL WHEN accessed THEN RiskState::Healthy is returned alongside the metadata.",
+        "GIVEN a TTL breach WHEN PolicyGuard evaluates THEN TradingMode::ReduceOnly is enforced within one tick and opens are blocked (closes/hedges/cancels allowed)."
+      ],
+      "steps": [
+        "Locate or create the InstrumentCache structure in crates/soldier_core/venue.",
+        "Add timestamp tracking for cache insert/update and compute cache age on read.",
+        "Compare cache age to TTL and return RiskState::Degraded when stale.",
+        "Add unit tests in crates/soldier_core/tests/test_instrument_cache_ttl.rs for fresh vs stale behavior.",
+        "Add or update a test to assert TTL breach forces ReduceOnly via PolicyGuard (opens blocked, closes allowed).",
+        "Ensure PolicyGuard precedence treats risk_state==Degraded as ReduceOnly per contract."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_instrument_cache_ttl"
+      ],
+      "evidence": [
+        "cargo test -p soldier_core --test test_instrument_cache_ttl output",
+        "Unit test asserts RiskState::Degraded on stale metadata",
+        "Test output shows PolicyGuard ReduceOnly within one tick and opens blocked"
+      ],
+      "dependencies": [
+        "S1-002"
+      ],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true
+    },
+    {
+      "id": "S1-006",
+      "priority": 65,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "story_ref": "S1.1 Instrument cache TTL observability",
+      "category": "risk",
+      "description": "Add required TTL observability hooks for instrument cache freshness.",
+      "contract_refs": [
+        "CONTRACT.md §1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
@@ -216,17 +273,17 @@
         ]
       },
       "acceptance": [
-        "GIVEN cached instrument metadata older than the configured TTL WHEN accessed THEN RiskState::Degraded is returned for that lookup.",
-        "GIVEN cached metadata within TTL WHEN accessed THEN RiskState::Healthy is returned alongside the metadata.",
-        "GIVEN a TTL breach WHEN processing THEN a structured log is emitted and instrument_cache_stale_total increments."
+        "GIVEN a TTL breach WHEN processing THEN a structured log InstrumentCacheTtlBreach{instrument_id, age_s, ttl_s} is emitted.",
+        "GIVEN any cache access WHEN processing THEN instrument_cache_hits_total increments and instrument_cache_age_s is updated.",
+        "GIVEN a stale access WHEN processing THEN instrument_cache_stale_total increments."
       ],
       "steps": [
-        "Locate or create the InstrumentCache structure in crates/soldier_core/venue.",
-        "Add timestamp tracking for cache insert/update and compute cache age on read.",
-        "Compare cache age to TTL and return RiskState::Degraded when stale.",
-        "Emit a structured log on staleness and increment instrument_cache_stale_total.",
-        "Add unit tests in crates/soldier_core/tests/test_instrument_cache_ttl.rs for fresh vs stale behavior.",
-        "In tests, assert the metric increment via an in-memory metrics registry or mock."
+        "Emit a structured log InstrumentCacheTtlBreach with instrument_id, age_s, ttl_s on staleness.",
+        "Increment instrument_cache_hits_total on every cache access.",
+        "Update instrument_cache_age_s gauge with computed cache age.",
+        "Increment instrument_cache_stale_total on staleness.",
+        "Add test assertions in crates/soldier_core/tests/test_instrument_cache_ttl.rs for the log event.",
+        "Add test assertions for metric increments and gauge updates using an in-memory metrics registry or mock."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -234,13 +291,15 @@
       ],
       "evidence": [
         "cargo test -p soldier_core --test test_instrument_cache_ttl output",
-        "Unit test asserts metric increment via in-memory metrics registry/mock"
+        "Log capture shows InstrumentCacheTtlBreach with instrument_id, age_s, ttl_s",
+        "Unit test asserts instrument_cache_hits_total and instrument_cache_stale_total increments",
+        "Unit test asserts instrument_cache_age_s gauge update"
       ],
       "dependencies": [
-        "S1-002"
+        "S1-003"
       ],
-      "est_size": "S",
-      "risk": "med",
+      "est_size": "XS",
+      "risk": "low",
       "needs_human_decision": false,
       "passes": true
     },
@@ -319,8 +378,7 @@
           "crates/soldier_core/src/execution/dispatch_map.rs",
           "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/lib.rs",
-          "crates/soldier_core/tests/test_dispatch_map.rs",
-          "crates/soldier_core/tests/test_order_size.rs"
+          "crates/soldier_core/tests/test_dispatch_map.rs"
         ],
         "avoid": [
           "crates/soldier_core/risk/**",
@@ -330,15 +388,71 @@
       "acceptance": [
         "GIVEN option or linear_future OrderSize WHEN mapping to an outbound Deribit request THEN it sets exactly one amount field using qty_coin.",
         "GIVEN perpetual or inverse_future OrderSize WHEN mapping to an outbound Deribit request THEN it sets exactly one amount field using qty_usd.",
-        "GIVEN contracts and canonical amount mismatch WHEN mapping THEN the intent is rejected and RiskState::Degraded is returned (fail-closed)."
+        "GIVEN any OrderSize WHEN mapping THEN exactly one canonical amount field is set and the other is unset."
       ],
       "steps": [
         "Create or update crates/soldier_core/execution/dispatch_map.rs with OrderSize mapping logic.",
         "Implement the rule: exactly one canonical amount field is sent per instrument_kind.",
-        "Validate contracts vs canonical amount and return an error with RiskState::Degraded on mismatch.",
-        "Add counter order_intent_reject_unit_mismatch_total for mismatch rejections.",
+        "Ensure outbound request uses qty_coin for option/linear_future and qty_usd for perpetual/inverse_future.",
         "Add unit tests in crates/soldier_core/tests/test_dispatch_map.rs for amount field selection.",
-        "Add or update unit tests in crates/soldier_core/tests/test_order_size.rs for mismatch rejection behavior."
+        "Add a negative test asserting no second amount field is set."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_dispatch_map"
+      ],
+      "evidence": [
+        "cargo test -p soldier_core --test test_dispatch_map output"
+      ],
+      "dependencies": [
+        "S1-004"
+      ],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": true
+    },
+    {
+      "id": "S1-007",
+      "priority": 55,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "story_ref": "S1.3 Dispatcher mismatch rejection",
+      "category": "execution",
+      "description": "Reject contract/amount mismatches and emit mismatch metrics.",
+      "contract_refs": [
+        "CONTRACT.md §1.0 Instrument Units & Notional Invariants (Dispatcher Rules and mismatch rejection)",
+        "CONTRACT.md Definitions (RiskState)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/dispatch_map.rs",
+          "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/test_dispatch_map.rs",
+          "crates/soldier_core/tests/test_order_size.rs"
+        ],
+        "avoid": [
+          "crates/soldier_core/risk/**",
+          "crates/soldier_infra/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN contracts and canonical amount mismatch WHEN mapping THEN the intent is rejected and RiskState::Degraded is returned (fail-closed).",
+        "GIVEN a mismatch rejection WHEN processing THEN order_intent_reject_unit_mismatch_total increments.",
+        "GIVEN a mismatch rejection WHEN processing THEN the error is surfaced to callers with a deterministic reason code."
+      ],
+      "steps": [
+        "Validate contracts vs canonical amount and return an error with RiskState::Degraded on mismatch.",
+        "Define a deterministic error reason for unit mismatches to surface to callers.",
+        "Increment order_intent_reject_unit_mismatch_total for mismatch rejections.",
+        "Add unit tests in crates/soldier_core/tests/test_dispatch_map.rs for mismatch rejection behavior.",
+        "Add or update unit tests in crates/soldier_core/tests/test_order_size.rs for mismatch cases.",
+        "Assert the metric increment via an in-memory metrics registry or mock."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -348,13 +462,12 @@
       "evidence": [
         "cargo test -p soldier_core --test test_dispatch_map output",
         "cargo test -p soldier_core --test test_order_size output",
-        "Unit test asserts metric increment via in-memory metrics registry/mock"
+        "Unit test asserts order_intent_reject_unit_mismatch_total increment"
       ],
       "dependencies": [
-        "S1-004",
-        "S1-003"
+        "S1-005"
       ],
-      "est_size": "S",
+      "est_size": "XS",
       "risk": "med",
       "needs_human_decision": false,
       "passes": true
