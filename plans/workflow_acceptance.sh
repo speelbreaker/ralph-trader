@@ -18,6 +18,7 @@ run_in_worktree() {
 
 run_in_worktree git update-index --no-assume-unchanged plans/ralph.sh plans/verify.sh >/dev/null 2>&1 || true
 run_in_worktree git checkout -f -- plans/ralph.sh plans/verify.sh >/dev/null 2>&1 || true
+run_in_worktree git update-index --assume-unchanged plans/contract_check.sh >/dev/null 2>&1 || true
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 echo "plans/contract_check.sh" >> "$exclude_file"
