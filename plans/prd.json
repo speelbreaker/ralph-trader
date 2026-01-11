@@ -21,8 +21,7 @@
       "category": "workflow",
       "description": "Confirm plans/verify.sh is the canonical verification script and runnable.",
       "contract_refs": [
-        "CONTRACT.md §8 Release Gates (F1 Certification Checklist — HARD PASS/FAIL)",
-        "CONTRACT.md §8.2 Minimum Test Suite (The Torture Chamber)"
+        "CONTRACT.md §0.Y Verification Harness (Non-Negotiable)"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Phase 1 Entry Criteria (test harness configured: cargo test --workspace)"
@@ -76,7 +75,7 @@
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
       "contract_refs": [
-        "CONTRACT.md §6 Implementation Roadmap v4.0 (Phase 1: The Foundation)"
+        "CONTRACT.md §0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Phase 1 Entry Criteria (Rust workspace exists with crates/soldier_core, crates/soldier_infra)"
@@ -199,8 +198,7 @@
       "category": "risk",
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
-        "CONTRACT.md Definitions (RiskState)",
-        "CONTRACT.md §1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract)"
+        "CONTRACT.md §1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
@@ -208,6 +206,7 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/src/risk/**",
           "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
         ],
         "avoid": [
@@ -216,25 +215,29 @@
         ]
       },
       "acceptance": [
-        "GIVEN cached instrument metadata older than the configured TTL WHEN accessed THEN RiskState::Degraded is returned for that lookup.",
+        "GIVEN cached instrument metadata older than the configured TTL WHEN accessed THEN RiskState::Degraded is returned for that lookup (test_stale_instrument_cache_sets_degraded).",
         "GIVEN cached metadata within TTL WHEN accessed THEN RiskState::Healthy is returned alongside the metadata.",
-        "GIVEN a TTL breach WHEN processing THEN a structured log is emitted and instrument_cache_stale_total increments."
+        "GIVEN a TTL breach WHEN processing THEN a structured log is emitted, instrument_cache_stale_total increments, and instrument_cache_age_s + instrument_cache_hits_total are recorded.",
+        "GIVEN instrument metadata is stale WHEN PolicyGuard computes effective mode THEN TradingMode::ReduceOnly is enforced within one tick and opens are blocked while closes/hedges/cancels are allowed (test_instrument_cache_ttl_blocks_opens_allows_closes)."
       ],
       "steps": [
         "Locate or create the InstrumentCache structure in crates/soldier_core/venue.",
-        "Add timestamp tracking for cache insert/update and compute cache age on read.",
+        "Add timestamp tracking for cache insert/update and compute cache age on read; record instrument_cache_age_s and increment instrument_cache_hits_total.",
         "Compare cache age to TTL and return RiskState::Degraded when stale.",
         "Emit a structured log on staleness and increment instrument_cache_stale_total.",
-        "Add unit tests in crates/soldier_core/tests/test_instrument_cache_ttl.rs for fresh vs stale behavior.",
-        "In tests, assert the metric increment via an in-memory metrics registry or mock."
+        "Ensure RiskState::Degraded from stale metadata forces TradingMode::ReduceOnly within one tick (opens blocked; closes/hedges/cancels allowed).",
+        "Add tests in crates/soldier_core/tests/test_instrument_cache_ttl.rs for fresh vs stale behavior and ReduceOnly gating (test_stale_instrument_cache_sets_degraded, test_instrument_cache_ttl_blocks_opens_allows_closes).",
+        "In tests, assert metric increments and required metric names are emitted/observable."
       ],
       "verify": [
         "./plans/verify.sh",
-        "cargo test -p soldier_core --test test_instrument_cache_ttl"
+        "cargo test -p soldier_core --test test_instrument_cache_ttl test_stale_instrument_cache_sets_degraded",
+        "cargo test -p soldier_core --test test_instrument_cache_ttl test_instrument_cache_ttl_blocks_opens_allows_closes"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_instrument_cache_ttl output",
-        "Unit test asserts metric increment via in-memory metrics registry/mock"
+        "cargo test -p soldier_core --test test_instrument_cache_ttl test_stale_instrument_cache_sets_degraded output",
+        "cargo test -p soldier_core --test test_instrument_cache_ttl test_instrument_cache_ttl_blocks_opens_allows_closes output",
+        "Test assertions reference metric names instrument_cache_age_s, instrument_cache_hits_total, instrument_cache_stale_total and the structured log key instrument_cache_stale"
       ],
       "dependencies": [
         "S1-002"
