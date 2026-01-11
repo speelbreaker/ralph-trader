@@ -15,6 +15,8 @@ cd "$ROOT"
 PRD_FILE="plans/prd.json"
 PROGRESS_FILE="plans/progress.txt"
 VERIFY_SH="plans/verify.sh"
+PRD_SCHEMA_CHECK_SH="plans/prd_schema_check.sh"
+CONTRACT_CHECK_SH="plans/contract_check.sh"
 
 # Controls
 FAIL_ON_DIRTY="${INIT_FAIL_ON_DIRTY:-1}"
@@ -45,12 +47,12 @@ if [[ ! -f "$PROGRESS_FILE" ]]; then
 # Append-only session log. Do not rewrite.
 #
 # Format suggestion (1 entry per iteration):
-# [YYYY-MM-DD HH:MM] iter=N story=ID
-# - summary:
-# - commands:
-# - files:
-# - evidence:
-# - next:
+# ts:
+# story_id:
+# summary:
+# commands_run:
+# evidence_paths:
+# notes_for_next_iteration:
 TXT
   echo "[init] created $PROGRESS_FILE"
 fi
@@ -67,6 +69,44 @@ if ! jq . "$PRD_FILE" >/dev/null 2>&1; then
   exit 13
 fi
 
+# --- required contract + implementation plan inputs
+resolve_contract_path() {
+  local prd_path="$1"
+  if [[ -n "$prd_path" ]]; then
+    [[ -f "$prd_path" ]] || return 1
+    echo "$prd_path"
+    return 0
+  fi
+  if [[ -f "CONTRACT.md" ]]; then echo "CONTRACT.md"; return 0; fi
+  if [[ -f "specs/CONTRACT.md" ]]; then echo "specs/CONTRACT.md"; return 0; fi
+  return 1
+}
+
+resolve_plan_path() {
+  local prd_path="$1"
+  if [[ -n "$prd_path" ]]; then
+    [[ -f "$prd_path" ]] || return 1
+    echo "$prd_path"
+    return 0
+  fi
+  if [[ -f "IMPLEMENTATION_PLAN.md" ]]; then echo "IMPLEMENTATION_PLAN.md"; return 0; fi
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then echo "specs/IMPLEMENTATION_PLAN.md"; return 0; fi
+  return 1
+}
+
+PRD_CONTRACT_PATH="$(jq -r '.source.contract_path // empty' "$PRD_FILE")"
+PRD_PLAN_PATH="$(jq -r '.source.implementation_plan_path // empty' "$PRD_FILE")"
+
+resolve_contract_path "$PRD_CONTRACT_PATH" >/dev/null 2>&1 || { echo "[init] ERROR: missing CONTRACT.md (required input)"; exit 17; }
+resolve_plan_path "$PRD_PLAN_PATH" >/dev/null 2>&1 || { echo "[init] ERROR: missing IMPLEMENTATION_PLAN.md (required input)"; exit 18; }
+
+# --- PRD schema validation (fail closed)
+if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
+  echo "[init] ERROR: missing $PRD_SCHEMA_CHECK_SH"
+  exit 19
+fi
+"./$PRD_SCHEMA_CHECK_SH" "$PRD_FILE"
+
 # --- verify must exist (single standard gate runner)
 if [[ ! -f "$VERIFY_SH" ]]; then
   echo "[init] ERROR: missing $VERIFY_SH"
@@ -79,6 +119,10 @@ fi
 if [[ ! -x "$VERIFY_SH" ]]; then
   echo "[init] ERROR: $VERIFY_SH is not executable"
   exit 14
+fi
+
+if [[ -f "$CONTRACT_CHECK_SH" ]]; then
+  chmod +x "$CONTRACT_CHECK_SH" || true
 fi
 
 # --- shell sanity (cheap, catches 80% of dumb)

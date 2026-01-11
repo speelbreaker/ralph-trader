@@ -16,6 +16,9 @@ PROGRESS_FILE="plans/progress.txt"
 VERIFY_FILE="plans/verify.sh"
 INIT_FILE="plans/init.sh"
 CONTRACT_FILE="CONTRACT.md"
+PLAN_FILE="IMPLEMENTATION_PLAN.md"
+PRD_SCHEMA_CHECK_SH="plans/prd_schema_check.sh"
+CONTRACT_CHECK_SH="plans/contract_check.sh"
 GITIGNORE_FILE=".gitignore"
 SENTINEL_FILE=".ralph/BOOTSTRAPPED"
 
@@ -47,10 +50,21 @@ fi
 # Create directories used by the harness
 mkdir -p plans/logs .ralph
 
-# Ensure contract exists (this repo is contract-driven)
-if [[ ! -f "$CONTRACT_FILE" ]]; then
-  die "missing $CONTRACT_FILE (contract is mandatory for this workflow)"
-fi
+# Ensure required inputs exist (contract + implementation plan)
+resolve_contract_path() {
+  if [[ -f "$CONTRACT_FILE" ]]; then echo "$CONTRACT_FILE"; return 0; fi
+  if [[ -f "specs/CONTRACT.md" ]]; then echo "specs/CONTRACT.md"; return 0; fi
+  return 1
+}
+
+resolve_plan_path() {
+  if [[ -f "$PLAN_FILE" ]]; then echo "$PLAN_FILE"; return 0; fi
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then echo "specs/IMPLEMENTATION_PLAN.md"; return 0; fi
+  return 1
+}
+
+CONTRACT_PATH="$(resolve_contract_path)" || die "missing CONTRACT.md (contract is mandatory for this workflow)"
+PLAN_PATH="$(resolve_plan_path)" || die "missing IMPLEMENTATION_PLAN.md (required for this workflow)"
 
 # Ensure init exists (optional, but recommended)
 if [[ -f "$INIT_FILE" ]]; then
@@ -95,13 +109,24 @@ else
   say "exists  $VERIFY_FILE"
 fi
 
+if [[ -f "$PRD_SCHEMA_CHECK_SH" ]]; then
+  chmod +x "$PRD_SCHEMA_CHECK_SH" || true
+fi
+
+if [[ -f "$CONTRACT_CHECK_SH" ]]; then
+  chmod +x "$CONTRACT_CHECK_SH" || true
+fi
+
 # prd.json: create sentinel stub if missing (prevents Ralph from 'completing' with empty PRD)
 if [[ ! -f "$PRD_FILE" ]]; then
   need jq || true  # optional here; stub doesn't require jq, but you'll want jq installed soon
-  cat > "$PRD_FILE" <<'JSON'
+  cat > "$PRD_FILE" <<JSON
 {
   "project": "StoicTrader",
-  "source": { "note": "BOOTSTRAP STUB — replace by running Story Cutter on IMPLEMENTATION_PLAN.md + CONTRACT.md" },
+  "source": {
+    "implementation_plan_path": "${PLAN_PATH}",
+    "contract_path": "${CONTRACT_PATH}"
+  },
   "rules": {
     "one_story_per_iteration": true,
     "one_commit_per_story": true,
@@ -110,16 +135,31 @@ if [[ ! -f "$PRD_FILE" ]]; then
   },
   "items": [
     {
-      "id": "BOOT-000",
+      "id": "S0-000",
       "priority": 9999,
       "phase": 0,
       "slice": 0,
+      "slice_ref": "Bootstrap",
+      "story_ref": "Bootstrap PRD",
       "category": "workflow",
       "description": "Generate real plans/prd.json using Story Cutter (Implementation Plan + Contract).",
-      "contract_refs": ["CONTRACT.md#(add-real-section-refs)"],
+      "contract_refs": ["${CONTRACT_PATH}#(add-real-section-refs)"],
+      "plan_refs": ["${PLAN_PATH}#(add-real-slice-ref)"],
+      "scope": {
+        "touch": ["plans/prd.json"],
+        "avoid": ["crates/**"]
+      },
       "acceptance": [
-        "A real PRD.json exists with bite-sized stories derived from IMPLEMENTATION_PLAN.md and aligned to CONTRACT.md.",
-        "Each story includes contract_refs with specific contract sections."
+        "A real PRD.json exists with bite-sized stories derived from the implementation plan and aligned to the contract.",
+        "Each story includes contract_refs with specific contract sections.",
+        "Each story includes plan_refs that point to specific plan sections."
+      ],
+      "steps": [
+        "Read ${PLAN_PATH} and ${CONTRACT_PATH}",
+        "Generate stories with required fields and specific refs",
+        "Validate PRD schema with plans/prd_schema_check.sh",
+        "Run ./plans/verify.sh (should be green baseline)",
+        "Commit the new plans/prd.json"
       ],
       "verify": ["./plans/verify.sh"],
       "evidence": ["New plans/prd.json committed"],
@@ -127,6 +167,13 @@ if [[ ! -f "$PRD_FILE" ]]; then
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": true,
+      "human_blocker": {
+        "why": "Implementation plan and contract refs are not yet mapped to stories.",
+        "question": "Which plan sections should be translated into the first PRD slice?",
+        "options": ["A: Use the first slice in the implementation plan", "B: Create a discovery slice to map plan refs"],
+        "recommended": "A",
+        "unblock_steps": ["Clarify plan section IDs and required contract refs", "Regenerate PRD with Story Cutter"]
+      },
       "passes": false
     }
   ]

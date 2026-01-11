@@ -13,6 +13,17 @@ trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
+CONTRACT_PATH="$TMP_DIR/CONTRACT.md"
+PLAN_PATH="$TMP_DIR/IMPLEMENTATION_PLAN.md"
+cat <<'EOF' > "$CONTRACT_PATH"
+# Contract
+Contract Section A
+EOF
+cat <<'EOF' > "$PLAN_PATH"
+# Plan
+Plan Section 1
+EOF
+
 find_recent_blocked() {
   local start_ts="$1"
   local latest=""
@@ -46,11 +57,71 @@ find_recent_iter() {
 }
 
 # Test 1: agent mode selection restricted to active slice
-cat <<'EOF' > "$TMP_DIR/prd1.json"
+cat > "$TMP_DIR/prd1.json" <<EOF
 {
+  "project": "Test",
+  "source": {
+    "implementation_plan_path": "$PLAN_PATH",
+    "contract_path": "$CONTRACT_PATH"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
   "items": [
-    {"id":"A1","priority":100,"slice":1,"passes":false,"needs_human_decision":false,"description":"first","verify":["./plans/verify.sh"]},
-    {"id":"B1","priority":200,"slice":2,"passes":false,"needs_human_decision":false,"description":"second","verify":["./plans/verify.sh"]}
+    {
+      "id":"S1-001",
+      "priority":100,
+      "phase":1,
+      "slice":1,
+      "slice_ref":"Slice 1",
+      "story_ref":"S1.0",
+      "category":"ops",
+      "description":"first",
+      "contract_refs":["Contract Section A"],
+      "plan_refs":["Plan Section 1"],
+      "scope":{"touch":["plans/verify.sh"],"avoid":["crates/**"]},
+      "acceptance":["a","b","c"],
+      "steps":["1","2","3","4","5"],
+      "verify":["./plans/verify.sh"],
+      "evidence":["e1"],
+      "dependencies":[],
+      "est_size":"XS",
+      "risk":"low",
+      "needs_human_decision":true,
+      "human_blocker":{
+        "why":"needs human",
+        "question":"which?",
+        "options":["A: one","B: two"],
+        "recommended":"A",
+        "unblock_steps":["decide"]
+      },
+      "passes":false
+    },
+    {
+      "id":"S2-001",
+      "priority":200,
+      "phase":1,
+      "slice":2,
+      "slice_ref":"Slice 2",
+      "story_ref":"S2.0",
+      "category":"ops",
+      "description":"second",
+      "contract_refs":["Contract Section A"],
+      "plan_refs":["Plan Section 1"],
+      "scope":{"touch":["plans/verify.sh"],"avoid":["crates/**"]},
+      "acceptance":["a","b","c"],
+      "steps":["1","2","3","4","5"],
+      "verify":["./plans/verify.sh"],
+      "evidence":["e1"],
+      "dependencies":[],
+      "est_size":"XS",
+      "risk":"low",
+      "needs_human_decision":false,
+      "passes":false
+    }
   ]
 }
 EOF
@@ -62,25 +133,64 @@ chmod +x "$TMP_DIR/select_agent.sh"
 
 out1="$TMP_DIR/out1.txt"
 start_ts="$(date +%s)"
-RPH_SELECTION_MODE=agent RPH_DRY_RUN=1 RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" RPH_AGENT_ARGS= RPH_PROMPT_FLAG= \
+RPH_SELECTION_MODE=agent RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" RPH_AGENT_ARGS= RPH_PROMPT_FLAG= \
   PRD_FILE="$TMP_DIR/prd1.json" PROGRESS_FILE="$TMP_DIR/progress1.txt" ./plans/ralph.sh 1 >"$out1" 2>&1 || fail "test1 non-zero exit"
-grep -q "DRY RUN: would run A1 - first" "$out1" || fail "test1 missing dry-run output"
+grep -q "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" "$out1" || fail "test1 missing sentinel"
 iter_dir="$(find_recent_iter "$start_ts")"
 [[ -n "$iter_dir" ]] || fail "test1 missing iter dir"
-jq -e '.active_slice==1 and .selection_mode=="agent" and .selected_id=="A1"' "$iter_dir/selected.json" >/dev/null \
+jq -e '.active_slice==1 and .selection_mode=="agent" and .selected_id=="S1-001"' "$iter_dir/selected.json" >/dev/null \
   || fail "test1 selected.json mismatch"
 
 # Test 2: needs_human_decision blocks
-cat <<'EOF' > "$TMP_DIR/prd2.json"
+cat > "$TMP_DIR/prd2.json" <<EOF
 {
+  "project": "Test",
+  "source": {
+    "implementation_plan_path": "$PLAN_PATH",
+    "contract_path": "$CONTRACT_PATH"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
   "items": [
-    {"id":"H1","priority":50,"slice":1,"passes":false,"needs_human_decision":true,"description":"needs human","verify":["./plans/verify.sh"]}
+    {
+      "id":"S1-001",
+      "priority":50,
+      "phase":1,
+      "slice":1,
+      "slice_ref":"Slice 1",
+      "story_ref":"S1.0",
+      "category":"ops",
+      "description":"needs human",
+      "contract_refs":["Contract Section A"],
+      "plan_refs":["Plan Section 1"],
+      "scope":{"touch":["plans/verify.sh"],"avoid":["crates/**"]},
+      "acceptance":["a","b","c"],
+      "steps":["1","2","3","4","5"],
+      "verify":["./plans/verify.sh"],
+      "evidence":["e1"],
+      "dependencies":[],
+      "est_size":"XS",
+      "risk":"low",
+      "needs_human_decision":true,
+      "human_blocker":{
+        "why":"needs human",
+        "question":"which?",
+        "options":["A: one","B: two"],
+        "recommended":"A",
+        "unblock_steps":["decide"]
+      },
+      "passes":false
+    }
   ]
 }
 EOF
 start_ts="$(date +%s)"
 out2="$TMP_DIR/out2.txt"
-RPH_DRY_RUN=1 PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" ./plans/ralph.sh 1 >"$out2" 2>&1 \
+PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" ./plans/ralph.sh 1 >"$out2" 2>&1 \
   || fail "test2 non-zero exit"
 grep -q "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" "$out2" || fail "test2 missing sentinel"
 blocked_dir="$(find_recent_blocked "$start_ts")"
@@ -90,22 +200,49 @@ blocked_dir="$(find_recent_blocked "$start_ts")"
 jq -e '.reason=="needs_human_decision"' "$blocked_dir/blocked_item.json" >/dev/null || fail "test2 reason mismatch"
 
 # Test 3: missing ./plans/verify.sh in verify[] blocks
-cat <<'EOF' > "$TMP_DIR/prd3.json"
+cat > "$TMP_DIR/prd3.json" <<EOF
 {
+  "project": "Test",
+  "source": {
+    "implementation_plan_path": "$PLAN_PATH",
+    "contract_path": "$CONTRACT_PATH"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
   "items": [
-    {"id":"V1","priority":10,"slice":1,"passes":false,"needs_human_decision":false,"description":"missing verify","verify":["cargo test"]}
+    {
+      "id":"S1-002",
+      "priority":10,
+      "phase":1,
+      "slice":1,
+      "slice_ref":"Slice 1",
+      "story_ref":"S1.1",
+      "category":"ops",
+      "description":"missing verify",
+      "contract_refs":["Contract Section A"],
+      "plan_refs":["Plan Section 1"],
+      "scope":{"touch":["plans/verify.sh"],"avoid":["crates/**"]},
+      "acceptance":["a","b","c"],
+      "steps":["1","2","3","4","5"],
+      "verify":["cargo test"],
+      "evidence":["e1"],
+      "dependencies":[],
+      "est_size":"XS",
+      "risk":"low",
+      "needs_human_decision":false,
+      "passes":false
+    }
   ]
 }
 EOF
 start_ts="$(date +%s)"
 out3="$TMP_DIR/out3.txt"
-RPH_DRY_RUN=1 PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" ./plans/ralph.sh 1 >"$out3" 2>&1 \
-  || fail "test3 non-zero exit"
-grep -q "<promise>BLOCKED_MISSING_VERIFY_SH_IN_STORY</promise>" "$out3" || fail "test3 missing sentinel"
-blocked_dir="$(find_recent_blocked "$start_ts")"
-[[ -n "$blocked_dir" ]] || fail "test3 missing blocked dir"
-[[ -f "$blocked_dir/prd_snapshot.json" ]] || fail "test3 missing prd_snapshot.json"
-[[ -f "$blocked_dir/blocked_item.json" ]] || fail "test3 missing blocked_item.json"
-jq -e '.reason=="missing_verify_sh_in_story"' "$blocked_dir/blocked_item.json" >/dev/null || fail "test3 reason mismatch"
+PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" ./plans/ralph.sh 1 >"$out3" 2>&1 \
+  && fail "test3 expected non-zero exit"
+grep -q "<promise>BLOCKED_PRD_SCHEMA</promise>" "$out3" || fail "test3 missing schema sentinel"
 
 echo "OK"

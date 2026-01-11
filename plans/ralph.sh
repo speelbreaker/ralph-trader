@@ -342,6 +342,9 @@ write_blocked_artifacts() {
   block_dir=".ralph/${prefix}_$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$block_dir"
   cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true
+  if [[ -n "${VERIFY_PRE_LOG_PATH:-}" && -f "$VERIFY_PRE_LOG_PATH" ]]; then
+    cp "$VERIFY_PRE_LOG_PATH" "$block_dir/verify_pre.log" || true
+  fi
   jq -n \
     --arg reason "$reason" \
     --arg id "$id" \
@@ -419,7 +422,7 @@ ensure_contract_review() {
 
   if [[ -x "./plans/contract_check.sh" ]]; then
     set +e
-    CONTRACT_REVIEW_OUT="$out" CONTRACT_FILE="$CONTRACT_FILE" ./plans/contract_check.sh "$out"
+    CONTRACT_REVIEW_OUT="$out" CONTRACT_FILE="$CONTRACT_FILE" PRD_FILE="$PRD_FILE" ./plans/contract_check.sh "$out"
     rc=$?
     set -e
     if [[ -f "$out" ]]; then
@@ -696,8 +699,14 @@ detect_cheating() {
   if [[ -n "$head_before" ]]; then
     status_cmd=(git diff --name-status "$head_before")
   fi
-  mapfile -t deletions < <("${status_cmd[@]}" | awk '$1 ~ /^D/ {print $2}')
-  for path in "${deletions[@]}"; do
+  local deletions=()
+  while IFS=$'\t' read -r status path; do
+    [[ -z "$status" ]] && continue
+    if [[ "$status" == D* ]]; then
+      deletions+=("$path")
+    fi
+  done < <("${status_cmd[@]}")
+  for path in "${deletions[@]:-}"; do
     if is_test_path "$path"; then
       cheats+=("deleted_test_file:$path")
     fi
@@ -1034,6 +1043,7 @@ PROMPT
     exit 1
   fi
 
+  VERIFY_PRE_LOG_PATH="${ITER_DIR}/verify_pre.log"
   verify_pre_rc=0
   if run_verify "${ITER_DIR}/verify_pre.log"; then
     verify_pre_rc=0
@@ -1394,6 +1404,16 @@ PROMPT
     fi
     if (( POST_VERIFY_CONTINUE == 1 )); then
       continue
+    fi
+  fi
+
+  if grep -qF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
+    if ! all_items_passed || [[ "$verify_post_rc" != "0" ]]; then
+      save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+      BLOCK_DIR="$(write_blocked_artifacts "incomplete_completion" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "blocked_incomplete")"
+      echo "<promise>BLOCKED_INCOMPLETE</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked incomplete completion: $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 1
     fi
   fi
 

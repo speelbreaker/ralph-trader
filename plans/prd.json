@@ -24,7 +24,7 @@
         "CONTRACT.md §0.Y Verification Harness (Non-Negotiable)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Phase 1 Entry Criteria (test harness configured: cargo test --workspace)"
+        "Test harness configured (cargo test \\--workspace)."
       ],
       "scope": {
         "touch": [
@@ -78,7 +78,7 @@
         "CONTRACT.md §0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Phase 1 Entry Criteria (Rust workspace exists with crates/soldier_core, crates/soldier_infra)"
+        "Rust workspace exists with crates/soldier\\_core, crates/soldier\\_infra."
       ],
       "scope": {
         "touch": [
@@ -140,7 +140,7 @@
         "CONTRACT.md §1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -203,7 +203,7 @@
         "CONTRACT.md Definitions (RiskState)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -313,10 +313,11 @@
       "category": "execution",
       "description": "Implement OrderSize canonical sizing with deterministic notional_usd.",
       "contract_refs": [
-        "CONTRACT.md §1.0 Instrument Units & Notional Invariants (OrderSize struct and canonical units)"
+        "CONTRACT.md OrderSize struct (MUST implement):",
+        "CONTRACT.md Canonical internal units (single source of truth):"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.2 — OrderSize canonical sizing \\+ notional invariant"
+        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
       ],
       "scope": {
         "touch": [
@@ -368,10 +369,11 @@
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts and reject mismatches.",
       "contract_refs": [
-        "CONTRACT.md §1.0 Instrument Units & Notional Invariants (Dispatcher Rules and mismatch rejection)"
+        "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
+        "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
