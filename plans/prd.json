@@ -13,7 +13,7 @@
   },
   "items": [
     {
-      "id": "S1-000",
+      "id": "S0-000",
       "priority": 100,
       "phase": 1,
       "slice": 0,
@@ -31,12 +31,15 @@
       },
       "acceptance": [
         "plans/verify.sh exists and is executable",
-        "plans/verify.sh runs successfully"
+        "plans/verify.sh runs successfully",
+        "verify.sh is the canonical gate for CI"
       ],
       "steps": [
         "Review existing plans/verify.sh contents against the CI gates",
         "Update plans/verify.sh if it diverges from the canonical CI gates",
-        "Ensure plans/verify.sh is executable"
+        "Ensure plans/verify.sh is executable",
+        "Run ./plans/verify.sh full to confirm a green baseline",
+        "Record verification output as evidence"
       ],
       "verify": [
         "bash -n plans/verify.sh",
@@ -52,10 +55,10 @@
       "needs_human_decision": false,
       "passes": false,
       "contract_refs": [
-        "CONTRACT.md (general)"
+        "Patch D — Owner /status Endpoint"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+        "Test harness configured (cargo test \\--workspace)."
       ]
     },
     {
@@ -80,7 +83,8 @@
       },
       "acceptance": [
         "Workspace builds successfully",
-        "Tests pass (empty test suite)"
+        "Tests pass (empty test suite)",
+        "plans/verify.sh runs cargo test --workspace"
       ],
       "steps": [
         "Create 'crates' directory",
@@ -96,17 +100,17 @@
         "Output of cargo test --workspace"
       ],
       "dependencies": [
-        "S1-000"
+        "S0-000"
       ],
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
       "passes": false,
       "contract_refs": [
-        "CONTRACT.md (general)"
+        "Execution Architecture: The \"Atomic Group\" (Real-Time Repair)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+        "Rust workspace exists with crates/soldier\\_core, crates/soldier\\_infra."
       ]
     },
     {
@@ -155,10 +159,12 @@
       "needs_human_decision": false,
       "passes": false,
       "contract_refs": [
-        "CONTRACT.md (general)"
+        "instrument_kind**: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
+        "Linear Perpetuals (USDC‑margined)**: treat as `linear_future` for sizing (canonical `qty_coin`), even if their venue symbol says \"PERPETUAL\".",
+        "RiskState** (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ]
     },
     {
@@ -180,7 +186,8 @@
       },
       "acceptance": [
         "Instrument cache respects TTL",
-        "Stale cache triggers RiskState::Degraded"
+        "Stale cache triggers RiskState::Degraded",
+        "Staleness path covered by a unit test"
       ],
       "steps": [
         "Implement 'InstrumentCache' struct in 'crates/soldier_core/src/venue/cache.rs'",
@@ -204,10 +211,11 @@
       "needs_human_decision": false,
       "passes": false,
       "contract_refs": [
-        "CONTRACT.md (general)"
+        "Resolved by PolicyGuard each tick from RiskState, policy staleness, watchdog, exchange health, fee cache staleness, and Cortex overrides.",
+        "RiskState** (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ]
     },
     {
@@ -254,10 +262,11 @@
       "needs_human_decision": false,
       "passes": false,
       "contract_refs": [
-        "CONTRACT.md (general)"
+        "OrderSize struct (MUST implement):",
+        "Canonical internal units (single source of truth):"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
       ]
     },
     {
@@ -307,10 +316,11 @@
       "needs_human_decision": false,
       "passes": false,
       "contract_refs": [
-        "CONTRACT.md (general)"
+        "Dispatcher Rules (Deribit request mapping):",
+        "If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2: Quantization + Labeling + Idempotency"
+        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
       ]
     }
   ]

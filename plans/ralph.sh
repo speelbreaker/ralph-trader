@@ -11,10 +11,12 @@ PRD_FILE="${PRD_FILE:-plans/prd.json}"
 PROGRESS_FILE="${PROGRESS_FILE:-plans/progress.txt}"
 VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
 ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
+PRD_SCHEMA_CHECK_SH="${PRD_SCHEMA_CHECK_SH:-./plans/prd_schema_check.sh}"
+CONTRACT_CHECK_SH="${CONTRACT_CHECK_SH:-./plans/contract_check.sh}"
 
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choice)
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
-RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
+RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1 (disabled by workflow contract)
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-claude}"       # claude|codex|opencode|etc
@@ -47,6 +49,61 @@ command -v jq  >/dev/null 2>&1 || { echo "ERROR: jq required"; exit 1; }
 
 [[ -f "$PRD_FILE" ]] || { echo "ERROR: missing $PRD_FILE"; exit 1; }
 jq . "$PRD_FILE" >/dev/null 2>&1 || { echo "ERROR: $PRD_FILE invalid JSON"; exit 1; }
+
+if [[ "$RPH_DRY_RUN" == "1" ]]; then
+  echo "<promise>BLOCKED_DRY_RUN_DISABLED</promise>"
+  echo "ERROR: RPH_DRY_RUN is disabled by the workflow contract."
+  exit 1
+fi
+
+if [[ "$RPH_REQUIRE_STORY_VERIFY" != "1" ]]; then
+  echo "WARN: RPH_REQUIRE_STORY_VERIFY forced to 1 to satisfy workflow contract." | tee -a "$LOG_FILE"
+  RPH_REQUIRE_STORY_VERIFY="1"
+fi
+
+if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
+  echo "ERROR: missing PRD schema checker: $PRD_SCHEMA_CHECK_SH" | tee -a "$LOG_FILE"
+  exit 1
+fi
+if ! "$PRD_SCHEMA_CHECK_SH" "$PRD_FILE"; then
+  echo "<promise>BLOCKED_PRD_SCHEMA</promise>" | tee -a "$LOG_FILE"
+  exit 1
+fi
+
+resolve_contract_path() {
+  local prd_path="$1"
+  if [[ -n "$prd_path" ]]; then
+    [[ -f "$prd_path" ]] || return 1
+    echo "$prd_path"
+    return 0
+  fi
+  if [[ -f "CONTRACT.md" ]]; then echo "CONTRACT.md"; return 0; fi
+  if [[ -f "specs/CONTRACT.md" ]]; then echo "specs/CONTRACT.md"; return 0; fi
+  return 1
+}
+
+resolve_plan_path() {
+  local prd_path="$1"
+  if [[ -n "$prd_path" ]]; then
+    [[ -f "$prd_path" ]] || return 1
+    echo "$prd_path"
+    return 0
+  fi
+  if [[ -f "IMPLEMENTATION_PLAN.md" ]]; then echo "IMPLEMENTATION_PLAN.md"; return 0; fi
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then echo "specs/IMPLEMENTATION_PLAN.md"; return 0; fi
+  return 1
+}
+
+PRD_CONTRACT_PATH="$(jq -r '.source.contract_path // empty' "$PRD_FILE")"
+PRD_PLAN_PATH="$(jq -r '.source.implementation_plan_path // empty' "$PRD_FILE")"
+
+CONTRACT_PATH="$(resolve_contract_path "$PRD_CONTRACT_PATH")" || { echo "ERROR: missing CONTRACT.md (required by workflow contract)"; exit 1; }
+PLAN_PATH="$(resolve_plan_path "$PRD_PLAN_PATH")" || { echo "ERROR: missing IMPLEMENTATION_PLAN.md (required by workflow contract)"; exit 1; }
+
+if [[ ! -x "$CONTRACT_CHECK_SH" ]]; then
+  echo "ERROR: missing contract check script: $CONTRACT_CHECK_SH" | tee -a "$LOG_FILE"
+  exit 1
+fi
 
 # progress file exists
 mkdir -p "$(dirname "$PROGRESS_FILE")"
@@ -96,7 +153,12 @@ save_iter_artifacts() {
   mkdir -p "$iter_dir"
   cp "$PRD_FILE" "${iter_dir}/prd_before.json" || true
   tail -n 200 "$PROGRESS_FILE" > "${iter_dir}/progress_tail_before.txt" || true
+  PROGRESS_BEFORE_FILE="${iter_dir}/progress_before_full.txt"
+  cp "$PROGRESS_FILE" "$PROGRESS_BEFORE_FILE" || true
+  PROGRESS_LINES_BEFORE="$(wc -l < "$PROGRESS_FILE" 2>/dev/null || echo 0)"
   git rev-parse HEAD > "${iter_dir}/head_before.txt" || true
+  echo "NOT RUN (blocked before agent)" > "${iter_dir}/prompt.txt" || true
+  echo "NOT RUN (blocked before agent)" > "${iter_dir}/agent.out" || true
 }
 
 save_iter_after() {
@@ -155,6 +217,9 @@ write_blocked_artifacts() {
   block_dir=".ralph/blocked_$(date +%Y%m%d-%H%M%S)"
   mkdir -p "$block_dir"
   cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true
+  if [[ -n "${VERIFY_PRE_LOG_PATH:-}" && -f "$VERIFY_PRE_LOG_PATH" ]]; then
+    cp "$VERIFY_PRE_LOG_PATH" "$block_dir/verify_pre.log" || true
+  fi
   jq -n \
     --arg reason "$reason" \
     --arg id "$id" \
@@ -190,6 +255,73 @@ sha256_tail_200() {
   else
     tail -n 200 "$file" | shasum -a 256 | awk '{print $1}'
   fi
+}
+
+progress_validate_append() {
+  local iter_dir="$1"
+  local before_lines="${PROGRESS_LINES_BEFORE:-0}"
+  local before_file="${PROGRESS_BEFORE_FILE:-}"
+  local after_lines
+  after_lines="$(wc -l < "$PROGRESS_FILE" 2>/dev/null || echo 0)"
+
+  if [[ -z "$before_file" || ! -f "$before_file" ]]; then
+    echo "ERROR: progress_before_full.txt missing; cannot validate append-only" | tee -a "$LOG_FILE"
+    return 1
+  fi
+
+  if (( after_lines <= before_lines )); then
+    echo "ERROR: progress.txt did not grow (append-only violation)" | tee -a "$LOG_FILE"
+    return 1
+  fi
+
+  if ! cmp -s "$before_file" <(head -n "$before_lines" "$PROGRESS_FILE"); then
+    echo "ERROR: progress.txt was rewritten (append-only violation)" | tee -a "$LOG_FILE"
+    return 1
+  fi
+
+  local appended="$iter_dir/progress_appended.txt"
+  tail -n +"$((before_lines + 1))" "$PROGRESS_FILE" > "$appended" || true
+
+  local missing=()
+  if ! grep -Eqi '^(ts|timestamp):' "$appended"; then missing+=("timestamp"); fi
+  if ! grep -Eqi '^story(_id)?:' "$appended"; then missing+=("story_id"); fi
+  if ! grep -Eqi '^summary:' "$appended"; then missing+=("summary"); fi
+  if ! grep -Eqi '^(commands_run|commands):' "$appended"; then missing+=("commands_run"); fi
+  if ! grep -Eqi '^(evidence_paths|evidence):' "$appended"; then missing+=("evidence"); fi
+  if ! grep -Eqi '^(notes_for_next_iteration|next|gotchas):' "$appended"; then missing+=("next_suggestion"); fi
+
+  if (( ${#missing[@]} > 0 )); then
+    echo "ERROR: progress entry missing fields: ${missing[*]}" | tee -a "$LOG_FILE"
+    return 1
+  fi
+  return 0
+}
+
+pass_change_report() {
+  local before="$1"
+  local after="$2"
+  jq -r --slurp '
+    def items($d): if ($d|type)=="array" then $d else ($d.items // []) end;
+    def map_by_id($items): reduce $items[] as $it ({}; .[$it.id] = $it);
+    (map_by_id(items(.[0]))) as $b
+    | (map_by_id(items(.[1]))) as $a
+    | ((($b|keys) + ($a|keys)) | unique) as $ids
+    | [ $ids[] as $id
+        | select(($b[$id]? and $a[$id]?) and ($b[$id].passes != $a[$id].passes))
+        | {id:$id, before:$b[$id].passes, after:$a[$id].passes}
+      ]
+  ' "$before" "$after"
+}
+
+block_and_exit() {
+  local reason="$1"
+  local promise="$2"
+  local message="$3"
+  BLOCK_DIR="$(write_blocked_with_state "$reason" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+  save_iter_after "$ITER_DIR"
+  echo "<promise>${promise}</promise>" | tee -a "$LOG_FILE"
+  echo "Blocked: $message ($BLOCK_DIR)" | tee -a "$LOG_FILE"
+  exit 0
 }
 
 state_merge() {
@@ -308,6 +440,58 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   save_iter_artifacts "$ITER_DIR"
   HEAD_BEFORE="$(git rev-parse HEAD)"
   PRD_HASH_BEFORE="$(sha256_file "$PRD_FILE")"
+
+  VERIFY_PRE_LOG_PATH="${ITER_DIR}/verify_pre.log"
+
+  # 1) Pre-verify baseline (must run every iteration)
+  if [[ ! -x "$VERIFY_SH" ]]; then
+    echo "ERROR: $VERIFY_SH missing or not executable." | tee -a "$LOG_FILE"
+    echo "This harness requires verify.sh. Bootstrap must create it first." | tee -a "$LOG_FILE"
+    save_iter_after "$ITER_DIR"
+    exit 3
+  fi
+
+  verify_pre_rc=0
+  if run_verify "$VERIFY_PRE_LOG_PATH"; then
+    verify_pre_rc=0
+  else
+    verify_pre_rc=$?
+  fi
+  state_merge \
+    --argjson last_verify_pre_rc "$verify_pre_rc" \
+    --arg verify_pre_log "$VERIFY_PRE_LOG_PATH" \
+    '.last_verify_pre_rc=$last_verify_pre_rc | .last_verify_pre_log=$verify_pre_log'
+
+  if (( verify_pre_rc != 0 )); then
+    echo "Baseline verify failed." | tee -a "$LOG_FILE"
+
+    if [[ "$RPH_SELF_HEAL" == "1" ]]; then
+      echo "$ITER_DIR" > "$LAST_FAIL_FILE"
+      if ! revert_to_last_good; then save_iter_after "$ITER_DIR"; exit 4; fi
+
+      # Re-run baseline verify after revert
+      verify_pre_after_rc=0
+      if run_verify "${ITER_DIR}/verify_pre_after_heal.log"; then
+        verify_pre_after_rc=0
+      else
+        verify_pre_after_rc=$?
+      fi
+      state_merge \
+        --argjson last_verify_pre_after_rc "$verify_pre_after_rc" \
+        --arg verify_pre_after_log "${ITER_DIR}/verify_pre_after_heal.log" \
+        '.last_verify_pre_after_rc=$last_verify_pre_after_rc | .last_verify_pre_after_log=$verify_pre_after_log'
+
+      if (( verify_pre_after_rc != 0 )); then
+        echo "Baseline still failing after self-heal. Stop." | tee -a "$LOG_FILE"
+        save_iter_after "$ITER_DIR"
+        exit 5
+      fi
+    else
+      echo "Fail-closed: fix baseline before continuing." | tee -a "$LOG_FILE"
+      save_iter_after "$ITER_DIR"
+      exit 6
+    fi
+  fi
 
   ACTIVE_SLICE="$(jq -r '
     def items:
@@ -428,6 +612,7 @@ PROMPT
 
   if [[ -z "$NEXT_ITEM_JSON" ]]; then
     BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+    save_iter_after "$ITER_DIR"
     echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
     echo "Blocked selection: $NEXT_ID" | tee -a "$LOG_FILE"
     exit 0
@@ -438,6 +623,7 @@ PROMPT
     SEL_PASSES="$(jq -r 'if has("passes") then .passes else "" end' <<<"$NEXT_ITEM_JSON")"
     if [[ -z "$NEXT_ID" || -z "$NEXT_ITEM_JSON" || "$SEL_PASSES" != "false" || "$SEL_SLICE" != "$ACTIVE_SLICE" ]]; then
       BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+      save_iter_after "$ITER_DIR"
       echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
       echo "Blocked selection: $NEXT_ID" | tee -a "$LOG_FILE"
       exit 0
@@ -446,11 +632,7 @@ PROMPT
 
   if [[ "$NEXT_NEEDS_HUMAN" == "true" ]]; then
     BLOCK_DIR="$(write_blocked_artifacts "needs_human_decision" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" true)"
-    if [[ "$RPH_DRY_RUN" != "1" ]]; then
-      if [[ -x "$VERIFY_SH" ]]; then
-        run_verify "$BLOCK_DIR/verify_pre.log" || true
-      fi
-    fi
+    save_iter_after "$ITER_DIR"
     echo "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" | tee -a "$LOG_FILE"
     echo "Blocked item: $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
     exit 0
@@ -459,61 +641,10 @@ PROMPT
   if [[ "$RPH_REQUIRE_STORY_VERIFY" == "1" ]]; then
     if ! jq -e '(.verify // []) | index("./plans/verify.sh") != null' <<<"$NEXT_ITEM_JSON" >/dev/null; then
       BLOCK_DIR="$(write_blocked_artifacts "missing_verify_sh_in_story" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+      save_iter_after "$ITER_DIR"
       echo "<promise>BLOCKED_MISSING_VERIFY_SH_IN_STORY</promise>" | tee -a "$LOG_FILE"
       echo "Blocked item: $NEXT_ID - missing ./plans/verify.sh in verify[]" | tee -a "$LOG_FILE"
       exit 0
-    fi
-  fi
-
-  if [[ "$RPH_DRY_RUN" == "1" ]]; then
-    echo "DRY RUN: would run $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
-    exit 0
-  fi
-
-  # 1) Pre-verify baseline
-  if [[ ! -x "$VERIFY_SH" ]]; then
-    echo "ERROR: $VERIFY_SH missing or not executable." | tee -a "$LOG_FILE"
-    echo "This harness requires verify.sh. Bootstrap must create it first." | tee -a "$LOG_FILE"
-    exit 3
-  fi
-
-  verify_pre_rc=0
-  if run_verify "${ITER_DIR}/verify_pre.log"; then
-    verify_pre_rc=0
-  else
-    verify_pre_rc=$?
-  fi
-  state_merge \
-    --argjson last_verify_pre_rc "$verify_pre_rc" \
-    --arg verify_pre_log "${ITER_DIR}/verify_pre.log" \
-    '.last_verify_pre_rc=$last_verify_pre_rc | .last_verify_pre_log=$verify_pre_log'
-
-  if (( verify_pre_rc != 0 )); then
-    echo "Baseline verify failed." | tee -a "$LOG_FILE"
-
-    if [[ "$RPH_SELF_HEAL" == "1" ]]; then
-      echo "$ITER_DIR" > "$LAST_FAIL_FILE"
-      if ! revert_to_last_good; then exit 4; fi
-
-      # Re-run baseline verify after revert
-      verify_pre_after_rc=0
-      if run_verify "${ITER_DIR}/verify_pre_after_heal.log"; then
-        verify_pre_after_rc=0
-      else
-        verify_pre_after_rc=$?
-      fi
-      state_merge \
-        --argjson last_verify_pre_after_rc "$verify_pre_after_rc" \
-        --arg verify_pre_after_log "${ITER_DIR}/verify_pre_after_heal.log" \
-        '.last_verify_pre_after_rc=$last_verify_pre_after_rc | .last_verify_pre_after_log=$verify_pre_after_log'
-
-      if (( verify_pre_after_rc != 0 )); then
-        echo "Baseline still failing after self-heal. Stop." | tee -a "$LOG_FILE"
-        exit 5
-      fi
-    else
-      echo "Fail-closed: fix baseline before continuing." | tee -a "$LOG_FILE"
-      exit 6
     fi
   fi
 
@@ -596,6 +727,11 @@ PROMPT
   if (( verify_post_rc != 0 )); then
     POST_VERIFY_FAILED=1
     echo "Post-iteration verify failed." | tee -a "$LOG_FILE"
+    if [[ -f "${ITER_DIR}/prd_before.json" ]]; then
+      cp "${ITER_DIR}/prd_before.json" "$PRD_FILE" || true
+      PRD_HASH_AFTER="$(sha256_file "$PRD_FILE")"
+      echo "Reverted PRD to pre-iteration snapshot due to failed verify." | tee -a "$LOG_FILE"
+    fi
     save_iter_after "$ITER_DIR"
     echo "$ITER_DIR" > "$LAST_FAIL_FILE"
 
@@ -680,6 +816,39 @@ PROMPT
     if (( POST_VERIFY_CONTINUE == 1 )); then
       continue
     fi
+  fi
+
+  # Contract compliance checks after green verify_post
+  if ! "$PRD_SCHEMA_CHECK_SH" "$PRD_FILE"; then
+    block_and_exit "prd_schema_invalid" "BLOCKED_PRD_SCHEMA" "PRD schema invalid after iteration"
+  fi
+
+  prd_no_pass_before="$(jq -c 'if type=="array" then map(del(.passes)) else (.items = ((.items // []) | map(del(.passes)))) end' "${ITER_DIR}/prd_before.json")"
+  prd_no_pass_after="$(jq -c 'if type=="array" then map(del(.passes)) else (.items = ((.items // []) | map(del(.passes)))) end' "$PRD_FILE")"
+  if [[ "$prd_no_pass_before" != "$prd_no_pass_after" ]]; then
+    block_and_exit "prd_modified_outside_passes" "BLOCKED_PRD_MUTATION" "PRD changed outside passes field"
+  fi
+
+  pass_changes_json="$(pass_change_report "${ITER_DIR}/prd_before.json" "$PRD_FILE")"
+  pass_changes_count="$(jq -r 'length' <<<"$pass_changes_json")"
+  pass_invalid_count="$(jq -r --arg id "$NEXT_ID" '[.[] | select(.id != $id or .before != false or .after != true)] | length' <<<"$pass_changes_json")"
+  pass_selected_count="$(jq -r --arg id "$NEXT_ID" '[.[] | select(.id == $id and .before == false and .after == true)] | length' <<<"$pass_changes_json")"
+
+  if [[ "$pass_changes_count" -ne 1 || "$pass_invalid_count" -ne 0 || "$pass_selected_count" -ne 1 ]]; then
+    block_and_exit "invalid_pass_flip" "BLOCKED_INVALID_PASS_FLIP" "passes must flip false->true for selected story only"
+  fi
+
+  if ! progress_validate_append "$ITER_DIR"; then
+    block_and_exit "progress_log_invalid" "BLOCKED_PROGRESS_LOG" "progress.txt append-only or required fields missing"
+  fi
+
+  commit_count="$(git rev-list --count "$HEAD_BEFORE..$HEAD_AFTER" 2>/dev/null || echo 0)"
+  if [[ "$commit_count" -ne 1 ]]; then
+    block_and_exit "invalid_commit_count" "BLOCKED_COMMIT_COUNT" "expected exactly 1 commit, got $commit_count"
+  fi
+
+  if ! "$CONTRACT_CHECK_SH" "$NEXT_ID" "$ITER_DIR"; then
+    block_and_exit "contract_check_failed" "BLOCKED_CONTRACT_CHECK" "contract alignment check failed"
   fi
 
   # 5) If green, update last_good_ref
