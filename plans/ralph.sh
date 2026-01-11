@@ -328,7 +328,7 @@ sha256_tail_200() {
 
 extract_mark_pass_id() {
   local file="$1"
-  sed -n "s/.*${RPH_MARK_PASS_OPEN}\([^<]*\)${RPH_MARK_PASS_CLOSE}.*/\1/p" "$file" | head -n 1
+  sed -n "s|.*${RPH_MARK_PASS_OPEN}\\([^<]*\\)${RPH_MARK_PASS_CLOSE}.*|\\1|p" "$file" | head -n 1
 }
 
 verify_log_has_sha() {
@@ -451,27 +451,25 @@ verify_iteration_artifacts() {
   return 0
 }
 
-file_in_list() {
+is_ignored_file() {
   local file="$1"
-  shift
-  local item
-  for item in "$@"; do
-    if [[ "$file" == "$item" ]]; then
-      return 0
-    fi
-  done
+  case "$file" in
+    plans/prd.json|plans/progress.txt|plans/progress_archive.txt) return 0 ;;
+    .ralph/*|plans/logs/*) return 0 ;;
+  esac
   return 1
 }
 
-file_matches_any() {
+matches_patterns() {
   local file="$1"
-  shift
+  local patterns="$2"
   local pattern
-  for pattern in "$@"; do
+  while IFS= read -r pattern; do
+    [[ -z "$pattern" ]] && continue
     if [[ "$file" == $pattern ]]; then
       return 0
     fi
-  done
+  done <<<"$patterns"
   return 1
 }
 
@@ -479,55 +477,38 @@ scope_gate() {
   local head_before="$1"
   local head_after="$2"
   local item_json="$3"
-  local -a touch_patterns=()
-  local -a avoid_patterns=()
-  local -a changed_files=()
-  local -a out_of_scope=()
+  local touch_patterns
+  local avoid_patterns
+  local changed_files
+  local out_of_scope=""
 
-  mapfile -t touch_patterns < <(jq -r '.scope.touch[]?' <<<"$item_json")
-  mapfile -t avoid_patterns < <(jq -r '.scope.avoid[]?' <<<"$item_json")
-  mapfile -t changed_files < <(git diff --name-only "$head_before" "$head_after")
-
-  local -a ignore_files=(
-    "plans/prd.json"
-    "plans/progress.txt"
-    "plans/progress_archive.txt"
-  )
-  local -a ignore_patterns=(
-    ".ralph/**"
-    "plans/logs/**"
-  )
-
-  local globstar_state
-  local nullglob_state
-  globstar_state="$(shopt -p globstar)"
-  nullglob_state="$(shopt -p nullglob)"
-  shopt -s globstar nullglob
+  touch_patterns="$(jq -r '.scope.touch[]?' <<<"$item_json")"
+  avoid_patterns="$(jq -r '.scope.avoid[]?' <<<"$item_json")"
+  changed_files="$(git diff --name-only "$head_before" "$head_after")"
 
   local file
-  for file in "${changed_files[@]}"; do
+  while IFS= read -r file; do
     [[ -z "$file" ]] && continue
-    if file_in_list "$file" "${ignore_files[@]}"; then
+    if is_ignored_file "$file"; then
       continue
     fi
-    if file_matches_any "$file" "${ignore_patterns[@]}"; then
+    if [[ -n "$avoid_patterns" ]] && matches_patterns "$file" "$avoid_patterns"; then
+      out_of_scope+="${file} (scope.avoid)"$'\n'
       continue
     fi
-    if file_matches_any "$file" "${avoid_patterns[@]}"; then
-      out_of_scope+=("$file (scope.avoid)")
+    if [[ -n "$touch_patterns" ]]; then
+      if ! matches_patterns "$file" "$touch_patterns"; then
+        out_of_scope+="${file} (not in scope.touch)"$'\n'
+        continue
+      fi
+    else
+      out_of_scope+="${file} (not in scope.touch)"$'\n'
       continue
     fi
-    if ! file_matches_any "$file" "${touch_patterns[@]}"; then
-      out_of_scope+=("$file (not in scope.touch)")
-      continue
-    fi
-  done
+  done <<<"$changed_files"
 
-  eval "$globstar_state"
-  eval "$nullglob_state"
-
-  if (( ${#out_of_scope[@]} > 0 )); then
-    printf '%s\n' "${out_of_scope[@]}"
+  if [[ -n "$out_of_scope" ]]; then
+    printf '%s' "$out_of_scope"
     return 1
   fi
   return 0
@@ -938,10 +919,18 @@ PROMPT
   set +e
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
     rate_limit_before_call
-    ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
+      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    else
+      ($RPH_AGENT_CMD "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    fi
   else
     rate_limit_before_call
-    ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
+      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    else
+      ($RPH_AGENT_CMD "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+    fi
   fi
   AGENT_RC=${PIPESTATUS[0]}
   set -e
