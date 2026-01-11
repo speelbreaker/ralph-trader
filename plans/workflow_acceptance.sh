@@ -16,6 +16,9 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
+run_in_worktree git update-index --no-assume-unchanged plans/ralph.sh plans/verify.sh >/dev/null 2>&1 || true
+run_in_worktree git checkout -f -- plans/ralph.sh plans/verify.sh >/dev/null 2>&1 || true
+
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 echo "plans/contract_check.sh" >> "$exclude_file"
 
@@ -29,6 +32,10 @@ count_blocked_incomplete() {
 
 latest_blocked_incomplete() {
   ls -dt "$WORKTREE/.ralph"/blocked_incomplete_* 2>/dev/null | head -n 1 || true
+}
+
+reset_state() {
+  rm -f "$WORKTREE/.ralph/state.json" "$WORKTREE/.ralph/last_failure_path" "$WORKTREE/.ralph/rate_limit.json" 2>/dev/null || true
 }
 
 write_valid_prd() {
@@ -182,6 +189,7 @@ chmod +x "$WORKTREE/plans/contract_check.sh"
 
 echo "Test 1: schema-violating PRD stops preflight"
 run_in_worktree mkdir -p .ralph
+reset_state
 invalid_prd="$WORKTREE/.ralph/invalid_prd.json"
 write_invalid_prd "$invalid_prd"
 before_blocked="$(count_blocked)"
@@ -201,6 +209,7 @@ if [[ "$after_blocked" -le "$before_blocked" ]]; then
 fi
 
 echo "Test 2: attempted pass flip without verify_post is prevented"
+reset_state
 valid_prd_2="$WORKTREE/.ralph/valid_prd_2.json"
 write_valid_prd "$valid_prd_2" "S1-001"
 before_blocked="$(count_blocked)"
@@ -236,10 +245,12 @@ if [[ "$pass_state" != "false" ]]; then
 fi
 
 echo "Test 3: COMPLETE printed early blocks with blocked_incomplete artifact"
+reset_state
 valid_prd_3="$WORKTREE/.ralph/valid_prd_3.json"
 write_valid_prd "$valid_prd_3" "S1-002"
 before_blocked="$(count_blocked)"
 set +e
+test3_log="$WORKTREE/.ralph/test3.log"
 run_in_worktree env \
   PRD_FILE="$valid_prd_3" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
@@ -250,7 +261,7 @@ run_in_worktree env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
-  ./plans/ralph.sh 1 >/dev/null 2>&1
+  ./plans/ralph.sh 1 >"$test3_log" 2>&1
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
@@ -265,6 +276,10 @@ fi
 after_blocked_incomplete="$(count_blocked_incomplete)"
 if [[ "$after_blocked_incomplete" -le "$before_blocked_incomplete" ]]; then
   echo "FAIL: expected blocked_incomplete_* artifact for premature COMPLETE" >&2
+  echo "Blocked dirs:" >&2
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' -print >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test3_log" >&2 || true
   exit 1
 fi
 latest_block="$(latest_blocked_incomplete)"
