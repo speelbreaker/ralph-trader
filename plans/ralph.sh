@@ -1171,8 +1171,8 @@ PROMPT
     --arg sel "$NEXT_ID" \
     '
       def items($f): if ($f[0] | type)=="array" then $f[0] else ($f[0].items // []) end;
-      (items($before) | map({id, passes}) | from_entries) as $b
-      | (items($after) | map({id, passes}) | from_entries) as $a
+      (items($before) | map({key:.id, value:.passes}) | from_entries) as $b
+      | (items($after) | map({key:.id, value:.passes}) | from_entries) as $a
       | (($b | keys_unsorted) + ($a | keys_unsorted) | sort | unique) as $ids
       | [ $ids[] | select(($b[.] // "__missing__") != ($a[.] // "__missing__")) ] as $changed
       | if ($changed | length) == 0 then "ok"
