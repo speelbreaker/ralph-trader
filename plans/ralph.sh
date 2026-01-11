@@ -232,6 +232,39 @@ run_verify() {
   return $rc
 }
 
+run_story_verify() {
+  local item_json="$1"
+  local iter_dir="$2"
+  local log="${iter_dir}/story_verify.log"
+  local cmds=""
+  local rc=0
+
+  : > "$log"
+  cmds="$(jq -r '(.verify // [])[]' <<<"$item_json" 2>/dev/null || true)"
+  if [[ -z "$cmds" ]]; then
+    echo "No story-specific verify commands." | tee -a "$log"
+    return 0
+  fi
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    if [[ "$cmd" == "./plans/verify.sh" ]]; then
+      continue
+    fi
+    echo "Running story verify: $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
+    set +e
+    bash -c "$cmd" >> "$log" 2>&1
+    local cmd_rc=$?
+    set -e
+    if (( cmd_rc != 0 )); then
+      rc=1
+      echo "FAIL: story verify command failed (rc=$cmd_rc): $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
+    fi
+  done <<<"$cmds"
+
+  return $rc
+}
+
 save_iter_artifacts() {
   local iter_dir="$1"
   mkdir -p "$iter_dir"
@@ -431,7 +464,7 @@ completion_requirements_met() {
     return 1
   fi
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log contract_review.json; do
+  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing=1
     fi
@@ -448,7 +481,7 @@ verify_iteration_artifacts() {
   local missing=()
   local f
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log contract_review.json; do
+  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing+=("$f")
     fi
@@ -478,6 +511,18 @@ matches_patterns() {
   local file="$1"
   local patterns="$2"
   local pattern
+  if command -v python3 >/dev/null 2>&1; then
+    RPH_PATTERNS="$patterns" python3 -c '
+import fnmatch, os, sys
+file = sys.argv[1]
+patterns = [p.strip() for p in os.environ.get("RPH_PATTERNS","").splitlines() if p.strip()]
+for p in patterns:
+    if fnmatch.fnmatchcase(file, p):
+        sys.exit(0)
+sys.exit(1)
+' "$file"
+    return $?
+  fi
   while IFS= read -r pattern; do
     [[ -z "$pattern" ]] && continue
     if [[ "$file" == $pattern ]]; then
@@ -1140,6 +1185,18 @@ PROMPT
     fi
   fi
 
+  DIRTY_STATUS="$(git status --porcelain 2>/dev/null || true)"
+  if [[ -n "$DIRTY_STATUS" ]]; then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "dirty_worktree" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_DIRTY_WORKTREE</promise>" | tee -a "$LOG_FILE"
+    echo "ERROR: working tree is dirty after agent run; commit required." | tee -a "$LOG_FILE"
+    echo "$DIRTY_STATUS" | tee -a "$LOG_FILE"
+    printf '%s\n' "$DIRTY_STATUS" > "$BLOCK_DIR/dirty_status.txt" || true
+    echo "Blocked: dirty worktree in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+
   out_of_scope=""
   if ! out_of_scope="$(scope_gate "$HEAD_BEFORE" "$HEAD_AFTER" "$NEXT_ITEM_JSON")"; then
     BLOCK_DIR="$(write_blocked_with_state "scope_violation" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
@@ -1176,10 +1233,6 @@ PROMPT
   else
     verify_post_rc=$?
   fi
-  state_merge \
-    --argjson last_verify_post_rc "$verify_post_rc" \
-    --arg verify_post_log "${ITER_DIR}/verify_post.log" \
-    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log'
 
   if ! verify_log_has_sha "${ITER_DIR}/verify_post.log"; then
     BLOCK_DIR="$(write_blocked_with_state "verify_sha_missing_post" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
@@ -1187,6 +1240,22 @@ PROMPT
     echo "Blocked: verify signature missing in $BLOCK_DIR" | tee -a "$LOG_FILE"
     exit 1
   fi
+
+  if (( verify_post_rc == 0 )); then
+    if run_story_verify "$NEXT_ITEM_JSON" "$ITER_DIR"; then
+      :
+    else
+      verify_post_rc=1
+    fi
+  else
+    : > "${ITER_DIR}/story_verify.log"
+    echo "Skipped story-specific verify commands because verify.sh failed." >> "${ITER_DIR}/story_verify.log"
+  fi
+
+  state_merge \
+    --argjson last_verify_post_rc "$verify_post_rc" \
+    --arg verify_post_log "${ITER_DIR}/verify_post.log" \
+    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log'
 
   POST_VERIFY_FAILED=0
   POST_VERIFY_EXIT=0
@@ -1265,7 +1334,7 @@ PROMPT
       echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
     else
       if (( CONTRACT_REVIEW_OK == 1 )); then
-        ./plans/update_task.sh "$MARK_PASS_ID" true
+        RPH_UPDATE_TASK_OK=1 RPH_STATE_FILE="$STATE_FILE" ./plans/update_task.sh "$MARK_PASS_ID" true
         git add -A
         if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" ]]; then
           git commit --amend --no-edit
