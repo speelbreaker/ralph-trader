@@ -29,6 +29,34 @@ This is the canonical contract path. Do not edit other copies.
   - While in ReduceOnly due to F1 failure: allow only closes/hedges/cancels; block all opens.
   - This rule is strict: no caching last-known-good and no grace periods.
 
+## **0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)**
+
+This repo is a Rust workspace with two required crates:
+
+- `crates/soldier_core`
+- `crates/soldier_infra`
+
+Any “Where:” references in this contract that mention `soldier/core/...` or `soldier/infra/...` map to:
+
+- `soldier/core/...` => `crates/soldier_core/...`
+- `soldier/infra/...` => `crates/soldier_infra/...`
+
+Contract invariant: any implementation that relocates these crates or breaks this mapping is non-compliant unless `CONTRACT.md` is updated first.
+
+**Contract acceptance criteria (repo-level):**
+- `cargo test --workspace` must run from repo root.
+- Both crates must exist and be members of the workspace.
+
+## **0.Y Verification Harness (Non-Negotiable)**
+
+`plans/verify.sh` is the canonical verification entrypoint for this repo.
+It MUST be runnable from repo root and MUST invoke `cargo test --workspace`
+as part of its core gate.
+
+**Contract acceptance criteria (repo-level):**
+- `bash -n plans/verify.sh` exits 0.
+- `./plans/verify.sh` runs `cargo test --workspace` from repo root.
+
 
 ## §0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)
 
