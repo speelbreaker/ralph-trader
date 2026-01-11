@@ -2,92 +2,245 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-PRD_FILE="${PRD_FILE:-plans/prd.json}"
-STORY_ID="${1:-}"
-ITER_DIR="${2:-}"
+out="${CONTRACT_REVIEW_OUT:-${1:-}}"
+contract_file="${CONTRACT_FILE:-CONTRACT.md}"
+prd_file="${PRD_FILE:-plans/prd.json}"
+allow_verify_edit="${RPH_ALLOW_VERIFY_SH_EDIT:-0}"
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "ERROR: jq required for contract check" >&2
-  exit 2
-fi
+write_json() {
+  local status="$1"
+  local notes="$2"
+  mkdir -p "$(dirname "$out")"
+  jq -n \
+    --arg status "$status" \
+    --arg contract_path "$contract_file" \
+    --arg notes "$notes" \
+    '{status:$status, contract_path:$contract_path, notes:$notes}' \
+    > "$out"
+}
 
-if [[ ! -f "$PRD_FILE" ]]; then
-  echo "ERROR: missing PRD file: $PRD_FILE" >&2
-  exit 3
-fi
+fail() {
+  write_json "fail" "$1"
+  exit 1
+}
 
-if ! jq . "$PRD_FILE" >/dev/null 2>&1; then
-  echo "ERROR: PRD is not valid JSON: $PRD_FILE" >&2
-  exit 4
-fi
+pass() {
+  write_json "pass" "$1"
+  exit 0
+}
 
-if [[ -z "$STORY_ID" ]]; then
-  echo "ERROR: contract_check requires story id as first arg" >&2
-  exit 5
-fi
+command -v jq >/dev/null 2>&1 || { echo "jq required" >&2; exit 2; }
+[[ -n "$out" ]] || { echo "missing CONTRACT_REVIEW_OUT / output path" >&2; exit 2; }
+[[ -f "$contract_file" ]] || fail "missing contract file: $contract_file"
+[[ -f "$prd_file" ]] || fail "missing PRD file: $prd_file"
 
-contract_path="$(jq -r '.source.contract_path // empty' "$PRD_FILE")"
-if [[ -n "$contract_path" && ! -f "$contract_path" ]]; then
-  echo "ERROR: contract_path from PRD is missing: $contract_path" >&2
-  contract_path=""
+iter_dir="$(cd "$(dirname "$out")" && pwd -P)"
+selected_json="$iter_dir/selected.json"
+head_before_txt="$iter_dir/head_before.txt"
+head_after_txt="$iter_dir/head_after.txt"
+
+[[ -f "$selected_json" ]] || fail "missing iteration selected.json at $selected_json"
+[[ -f "$head_before_txt" ]] || fail "missing iteration head_before.txt at $head_before_txt"
+[[ -f "$head_after_txt" ]] || fail "missing iteration head_after.txt at $head_after_txt"
+
+selected_id="$(jq -r '.selected_id // empty' "$selected_json")"
+[[ -n "$selected_id" ]] || fail "selected_id missing in selected.json"
+
+# Load story from PRD
+story_json="$(jq -c --arg id "$selected_id" '
+  def items: (if type=="array" then . else (.items // []) end);
+  (items | map(select(.id==$id)) | .[0]) // empty
+' "$prd_file")"
+
+[[ -n "$story_json" ]] || fail "selected story not found in PRD: $selected_id"
+
+# Enforce story has contract_refs + scope.touch (PRD schema already requires, but double-lock here)
+contract_ref_count="$(jq -r '(.contract_refs // []) | length' <<<"$story_json")"
+touch_count="$(jq -r '(.scope.touch // []) | length' <<<"$story_json")"
+[[ "$contract_ref_count" -ge 1 ]] || fail "story $selected_id has empty contract_refs"
+[[ "$touch_count" -ge 1 ]] || fail "story $selected_id has empty scope.touch"
+
+head_before="$(cat "$head_before_txt")"
+head_after="$(cat "$head_after_txt")"
+[[ -n "$head_before" && -n "$head_after" ]] || fail "missing head_before/head_after values"
+
+# Enforce: agent must have made exactly ONE commit for this story.
+commit_count="$(git rev-list --count "${head_before}..${head_after}" 2>/dev/null || echo "0")"
+if ! [[ "$commit_count" =~ ^[0-9]+$ ]]; then
+  fail "could not compute commit_count for ${head_before}..${head_after}"
 fi
-if [[ -z "$contract_path" ]]; then
-  if [[ -f "CONTRACT.md" ]]; then
-    contract_path="CONTRACT.md"
-  elif [[ -f "specs/CONTRACT.md" ]]; then
-    contract_path="specs/CONTRACT.md"
+if [[ "$commit_count" -ne 1 ]]; then
+  # Also fail if there are uncommitted changes (classic "verify green but no commit" loophole)
+  if [[ -n "$(git status --porcelain)" ]]; then
+    fail "expected 1 commit, got ${commit_count}; also worktree is dirty (uncommitted changes present)"
   fi
+  fail "expected exactly 1 commit for story, got ${commit_count}"
 fi
 
-if [[ -z "$contract_path" ]]; then
-  echo "ERROR: CONTRACT.md missing (expected CONTRACT.md or specs/CONTRACT.md)" >&2
-  exit 6
+# Files changed in the commit
+mapfile -t changed_files < <(git diff-tree --no-commit-id --name-only -r "$head_after" | sed '/^$/d')
+mapfile -t changed_status < <(git diff --name-status "$head_before" "$head_after" | sed '/^$/d')
+
+# Scope enforcement (this is the big missing guard you were failing before)
+mapfile -t touch_patterns < <(jq -r '.scope.touch[]' <<<"$story_json")
+mapfile -t avoid_patterns < <(jq -r '.scope.avoid[]?' <<<"$story_json")
+
+shopt -s globstar
+
+scope_violations=()
+
+matches_any() {
+  local path="$1"; shift
+  local pat
+  for pat in "$@"; do
+    [[ -z "$pat" ]] && continue
+    if [[ "$path" == $pat ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+is_test_file() {
+  local path="$1"
+  case "$path" in
+    */tests/*|*/__tests__/*|*/*_test.*|*_test.*|*.spec.*|*.test.*|test_*.*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+for f in "${changed_files[@]}"; do
+  # avoid wins
+  if [[ "${#avoid_patterns[@]}" -gt 0 ]] && matches_any "$f" "${avoid_patterns[@]}"; then
+    scope_violations+=("avoid-match: $f")
+    continue
+  fi
+  if ! matches_any "$f" "${touch_patterns[@]}"; then
+    scope_violations+=("out-of-scope: $f")
+    continue
+  fi
+done
+
+if [[ "${#scope_violations[@]}" -gt 0 ]]; then
+  notes="SCOPE FAIL for $selected_id: $(printf '%s; ' "${scope_violations[@]}")"
+  fail "$notes"
 fi
 
-story_json="$(jq -c --arg id "$STORY_ID" '
-  def items: if type=="array" then . else (.items // []) end;
-  items[] | select(.id==$id)
-' "$PRD_FILE")"
+test_deletions=()
+ci_violations=()
+for line in "${changed_status[@]}"; do
+  status="${line%%$'\t'*}"
+  path="${line#*$'\t'}"
 
-if [[ -z "$story_json" ]]; then
-  echo "ERROR: story id not found in PRD: $STORY_ID" >&2
-  exit 7
+  if [[ "$status" == D* ]]; then
+    if is_test_file "$path"; then
+      test_deletions+=("$path")
+    fi
+  fi
+
+  if [[ "$path" == ".github/workflows/ci.yml" || "$path" == ".github/workflows/ci.yaml" ]]; then
+    if [[ "$status" == D* ]]; then
+      ci_violations+=("ci_workflow_deleted:$path")
+      continue
+    fi
+    if [[ ! -f "$path" ]]; then
+      ci_violations+=("ci_workflow_missing:$path")
+      continue
+    fi
+    if ! grep -Eq "plans/verify\\.sh" "$path"; then
+      ci_violations+=("ci_missing_verify_sh:$path")
+    fi
+    if ! grep -Eq "CI_GATES_SOURCE[[:space:]]*[:=][[:space:]]*verify" "$path"; then
+      ci_violations+=("ci_missing_gate_source:$path")
+    fi
+  fi
+done
+
+if [[ "${#test_deletions[@]}" -gt 0 ]]; then
+  fail "test file deletion detected: $(printf '%s; ' "${test_deletions[@]}")"
+fi
+if [[ "${#ci_violations[@]}" -gt 0 ]]; then
+  fail "CI gate weakening detected: $(printf '%s; ' "${ci_violations[@]}")"
 fi
 
-mapfile -t refs < <(jq -r '.contract_refs[]?' <<<"$story_json")
-if [[ "${#refs[@]}" -eq 0 ]]; then
-  echo "ERROR: contract_refs missing for story: $STORY_ID" >&2
-  exit 8
-fi
+# Guard: verify.sh edits are human-reviewed unless explicitly allowed
+for f in "${changed_files[@]}"; do
+  if [[ "$f" == "plans/verify.sh" && "$allow_verify_edit" != "1" ]]; then
+    fail "verify.sh modified in commit but RPH_ALLOW_VERIFY_SH_EDIT!=1 (human-reviewed gate)"
+  fi
+done
+
+# Contract refs: mechanical "does the contract actually contain what you claim you referenced?"
+# This is intentionally conservative: if it can't find it, it fails (forces you to fix ref text or contract).
+contract_text_lc="$(tr '[:upper:]' '[:lower:]' < "$contract_file")"
 
 missing_refs=()
-for ref in "${refs[@]}"; do
-  if ! grep -Fq "$ref" "$contract_path"; then
+normalize_ref() {
+  local r="$1"
+  r="${r#CONTRACT.md }"
+  r="${r#CONTRACT.md}"
+  r="${r//$'\xc2\xa7'/}"
+  echo "$r" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
+}
+
+ref_ok() {
+  local ref="$1"
+  local r; r="$(normalize_ref "$ref")"
+  local r_lc; r_lc="$(echo "$r" | tr '[:upper:]' '[:lower:]')"
+
+  # Definitions(x) style
+  if echo "$r_lc" | grep -q "definitions" && echo "$r" | grep -q "("; then
+    local inner
+    inner="$(echo "$r" | sed -n 's/.*(\(.*\)).*/\1/p' | head -n 1)"
+    inner="$(echo "$inner" | sed 's/^ *//; s/ *$//')"
+    [[ -z "$inner" ]] && return 1
+    echo "$contract_text_lc" | grep -Fqi "$(echo "$inner" | tr '[:upper:]' '[:lower:]')" && return 0
+    return 1
+  fi
+
+  # Section style: "8 Release Gates ..." or "8.2 Minimum Test Suite ..."
+  if [[ "$r" =~ ^([0-9]+(\.[0-9]+)?)\ (.+)$ ]]; then
+    local num="${BASH_REMATCH[1]}"
+    local rest="${BASH_REMATCH[3]}"
+
+    # If ref is "8 ..." but contract headings are "8. ...", normalize integer sections to "8."
+    local num_fmt="$num"
+    if [[ "$num" =~ ^[0-9]+$ ]]; then
+      num_fmt="${num}."
+      # accept integer section by finding "num.0" as well (your contract uses 1.0 / 1.1 etc)
+      echo "$contract_text_lc" | grep -Fqi "${num}.0" && return 0
+    fi
+
+    # Build a small title key: first 2 words (alnum only)
+    local title_key
+    title_key="$(echo "$rest" | sed 's/[^[:alnum:][:space:]]/ /g' | awk '{print $1, $2}' | sed 's/ $//')"
+    local needle="${num_fmt} ${title_key}"
+    needle="$(echo "$needle" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//')"
+
+    [[ -n "$title_key" ]] && echo "$contract_text_lc" | grep -Fqi "$needle" && return 0
+    # fallback: at least find the numeric section token somewhere (still reasonably strong for 1.0, 8.2, etc)
+    echo "$contract_text_lc" | grep -Fqi "$num" && return 0
+  fi
+
+  # Last resort: try the whole normalized ref (short refs)
+  if [[ "${#r_lc}" -ge 8 ]]; then
+    echo "$contract_text_lc" | grep -Fqi "$r_lc" && return 0
+  fi
+
+  return 1
+}
+
+mapfile -t contract_refs < <(jq -r '.contract_refs[]' <<<"$story_json")
+for ref in "${contract_refs[@]}"; do
+  if ! ref_ok "$ref"; then
     missing_refs+=("$ref")
   fi
 done
 
-status="PASS"
 if [[ "${#missing_refs[@]}" -gt 0 ]]; then
-  status="FAIL"
+  fail "CONTRACT REF FAIL for $selected_id: missing/weak refs: $(printf '%s | ' "${missing_refs[@]}")"
 fi
 
-if [[ -n "$ITER_DIR" ]]; then
-  mkdir -p "$ITER_DIR"
-  jq -n \
-    --arg status "$status" \
-    --arg story_id "$STORY_ID" \
-    --arg contract_path "$contract_path" \
-    --argjson checked_refs "$(printf '%s\n' "${refs[@]}" | jq -R . | jq -s .)" \
-    --argjson missing_refs "$(printf '%s\n' "${missing_refs[@]}" | jq -R . | jq -s .)" \
-    --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-    '{status:$status, story_id:$story_id, contract_path:$contract_path, checked_refs:$checked_refs, missing_refs:$missing_refs, timestamp_utc:$ts}' \
-    > "$ITER_DIR/contract_review.json"
-fi
-
-if [[ "$status" != "PASS" ]]; then
-  echo "ERROR: contract_refs not found in contract file: ${missing_refs[*]}" >&2
-  exit 9
-fi
-
-echo "Contract check OK for $STORY_ID"
+pass "ok: $selected_id scope+contract_refs+one_commit"

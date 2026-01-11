@@ -1,6 +1,7 @@
 # Agent Guide (High-Signal)
 
 ## Non-negotiable: Contract Alignment
+- Any change you make to the code must be 100% aligned with CONTRACT.md.
 - Every code change MUST be 100% aligned with CONTRACT.md.
 - If any instruction, story, or implementation detail conflicts with CONTRACT.md:
   - STOP immediately

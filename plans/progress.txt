@@ -2,3 +2,21 @@
 - S1-000: added CI config discovery to plans/verify.sh and fail-closed when no CI config is present, emitting BLOCKED_CI_COMMANDS.
 - Commands: ./plans/verify.sh full
 - Next: provide CI config (.github/workflows or equivalent) so verify.sh can mirror actual CI gates.
+- S1-000: confirmed plans/verify.sh is runnable and includes cargo test --workspace; validated bash syntax.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; bash -n plans/verify.sh; ./plans/verify.sh; ./plans/update_task.sh S1-000 true.
+- Next: proceed to S1-001.
+- S1-001: initialized Rust workspace with soldier_core and soldier_infra crates, added root Cargo.toml workspace and generated Cargo.lock.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; cargo new --lib crates/soldier_core --vcs none; cargo new --lib crates/soldier_infra --vcs none; cargo test --workspace; ./plans/verify.sh full; ./plans/update_task.sh S1-001 true.
+- Next: proceed to S1-002.
+- S1-002: added RiskState and InstrumentKind enums, Deribit metadata structs, and mapping logic; added instrument kind mapping tests.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-002 true.
+- Next: proceed to S1-003.
+- S1-003: added InstrumentCache with TTL checks, stale metric counter + structured log, and tests for fresh/stale behavior.
+- Commands: ./plans/init.sh; ./plans/verify.sh full (fails fmt); cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-003 true.
+- Next: proceed to S1-004.
+- S1-004: added OrderSize canonical sizing with deterministic notional_usd, execution module wiring, and order size tests.
+- Commands: ./plans/init.sh; ./plans/verify.sh full (fails fmt); cargo fmt; ./plans/verify.sh full; ./plans/update_task.sh S1-004 true.
+- Next: proceed to S1-005.
+- S1-005: mapped OrderSize to Deribit amount selection, added mismatch rejection counter + tests for amount mapping and contract mismatch.
+- Commands: ./plans/verify.sh full; ./plans/update_task.sh S1-005 true.
+- Next: proceed to S1-006.

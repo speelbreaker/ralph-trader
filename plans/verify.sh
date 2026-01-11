@@ -22,7 +22,20 @@
 
 set -euo pipefail
 
-MODE="${1:-quick}"                 # quick | full
+VERIFY_SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify.sh"
+if command -v sha256sum >/dev/null 2>&1; then
+  VERIFY_SH_SHA="$(sha256sum "$VERIFY_SCRIPT_PATH" | awk '{print $1}')"
+else
+  VERIFY_SH_SHA="$(shasum -a 256 "$VERIFY_SCRIPT_PATH" | awk '{print $1}')"
+fi
+echo "VERIFY_SH_SHA=$VERIFY_SH_SHA"
+
+MODE="${1:-quick}"                 # quick | full | promotion
+# Allow "promotion" as a mode alias (full + VERIFY_MODE=promotion)
+if [[ "$MODE" == "promotion" ]]; then
+  MODE="full"
+  export VERIFY_MODE="promotion"
+fi
 VERIFY_MODE="${VERIFY_MODE:-}"     # set to "promotion" for release-grade gates
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -38,6 +51,7 @@ fi
 
 if [[ "$CI_GATES_SOURCE" != "github" && "$CI_GATES_SOURCE" != "verify" ]]; then
   echo "<promise>BLOCKED_CI_COMMANDS</promise>"
+  echo "Missing CI gate source. Set CI_GATES_SOURCE=verify or add .github/workflows for CI mirroring."
   exit 2
 fi
 
@@ -56,6 +70,18 @@ is_ci(){ [[ -n "${CI:-}" ]]; }
 
 need() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
+}
+
+ensure_python() {
+  if command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+    return 0
+  fi
+  fail "Missing required command: python (or python3)"
 }
 
 node_script_exists() {
@@ -202,11 +228,11 @@ else
       changed_files="$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || true)"
 
       # Broad but practical patterns across stacks
-      endpoint_changed="$(echo "$changed_files" | grep -E \
-        '(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/' || true)"
+      ENDPOINT_PATTERNS="${ENDPOINT_PATTERNS:-'(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/'}"
+      TEST_PATTERNS="${TEST_PATTERNS:-'(^|/)(tests?|__tests__)/|(\\.spec\\.|\\.test\\.)|(^|/)integration_tests/'}"
+      endpoint_changed="$(echo "$changed_files" | grep -E "$ENDPOINT_PATTERNS" || true)"
 
-      tests_changed="$(echo "$changed_files" | grep -E \
-        '(^|/)(tests?|__tests__)/|(\.spec\.|\.test\.)|(^|/)integration_tests/' || true)"
+      tests_changed="$(echo "$changed_files" | grep -E "$TEST_PATTERNS" || true)"
 
       if [[ -n "$endpoint_changed" && -z "$tests_changed" ]]; then
         fail "Endpoint-ish files changed without corresponding test changes:
@@ -248,7 +274,7 @@ fi
 # 3) Python gates (if Python project present)
 # -----------------------------------------------------------------------------
 if [[ -f pyproject.toml || -f requirements.txt ]]; then
-  need python
+  ensure_python
 
   # Ruff: required in CI (best ROI for agent-heavy workflows)
   if command -v ruff >/dev/null 2>&1; then
@@ -330,8 +356,8 @@ log "5) Optional gates (only when enabled)"
 # 5a) Venue facts evidence check (optional strictness)
 REQUIRE_VQ_EVIDENCE="${REQUIRE_VQ_EVIDENCE:-0}"
 if [[ -f "$ROOT/scripts/check_vq_evidence.py" ]]; then
-  need python
-  python "$ROOT/scripts/check_vq_evidence.py" || fail "Venue facts evidence check failed"
+  ensure_python
+  "$PYTHON_BIN" "$ROOT/scripts/check_vq_evidence.py" || fail "Venue facts evidence check failed"
   echo "✓ venue evidence check passed"
 else
   if [[ "$REQUIRE_VQ_EVIDENCE" == "1" ]]; then
@@ -350,9 +376,9 @@ if [[ "$VERIFY_MODE" == "promotion" || "$REQUIRE_F1_CERT" == "1" ]]; then
 
   # Generate cert if requested and tool exists
   if [[ "$RUN_F1_CERT" == "1" && -f "$F1_TOOL" ]]; then
-    need python
+    ensure_python
     mkdir -p "$ROOT/artifacts"
-    python "$F1_TOOL" --window=24h --out="$F1_CERT"
+    "$PYTHON_BIN" "$F1_TOOL" --window=24h --out="$F1_CERT"
   fi
 
   [[ -f "$F1_CERT" ]] || fail "F1 cert required but missing: artifacts/F1_CERT.json"

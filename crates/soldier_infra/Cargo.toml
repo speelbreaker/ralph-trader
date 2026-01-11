@@ -1,0 +1,7 @@
+[package]
+name = "soldier_infra"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+soldier_core = { path = "../soldier_core" }
