@@ -67,12 +67,21 @@ if [[ -f "$iter_dir/head_after.txt" ]]; then
   head_after="$(cat "$iter_dir/head_after.txt" || true)"
 fi
 
+if [[ -z "$head_before" || -z "$head_after" ]]; then
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  state_file="${RPH_STATE_FILE:-${repo_root}/.ralph/state.json}"
+  if [[ -f "$state_file" ]]; then
+    head_before="$(jq -r '.head_before // empty' "$state_file")"
+    head_after="$(jq -r '.head_after // empty' "$state_file")"
+  fi
+fi
+
 if [[ -n "$head_before" && -n "$head_after" ]]; then
   if git diff --name-only "$head_before" "$head_after" | grep -qx "plans/verify.sh"; then
     fail_note "plans/verify.sh modified in iteration"
   fi
 else
-  note "missing head_before/head_after; cannot verify verify.sh diff"
+  fail_note "missing head_before/head_after; cannot verify verify.sh diff"
 fi
 
 notes_text="$(printf '%s; ' "${notes[@]}" | sed 's/[; ]*$//')"
