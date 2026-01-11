@@ -1407,6 +1407,16 @@ PROMPT
     fi
   fi
 
+  if grep -qF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
+    if ! all_items_passed || [[ "$verify_post_rc" != "0" ]]; then
+      save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+      BLOCK_DIR="$(write_blocked_artifacts "incomplete_completion" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "blocked_incomplete")"
+      echo "<promise>BLOCKED_INCOMPLETE</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked incomplete completion: $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 1
+    fi
+  fi
+
   progress_issues=""
   if ! progress_issues="$(progress_gate "$PROGRESS_SIZE_BEFORE" "$PROGRESS_HASH_BEFORE" "$NEXT_ID" "$ITER_DIR")"; then
     echo "ERROR: progress.txt gate failed: $progress_issues" | tee -a "$LOG_FILE"
