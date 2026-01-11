@@ -58,6 +58,23 @@ as part of its core gate.
 - `./plans/verify.sh` runs `cargo test --workspace` from repo root.
 
 
+## §0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)
+
+This repo is a Rust workspace with two required crates:
+- `crates/soldier_core`
+- `crates/soldier_infra`
+
+Any "Where:" references in this contract that mention `soldier/core/...` or `soldier/infra/...` map to:
+- `soldier/core/...` -> `crates/soldier_core/...`
+- `soldier/infra/...` -> `crates/soldier_infra/...`
+
+**Contract invariant:** any implementation that relocates these crates or breaks this mapping is non-compliant unless CONTRACT.md is updated first.
+
+**Contract acceptance criteria (repo-level):**
+- `cargo test --workspace` must run from repo root.
+- Both crates must exist and be members of the workspace.
+
+
 ## Deribit Venue Facts Addendum (Artifact-Backed)
 
 This contract is **venue-bound**: any behavior marked **VERIFIED** below is backed by artifacts under `artifacts/` and is enforced by code + regression tests.  
@@ -110,17 +127,17 @@ This policy is enforced in §1.4 (**No Market Orders**) and §1.4.4 (**Options O
 
 #### **1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement**
 
-**Purpose:** stale instrument metadata can silently break sizing + quantization (tick/step/min_amount), causing wrong exposure.
+**Purpose:** Stale instrument metadata can silently break sizing and quantization (tick_size, amount_step, min_amount), causing wrong exposure.
 
-**Invariant (Non‑Negotiable):**
+**Invariant (Non-Negotiable):**
 - The engine MUST track freshness of instrument metadata used for:
   - instrument_kind derivation
-  - quantization constraints (`tick_size`, `amount_step`, `min_amount`)
+  - quantization constraints (tick_size, amount_step, min_amount)
 - If instrument metadata age exceeds `instrument_cache_ttl_s`:
-  - Set `RiskState::Degraded`
-  - Block opens by forcing `TradingMode::ReduceOnly` within one tick (closes/hedges/cancels allowed)
+  - set `RiskState::Degraded`
+  - block opens by forcing `TradingMode::ReduceOnly` within one tick (closes/hedges/cancels allowed)
 
-**Required observability (names are contract‑bound):**
+**Required observability (contract-bound names):**
 - `instrument_cache_age_s` (gauge)
 - `instrument_cache_hits_total` (counter)
 - `instrument_cache_stale_total` (counter)
@@ -679,7 +696,7 @@ EvidenceChainState = GREEN iff ALL are true (rolling window, e.g. last 60s):
    - EvidenceChainState != GREEN (EvidenceGuard; see §2.2.2)
    - `cortex_override == ForceReduceOnly`
    - fee model stale beyond hard limit (see §4.2)
-   - `risk_state == Degraded` ⇒ `TradingMode::ReduceOnly` (mandatory)
+   - `risk_state == Degraded` => `TradingMode::ReduceOnly` (mandatory)
 3. `TradingMode::Active` only if:
    - `risk_state == Healthy`, and
    - policy staleness is within limits, and

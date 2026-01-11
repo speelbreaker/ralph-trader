@@ -50,7 +50,7 @@ RPH_MARK_PASS_CLOSE="${RPH_MARK_PASS_CLOSE:-</mark_pass>}"
 # Parse RPH_AGENT_ARGS (space-delimited) into an array (global IFS excludes spaces).
 RPH_AGENT_ARGS_ARR=()
 if [[ -n "${RPH_AGENT_ARGS:-}" ]]; then
-  _old_ifs="$IFS"; IFS=' '
+  _old_ifs="$IFS"; IFS=$' \t\n'
   read -r -a RPH_AGENT_ARGS_ARR <<<"$RPH_AGENT_ARGS"
   IFS="$_old_ifs"
 fi
@@ -115,6 +115,12 @@ block_preflight() {
 # --- preflight ---
 command -v git >/dev/null 2>&1 || block_preflight "missing_git" "git required"
 command -v jq  >/dev/null 2>&1 || block_preflight "missing_jq" "jq required"
+if [[ "$RPH_DRY_RUN" != "1" ]]; then
+  if [[ -z "${RPH_AGENT_CMD:-}" ]]; then
+    block_preflight "missing_agent_cmd" "RPH_AGENT_CMD is empty"
+  fi
+  command -v "$RPH_AGENT_CMD" >/dev/null 2>&1 || block_preflight "missing_agent_cmd" "agent command not found: $RPH_AGENT_CMD"
+fi
 
 [[ -f "$PRD_FILE" ]] || block_preflight "missing_prd" "missing $PRD_FILE"
 jq . "$PRD_FILE" >/dev/null 2>&1 || block_preflight "invalid_prd_json" "$PRD_FILE invalid JSON"

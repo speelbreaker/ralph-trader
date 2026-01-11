@@ -7,8 +7,8 @@
     "workflow_contract": "WORKFLOW_CONTRACT.md"
   },
   "summary": {
-    "items_total": 10,
-    "items_pass": 10,
+    "items_total": 12,
+    "items_pass": 12,
     "items_fail": 0,
     "items_blocked": 0,
     "must_fix_count": 0
@@ -166,6 +166,41 @@
       "patch_suggestions": []
     },
     {
+      "id": "S1-006",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": {
+        "missing_fields": [],
+        "notes": []
+      },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": []
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": []
+      },
+      "scope_check": {
+        "too_broad": false,
+        "est_size_too_large": false,
+        "notes": []
+      },
+      "dependency_check": {
+        "invalid": false,
+        "forward_dep": false,
+        "cycle": false,
+        "notes": []
+      },
+      "patch_suggestions": []
+    },
+    {
       "id": "S1-004",
       "slice": 1,
       "status": "PASS",
@@ -202,6 +237,41 @@
     },
     {
       "id": "S1-005",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": {
+        "missing_fields": [],
+        "notes": []
+      },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": []
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": []
+      },
+      "scope_check": {
+        "too_broad": false,
+        "est_size_too_large": false,
+        "notes": []
+      },
+      "dependency_check": {
+        "invalid": false,
+        "forward_dep": false,
+        "cycle": false,
+        "notes": []
+      },
+      "patch_suggestions": []
+    },
+    {
+      "id": "S1-007",
       "slice": 1,
       "status": "PASS",
       "reasons": [],
