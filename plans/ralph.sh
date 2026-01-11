@@ -706,7 +706,7 @@ detect_cheating() {
       deletions+=("$path")
     fi
   done < <("${status_cmd[@]}")
-  for path in "${deletions[@]}"; do
+  for path in "${deletions[@]:-}"; do
     if is_test_path "$path"; then
       cheats+=("deleted_test_file:$path")
     fi
