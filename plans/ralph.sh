@@ -23,6 +23,7 @@ RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choi
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
+RPH_OVERNIGHT="${RPH_OVERNIGHT:-0}"            # 0|1
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-claude}"       # claude|codex|opencode|etc
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
@@ -66,6 +67,25 @@ LOG_FILE="plans/logs/ralph.$(date +%Y%m%d-%H%M%S).log"
 LAST_GOOD_FILE=".ralph/last_good_ref"
 LAST_FAIL_FILE=".ralph/last_failure_path"
 STATE_FILE="$RPH_STATE_FILE"
+
+if [[ "$RPH_OVERNIGHT" == "1" ]]; then
+  RPH_SELF_HEAL=1
+  RPH_CIRCUIT_BREAKER_ENABLED=1
+  RPH_ALLOW_AGENT_PRD_EDIT=0
+  RPH_ALLOW_VERIFY_SH_EDIT=0
+  RPH_REQUIRE_STORY_VERIFY=1
+fi
+
+case "$RPH_AGENT_ARGS" in
+  *"--skip-permission"*|*"--dangerously-skip"*|*"--yolo"*)
+    if [[ "$RPH_OVERNIGHT" == "1" ]]; then
+      echo "ERROR: dangerous agent args forbidden in overnight mode: $RPH_AGENT_ARGS" | tee -a "$LOG_FILE"
+      exit 10
+    else
+      echo "WARN: dangerous agent args detected (allowed in non-overnight): $RPH_AGENT_ARGS" | tee -a "$LOG_FILE"
+    fi
+    ;;
+esac
 
 json_escape() {
   local s="$1"
@@ -1079,7 +1099,7 @@ PROMPT
       echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
     else
       if (( CONTRACT_REVIEW_OK == 1 )); then
-        ./plans/update_task.sh "$MARK_PASS_ID" true
+        SKIP_VERIFY_GATE=1 ./plans/update_task.sh "$MARK_PASS_ID" true
         git add -A
         if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" ]]; then
           git commit --amend --no-edit
@@ -1144,6 +1164,29 @@ PROMPT
     '.last_good_ref=$last_good_ref'
 
   save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+
+  PRD_DIFF_CHECK="$(jq -n \
+    --slurpfile before "${ITER_DIR}/prd_before.json" \
+    --slurpfile after "${ITER_DIR}/prd_after.json" \
+    --arg sel "$NEXT_ID" \
+    '
+      def items($f): if ($f[0] | type)=="array" then $f[0] else ($f[0].items // []) end;
+      (items($before) | map({id, passes}) | from_entries) as $b
+      | (items($after) | map({id, passes}) | from_entries) as $a
+      | (($b | keys_unsorted) + ($a | keys_unsorted) | sort | unique) as $ids
+      | [ $ids[] | select(($b[.] // "__missing__") != ($a[.] // "__missing__")) ] as $changed
+      | if ($changed | length) == 0 then "ok"
+        elif ($changed | length) == 1 and $changed[0] == $sel then "ok"
+        else "violation:" + ($changed | join(","))
+        end
+    ' -r)"
+  if [[ "$PRD_DIFF_CHECK" != "ok" ]]; then
+    echo "ERROR: PRD integrity violation: $PRD_DIFF_CHECK" | tee -a "$LOG_FILE"
+    BLOCK_DIR="$(write_blocked_with_state "prd_integrity_violation" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_PRD_INTEGRITY</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: PRD integrity violation in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 9
+  fi
 
   PASS_FLIPS="$(count_pass_flips "$ITER_DIR/prd_before.json" "$ITER_DIR/prd_after.json" || echo "error")"
   if [[ "$PASS_FLIPS" == "error" ]]; then

@@ -4,6 +4,8 @@ set -euo pipefail
 ID="${1:-}"
 STATUS="${2:-}"
 PRD_FILE="${PRD_FILE:-plans/prd.json}"
+VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
+SKIP_VERIFY_GATE="${SKIP_VERIFY_GATE:-0}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 [[ -n "$ID" && -n "$STATUS" ]] || { echo "Usage: $0 <task_id> <true|false>" >&2; exit 1; }
@@ -11,6 +13,16 @@ command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 if [[ "$STATUS" != "true" && "$STATUS" != "false" ]]; then
   echo "ERROR: status must be true or false" >&2
   exit 1
+fi
+
+# If setting passes=true, require verify to be green unless explicitly skipped.
+if [[ "$STATUS" == "true" && "$SKIP_VERIFY_GATE" != "1" ]]; then
+  if [[ -x "$VERIFY_SH" ]]; then
+    if ! "$VERIFY_SH" quick >/dev/null 2>&1; then
+      echo "ERROR: cannot set passes=true when verify is red (set SKIP_VERIFY_GATE=1 to override)" >&2
+      exit 4
+    fi
+  fi
 fi
 
 [[ -f "$PRD_FILE" ]] || { echo "ERROR: missing $PRD_FILE" >&2; exit 1; }
