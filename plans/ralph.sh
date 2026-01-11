@@ -699,7 +699,13 @@ detect_cheating() {
   if [[ -n "$head_before" ]]; then
     status_cmd=(git diff --name-status "$head_before")
   fi
-  mapfile -t deletions < <("${status_cmd[@]}" | awk '$1 ~ /^D/ {print $2}')
+  local deletions=()
+  while IFS=$'\t' read -r status path; do
+    [[ -z "$status" ]] && continue
+    if [[ "$status" == D* ]]; then
+      deletions+=("$path")
+    fi
+  done < <("${status_cmd[@]}")
   for path in "${deletions[@]}"; do
     if is_test_path "$path"; then
       cheats+=("deleted_test_file:$path")
