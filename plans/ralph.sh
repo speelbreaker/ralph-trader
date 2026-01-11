@@ -39,6 +39,7 @@ RPH_ALLOW_AGENT_PRD_EDIT="${RPH_ALLOW_AGENT_PRD_EDIT:-0}"  # 0|1 (legacy compati
 RPH_ALLOW_VERIFY_SH_EDIT="${RPH_ALLOW_VERIFY_SH_EDIT:-0}"  # 0|1
 # Contract alignment review gate (mandatory).
 CONTRACT_FILE="${CONTRACT_FILE:-CONTRACT.md}"
+IMPL_PLAN_FILE="${IMPL_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
 RPH_REQUIRE_CONTRACT_REVIEW="${RPH_REQUIRE_CONTRACT_REVIEW:-1}"  # 0|1 (mandatory)
 # Agent pass-mark tags: print exactly <mark_pass>ID</mark_pass>
 RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
@@ -169,7 +170,18 @@ fi
 [[ -x "./plans/update_task.sh" ]] || block_preflight "missing_update_task_sh" "plans/update_task.sh missing or not executable"
 
 if [[ ! -f "$CONTRACT_FILE" ]]; then
-  block_preflight "missing_contract_file" "CONTRACT_FILE missing: $CONTRACT_FILE"
+  if [[ -f "specs/CONTRACT.md" ]]; then
+    CONTRACT_FILE="specs/CONTRACT.md"
+  else
+    block_preflight "missing_contract_file" "CONTRACT_FILE missing: $CONTRACT_FILE"
+  fi
+fi
+if [[ ! -f "$IMPL_PLAN_FILE" ]]; then
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then
+    IMPL_PLAN_FILE="specs/IMPLEMENTATION_PLAN.md"
+  else
+    block_preflight "missing_implementation_plan" "missing implementation plan: $IMPL_PLAN_FILE"
+  fi
 fi
 if [[ "$RPH_REQUIRE_CONTRACT_REVIEW" != "1" ]]; then
   echo "WARN: RPH_REQUIRE_CONTRACT_REVIEW=0 ignored; gate is mandatory." | tee -a "$LOG_FILE"
@@ -215,6 +227,39 @@ run_verify() {
   "$VERIFY_SH" "$RPH_VERIFY_MODE" "$@" 2>&1 | tee "$out"
   local rc=${PIPESTATUS[0]}
   set -e
+  return $rc
+}
+
+run_story_verify() {
+  local item_json="$1"
+  local iter_dir="$2"
+  local log="${iter_dir}/story_verify.log"
+  local cmds=""
+  local rc=0
+
+  : > "$log"
+  cmds="$(jq -r '(.verify // [])[]' <<<"$item_json" 2>/dev/null || true)"
+  if [[ -z "$cmds" ]]; then
+    echo "No story-specific verify commands." | tee -a "$log"
+    return 0
+  fi
+
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    if [[ "$cmd" == "./plans/verify.sh" ]]; then
+      continue
+    fi
+    echo "Running story verify: $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
+    set +e
+    bash -c "$cmd" >> "$log" 2>&1
+    local cmd_rc=$?
+    set -e
+    if (( cmd_rc != 0 )); then
+      rc=1
+      echo "FAIL: story verify command failed (rc=$cmd_rc): $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
+    fi
+  done <<<"$cmds"
+
   return $rc
 }
 
@@ -417,7 +462,7 @@ completion_requirements_met() {
     return 1
   fi
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log contract_review.json; do
+  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing=1
     fi
@@ -434,7 +479,7 @@ verify_iteration_artifacts() {
   local missing=()
   local f
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log contract_review.json; do
+  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing+=("$f")
     fi
@@ -464,6 +509,18 @@ matches_patterns() {
   local file="$1"
   local patterns="$2"
   local pattern
+  if command -v python3 >/dev/null 2>&1; then
+    RPH_PATTERNS="$patterns" python3 -c '
+import fnmatch, os, sys
+file = sys.argv[1]
+patterns = [p.strip() for p in os.environ.get("RPH_PATTERNS","").splitlines() if p.strip()]
+for p in patterns:
+    if fnmatch.fnmatchcase(file, p):
+        sys.exit(0)
+sys.exit(1)
+' "$file"
+    return $?
+  fi
   while IFS= read -r pattern; do
     [[ -z "$pattern" ]] && continue
     if [[ "$file" == $pattern ]]; then
@@ -509,6 +566,83 @@ scope_gate() {
 
   if [[ -n "$out_of_scope" ]]; then
     printf '%s' "$out_of_scope"
+    return 1
+  fi
+  return 0
+}
+
+progress_gate() {
+  local before_size="$1"
+  local before_hash="$2"
+  local next_id="$3"
+  local iter_dir="$4"
+  local progress_file="$PROGRESS_FILE"
+  local issues=()
+  local after_size=0
+  local appended_file="${iter_dir}/progress_appended.txt"
+
+  if [[ ! -f "$progress_file" ]]; then
+    issues+=("missing_progress_file")
+  fi
+
+  if [[ "${#issues[@]}" -eq 0 ]]; then
+    after_size="$(wc -c < "$progress_file" | tr -d ' ')"
+    if ! [[ "$after_size" =~ ^[0-9]+$ ]]; then after_size=0; fi
+    if ! [[ "$before_size" =~ ^[0-9]+$ ]]; then before_size=0; fi
+
+    if (( after_size <= before_size )); then
+      issues+=("no_new_entry")
+    fi
+    if (( after_size < before_size )); then
+      issues+=("truncated")
+    fi
+
+    if (( before_size > 0 )); then
+      local prefix_hash=""
+      if command -v sha256sum >/dev/null 2>&1; then
+        prefix_hash="$(head -c "$before_size" "$progress_file" | sha256sum | awk '{print $1}')"
+      else
+        prefix_hash="$(head -c "$before_size" "$progress_file" | shasum -a 256 | awk '{print $1}')"
+      fi
+      if [[ -n "$before_hash" && "$prefix_hash" != "$before_hash" ]]; then
+        issues+=("not_append_only")
+      fi
+    fi
+
+    if (( after_size > before_size )); then
+      tail -c +$((before_size + 1)) "$progress_file" > "$appended_file" || true
+    else
+      : > "$appended_file"
+    fi
+
+    if [[ -n "$next_id" ]]; then
+      if ! grep -Fq "$next_id" "$appended_file"; then
+        issues+=("missing_story_id")
+      fi
+    else
+      issues+=("missing_story_id")
+    fi
+    if ! grep -Eq "20[0-9]{2}-[01][0-9]-[0-3][0-9]" "$appended_file"; then
+      issues+=("missing_timestamp")
+    fi
+    if ! grep -qi "summary" "$appended_file"; then
+      issues+=("missing_summary")
+    fi
+    if ! grep -qi "commands" "$appended_file"; then
+      issues+=("missing_commands")
+    fi
+    if ! grep -qi "evidence" "$appended_file"; then
+      issues+=("missing_evidence")
+    fi
+    if ! grep -qiE "(next|gotcha)" "$appended_file"; then
+      issues+=("missing_next")
+    fi
+  else
+    : > "$appended_file" 2>/dev/null || true
+  fi
+
+  if (( ${#issues[@]} > 0 )); then
+    printf '%s' "${issues[*]}"
     return 1
   fi
   return 0
@@ -642,6 +776,11 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   HEAD_BEFORE="$(git rev-parse HEAD)"
   PRD_HASH_BEFORE="$(sha256_file "$PRD_FILE")"
   PRD_PASSES_BEFORE="$(jq -c '.items | map({id, passes})' "$PRD_FILE")"
+  PROGRESS_SIZE_BEFORE="$(wc -c < "$PROGRESS_FILE" | tr -d ' ')"
+  if ! [[ "$PROGRESS_SIZE_BEFORE" =~ ^[0-9]+$ ]]; then
+    PROGRESS_SIZE_BEFORE=0
+  fi
+  PROGRESS_HASH_BEFORE="$(sha256_file "$PROGRESS_FILE")"
 
   ACTIVE_SLICE="$(jq -r '
     def items:
@@ -974,6 +1113,18 @@ PROMPT
     fi
   fi
 
+  DIRTY_STATUS="$(git status --porcelain 2>/dev/null || true)"
+  if [[ -n "$DIRTY_STATUS" ]]; then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "dirty_worktree" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_DIRTY_WORKTREE</promise>" | tee -a "$LOG_FILE"
+    echo "ERROR: working tree is dirty after agent run; commit required." | tee -a "$LOG_FILE"
+    echo "$DIRTY_STATUS" | tee -a "$LOG_FILE"
+    printf '%s\n' "$DIRTY_STATUS" > "$BLOCK_DIR/dirty_status.txt" || true
+    echo "Blocked: dirty worktree in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+
   out_of_scope=""
   if ! out_of_scope="$(scope_gate "$HEAD_BEFORE" "$HEAD_AFTER" "$NEXT_ITEM_JSON")"; then
     BLOCK_DIR="$(write_blocked_with_state "scope_violation" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
@@ -990,10 +1141,6 @@ PROMPT
   else
     verify_post_rc=$?
   fi
-  state_merge \
-    --argjson last_verify_post_rc "$verify_post_rc" \
-    --arg verify_post_log "${ITER_DIR}/verify_post.log" \
-    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log'
 
   if ! verify_log_has_sha "${ITER_DIR}/verify_post.log"; then
     BLOCK_DIR="$(write_blocked_with_state "verify_sha_missing_post" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
@@ -1001,6 +1148,22 @@ PROMPT
     echo "Blocked: verify signature missing in $BLOCK_DIR" | tee -a "$LOG_FILE"
     exit 1
   fi
+
+  if (( verify_post_rc == 0 )); then
+    if run_story_verify "$NEXT_ITEM_JSON" "$ITER_DIR"; then
+      :
+    else
+      verify_post_rc=1
+    fi
+  else
+    : > "${ITER_DIR}/story_verify.log"
+    echo "Skipped story-specific verify commands because verify.sh failed." >> "${ITER_DIR}/story_verify.log"
+  fi
+
+  state_merge \
+    --argjson last_verify_post_rc "$verify_post_rc" \
+    --arg verify_post_log "${ITER_DIR}/verify_post.log" \
+    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log'
 
   POST_VERIFY_FAILED=0
   POST_VERIFY_EXIT=0
@@ -1079,7 +1242,7 @@ PROMPT
       echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
     else
       if (( CONTRACT_REVIEW_OK == 1 )); then
-        ./plans/update_task.sh "$MARK_PASS_ID" true
+        RPH_UPDATE_TASK_OK=1 RPH_STATE_FILE="$STATE_FILE" ./plans/update_task.sh "$MARK_PASS_ID" true
         git add -A
         if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" ]]; then
           git commit --amend --no-edit
@@ -1134,6 +1297,16 @@ PROMPT
     if (( POST_VERIFY_CONTINUE == 1 )); then
       continue
     fi
+  fi
+
+  progress_issues=""
+  if ! progress_issues="$(progress_gate "$PROGRESS_SIZE_BEFORE" "$PROGRESS_HASH_BEFORE" "$NEXT_ID" "$ITER_DIR")"; then
+    echo "ERROR: progress.txt gate failed: $progress_issues" | tee -a "$LOG_FILE"
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "progress_invalid" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_PROGRESS_INVALID</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: progress.txt gate failed in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
   fi
 
   # 5) If green, update last_good_ref

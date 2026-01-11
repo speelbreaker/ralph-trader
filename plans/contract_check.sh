@@ -79,6 +79,7 @@ fi
 
 # Files changed in the commit
 mapfile -t changed_files < <(git diff-tree --no-commit-id --name-only -r "$head_after" | sed '/^$/d')
+mapfile -t changed_status < <(git diff --name-status "$head_before" "$head_after" | sed '/^$/d')
 
 # Scope enforcement (this is the big missing guard you were failing before)
 mapfile -t touch_patterns < <(jq -r '.scope.touch[]' <<<"$story_json")
@@ -100,6 +101,16 @@ matches_any() {
   return 1
 }
 
+is_test_file() {
+  local path="$1"
+  case "$path" in
+    */tests/*|*/__tests__/*|*/*_test.*|*_test.*|*.spec.*|*.test.*|test_*.*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 for f in "${changed_files[@]}"; do
   # avoid wins
   if [[ "${#avoid_patterns[@]}" -gt 0 ]] && matches_any "$f" "${avoid_patterns[@]}"; then
@@ -115,6 +126,43 @@ done
 if [[ "${#scope_violations[@]}" -gt 0 ]]; then
   notes="SCOPE FAIL for $selected_id: $(printf '%s; ' "${scope_violations[@]}")"
   fail "$notes"
+fi
+
+test_deletions=()
+ci_violations=()
+for line in "${changed_status[@]}"; do
+  status="${line%%$'\t'*}"
+  path="${line#*$'\t'}"
+
+  if [[ "$status" == D* ]]; then
+    if is_test_file "$path"; then
+      test_deletions+=("$path")
+    fi
+  fi
+
+  if [[ "$path" == ".github/workflows/ci.yml" || "$path" == ".github/workflows/ci.yaml" ]]; then
+    if [[ "$status" == D* ]]; then
+      ci_violations+=("ci_workflow_deleted:$path")
+      continue
+    fi
+    if [[ ! -f "$path" ]]; then
+      ci_violations+=("ci_workflow_missing:$path")
+      continue
+    fi
+    if ! grep -Eq "plans/verify\\.sh" "$path"; then
+      ci_violations+=("ci_missing_verify_sh:$path")
+    fi
+    if ! grep -Eq "CI_GATES_SOURCE[[:space:]]*[:=][[:space:]]*verify" "$path"; then
+      ci_violations+=("ci_missing_gate_source:$path")
+    fi
+  fi
+done
+
+if [[ "${#test_deletions[@]}" -gt 0 ]]; then
+  fail "test file deletion detected: $(printf '%s; ' "${test_deletions[@]}")"
+fi
+if [[ "${#ci_violations[@]}" -gt 0 ]]; then
+  fail "CI gate weakening detected: $(printf '%s; ' "${ci_violations[@]}")"
 fi
 
 # Guard: verify.sh edits are human-reviewed unless explicitly allowed
