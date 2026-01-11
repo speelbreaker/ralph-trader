@@ -41,6 +41,8 @@ RPH_ALLOW_VERIFY_SH_EDIT="${RPH_ALLOW_VERIFY_SH_EDIT:-0}"  # 0|1
 CONTRACT_FILE="${CONTRACT_FILE:-CONTRACT.md}"
 IMPL_PLAN_FILE="${IMPL_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
 RPH_REQUIRE_CONTRACT_REVIEW="${RPH_REQUIRE_CONTRACT_REVIEW:-1}"  # 0|1 (mandatory)
+RPH_CHEAT_DETECTION="${RPH_CHEAT_DETECTION:-block}"  # off|warn|block
+RPH_CHEAT_ALLOWLIST="${RPH_CHEAT_ALLOWLIST:-}"      # regex of file paths to ignore
 # Agent pass-mark tags: print exactly <mark_pass>ID</mark_pass>
 RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
 RPH_MARK_PASS_CLOSE="${RPH_MARK_PASS_CLOSE:-</mark_pass>}"
@@ -603,6 +605,76 @@ progress_gate() {
   return 0
 }
 
+is_test_path() {
+  local path="$1"
+  case "$path" in
+    */tests/*|*/__tests__/*|*/*_test.*|*_test.*|*.spec.*|*.test.*|test_*.*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+detect_cheating() {
+  local iter_dir="$1"
+  local head_before="$2"
+  local diff_file="${iter_dir}/diff_for_cheat_check.patch"
+  local filtered="${iter_dir}/diff_for_cheat_check.filtered.patch"
+  local allow_re="${RPH_CHEAT_ALLOWLIST:-}"
+  local cheats=()
+
+  if [[ -n "$head_before" ]]; then
+    git diff "$head_before" > "$diff_file" 2>/dev/null || git diff > "$diff_file"
+  else
+    git diff > "$diff_file"
+  fi
+
+  if [[ -n "$allow_re" ]]; then
+    awk -v re="$allow_re" '
+      /^diff --git / {
+        file=$4; sub(/^b\//,"",file);
+        skip=(re!="" && file ~ re);
+      }
+      { if (!skip) print }
+    ' "$diff_file" > "$filtered"
+  else
+    cp "$diff_file" "$filtered"
+  fi
+
+  local status_cmd=(git diff --name-status)
+  if [[ -n "$head_before" ]]; then
+    status_cmd=(git diff --name-status "$head_before")
+  fi
+  mapfile -t deletions < <("${status_cmd[@]}" | awk '$1 ~ /^D/ {print $2}')
+  for path in "${deletions[@]}"; do
+    if is_test_path "$path"; then
+      cheats+=("deleted_test_file:$path")
+    fi
+  done
+
+  if grep -qE '^\-.*\b(assert|expect|should|must)\b' "$filtered"; then
+    cheats+=("removed_assertion")
+  fi
+  if grep -qE '^\+.*(#\[ignore\]|@pytest\.mark\.skip|\.skip\(|it\.skip|xtest|xit)' "$filtered"; then
+    cheats+=("added_skip_marker")
+  fi
+  if grep -qE '^[-+]{3} [ab]/plans/verify\.sh' "$filtered"; then
+    cheats+=("modified_verify_sh")
+  fi
+  if grep -qE '^[-+]{3} [ab]/\.github/workflows/|^[-+]{3} [ab]/\.gitlab-ci\.yml' "$filtered"; then
+    cheats+=("modified_ci")
+  fi
+  if grep -qE '^\+.*(# noqa|// @ts-ignore|#!\[allow|eslint-disable|rubocop:disable)' "$filtered"; then
+    cheats+=("added_suppression")
+  fi
+
+  if (( ${#cheats[@]} > 0 )); then
+    printf '%s' "${cheats[*]}"
+    return 1
+  fi
+  return 0
+}
+
 count_pass_flips() {
   local before_file="$1"
   local after_file="$2"
@@ -1075,6 +1147,26 @@ PROMPT
     echo "$out_of_scope" | tee -a "$LOG_FILE"
     echo "Blocked: scope violation in $BLOCK_DIR" | tee -a "$LOG_FILE"
     exit 1
+  fi
+
+  CHEAT_RESULT=""
+  if [[ "$RPH_CHEAT_DETECTION" != "off" ]]; then
+    if ! CHEAT_RESULT="$(detect_cheating "$ITER_DIR" "$HEAD_BEFORE")"; then
+      echo "Cheating patterns detected: $CHEAT_RESULT" | tee -a "$LOG_FILE"
+      echo "Details in: $ITER_DIR/diff_for_cheat_check.patch" | tee -a "$LOG_FILE"
+      if [[ "$RPH_CHEAT_DETECTION" == "warn" ]]; then
+        echo "WARNING: cheat detection in warn mode; continuing." | tee -a "$LOG_FILE"
+      else
+        save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+        BLOCK_DIR="$(write_blocked_with_state "cheating_detected" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+        echo "<promise>BLOCKED_CHEATING_DETECTED</promise>" | tee -a "$LOG_FILE"
+        echo "Blocked: cheating detected in $BLOCK_DIR" | tee -a "$LOG_FILE"
+        if [[ "$RPH_SELF_HEAL" == "1" ]]; then
+          revert_to_last_good || exit 9
+        fi
+        exit 9
+      fi
+    fi
   fi
 
   # 4) Post-verify

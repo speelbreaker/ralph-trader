@@ -5,6 +5,7 @@
 - OK: PRD schema validation (required fields, `human_blocker`, `contract_refs`, `plan_refs`, verify[]) is enforced at preflight.
 - OK: WIP=1 and one‑commit‑per‑iteration are enforced (selection + contract check).
 - OK: `plans/progress.txt` append‑only + required fields gate is enforced on green iterations.
+- OK (partial): Cheat detection blocks common patterns (test deletions, skip markers, assertion removals, CI/verify changes, suppression pragmas).
 - MAJOR: `plans/verify.sh` enforces gates not documented in the workflow contract (drift remains).
 - MINOR: Some blocked iterations still miss artifacts (`verify_pre.log`, `agent.out`); `RPH_DRY_RUN=1` bypass is undocumented.
 
@@ -42,6 +43,7 @@ _Snapshot omitted; run `git status --porcelain` to refresh._
 | After verify_post is green, a contract check MUST occur | `plans/ralph.sh` `ensure_contract_review` + `plans/contract_check.sh` | Blocks on contract review failure | OK |
 | CI MUST execute `./plans/verify.sh` | `.github/workflows/ci.yml` + `plans/contract_check.sh` CI gate check | Contract review fails if weakened | OK |
 | `plans/progress.txt` MUST be append‑only and include per‑iteration entries | `plans/ralph.sh` progress gate | Blocks with `<promise>BLOCKED_PROGRESS_INVALID</promise>` | OK (enforced on green iterations) |
+| No cheating (don’t delete/disable tests or weaken gates) | `plans/ralph.sh` cheat detector + `plans/contract_check.sh` CI/test deletion checks | Blocks with `<promise>BLOCKED_CHEATING_DETECTED</promise>` or contract review failure | PARTIAL (pattern‑based) |
 | Workflow changes MUST be made here first, reflected in scripts second, enforced in CI third | None | N/A | GAP (governance only) |
 
 ## DRIFT list (enforcement behavior → missing contract text)
@@ -58,6 +60,7 @@ _Snapshot omitted; run `git status --porcelain` to refresh._
 - **Entry conditions**: git and jq installed; `CONTRACT.md` and `IMPLEMENTATION_PLAN.md` exist (with `specs/` fallback); `plans/prd.json` exists and passes schema validation; working tree clean; progress file exists; state file initialized. `./plans/verify.sh` must be executable before verify runs.
 - **Selection rules**: `ACTIVE_SLICE = min(slice)` among items with `passes=false`. Harness mode selects highest priority item in active slice. Agent mode requires exact `<selected_id>ITEM_ID</selected_id>`; invalid selection blocks.
 - **Pre‑verify**: Always runs `./plans/verify.sh $RPH_VERIFY_MODE` before agent work unless blocked/dry‑run; failure stops or self‑heals if `RPH_SELF_HEAL=1`.
+- **Post‑agent / pre‑verify**: Cheat detection runs on the iteration diff (pattern‑based) and blocks or warns based on `RPH_CHEAT_DETECTION`.
 - **Post‑verify**: Always runs after agent execution; failure stops (or self‑heals + continues if enabled). Progress append‑only gate is enforced on green iterations. Contract review gate runs on green iterations and blocks on failure.
 - **Blocked behavior**: Blocks on invalid selection, `needs_human_decision`, missing `./plans/verify.sh` in story (if required), circuit breaker, or no‑progress. Writes `.ralph/blocked_*` artifacts and emits sentinel promises.
 - **Completion**: Stops if agent outputs `<promise>COMPLETE</promise>` or all PRD items have `passes=true`, or if max iterations reached.
@@ -73,7 +76,7 @@ _Snapshot omitted; run `git status --porcelain` to refresh._
 ## Top 5 code/CI changes (to enforce the contract)
 1) Close blocked‑iteration artifact gaps (always emit `verify_pre.log` best‑effort and stub `prompt.txt`/`agent.out` on early blocks).
 2) Decide whether to keep `RPH_DRY_RUN`; if kept, document and hard‑gate its use.
-3) Expand `plans/contract_check.sh` “no cheating” detection beyond test deletions (e.g., detect disabling assertions or skipping verify in CI).
+3) Expand cheat detection beyond pattern matching (AST‑aware assertion removal, per‑framework skip detection).
 4) Enforce progress gating even on failed iterations (if strict per‑iteration logging is required).
 5) Add a focused acceptance test for the workflow gates (smoke test for PRD schema + contract review + progress gate).
 
