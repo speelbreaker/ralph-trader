@@ -21,6 +21,11 @@ FAIL_ON_DIRTY="${INIT_FAIL_ON_DIRTY:-1}"
 RUN_VERIFY="${INIT_RUN_VERIFY:-0}"          # 0=skip, 1=run ./plans/verify.sh
 VERIFY_MODE="${INIT_VERIFY_MODE:-quick}"    # passed to verify.sh if supported
 
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "[init] ERROR: $ROOT is not a git repository"
+  exit 10
+fi
+
 echo "[init] repo_root: $ROOT"
 echo "[init] branch: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')"
 echo "[init] commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
@@ -68,7 +73,13 @@ if [[ ! -f "$VERIFY_SH" ]]; then
   echo "[init] Action: implement the workflow story that creates verify.sh (your S1-000)"
   exit 14
 fi
-chmod +x "$VERIFY_SH" || true
+if [[ ! -x "$VERIFY_SH" ]]; then
+  chmod +x "$VERIFY_SH" || { echo "[init] ERROR: unable to mark $VERIFY_SH executable"; exit 14; }
+fi
+if [[ ! -x "$VERIFY_SH" ]]; then
+  echo "[init] ERROR: $VERIFY_SH is not executable"
+  exit 14
+fi
 
 # --- shell sanity (cheap, catches 80% of dumb)
 if compgen -G "plans/*.sh" >/dev/null; then
