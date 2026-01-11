@@ -167,7 +167,7 @@ chmod +x "$TMP_DIR/select_agent.sh"
 
 out1="$TMP_DIR/out1.txt"
 start_ts="$(date +%s)"
-RPH_SELECTION_MODE=agent RPH_DRY_RUN=1 RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" RPH_AGENT_ARGS= RPH_PROMPT_FLAG= \
+RPH_SELECTION_MODE=agent RPH_DRY_RUN=1 RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" \
   PRD_FILE="$TMP_DIR/prd1.json" PROGRESS_FILE="$TMP_DIR/progress1.txt" ./plans/ralph.sh 1 >"$out1" 2>&1 || fail "test1 non-zero exit"
 grep -q "DRY RUN: would run A1 - first" "$out1" || fail "test1 missing dry-run output"
 iter_dir="$(find_recent_iter "$start_ts")"
