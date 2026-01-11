@@ -39,6 +39,7 @@ RPH_ALLOW_AGENT_PRD_EDIT="${RPH_ALLOW_AGENT_PRD_EDIT:-0}"  # 0|1 (legacy compati
 RPH_ALLOW_VERIFY_SH_EDIT="${RPH_ALLOW_VERIFY_SH_EDIT:-0}"  # 0|1
 # Contract alignment review gate (mandatory).
 CONTRACT_FILE="${CONTRACT_FILE:-CONTRACT.md}"
+IMPL_PLAN_FILE="${IMPL_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
 RPH_REQUIRE_CONTRACT_REVIEW="${RPH_REQUIRE_CONTRACT_REVIEW:-1}"  # 0|1 (mandatory)
 # Agent pass-mark tags: print exactly <mark_pass>ID</mark_pass>
 RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
@@ -169,7 +170,18 @@ fi
 [[ -x "./plans/update_task.sh" ]] || block_preflight "missing_update_task_sh" "plans/update_task.sh missing or not executable"
 
 if [[ ! -f "$CONTRACT_FILE" ]]; then
-  block_preflight "missing_contract_file" "CONTRACT_FILE missing: $CONTRACT_FILE"
+  if [[ -f "specs/CONTRACT.md" ]]; then
+    CONTRACT_FILE="specs/CONTRACT.md"
+  else
+    block_preflight "missing_contract_file" "CONTRACT_FILE missing: $CONTRACT_FILE"
+  fi
+fi
+if [[ ! -f "$IMPL_PLAN_FILE" ]]; then
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then
+    IMPL_PLAN_FILE="specs/IMPLEMENTATION_PLAN.md"
+  else
+    block_preflight "missing_implementation_plan" "missing implementation plan: $IMPL_PLAN_FILE"
+  fi
 fi
 if [[ "$RPH_REQUIRE_CONTRACT_REVIEW" != "1" ]]; then
   echo "WARN: RPH_REQUIRE_CONTRACT_REVIEW=0 ignored; gate is mandatory." | tee -a "$LOG_FILE"
@@ -514,6 +526,83 @@ scope_gate() {
   return 0
 }
 
+progress_gate() {
+  local before_size="$1"
+  local before_hash="$2"
+  local next_id="$3"
+  local iter_dir="$4"
+  local progress_file="$PROGRESS_FILE"
+  local issues=()
+  local after_size=0
+  local appended_file="${iter_dir}/progress_appended.txt"
+
+  if [[ ! -f "$progress_file" ]]; then
+    issues+=("missing_progress_file")
+  fi
+
+  if [[ "${#issues[@]}" -eq 0 ]]; then
+    after_size="$(wc -c < "$progress_file" | tr -d ' ')"
+    if ! [[ "$after_size" =~ ^[0-9]+$ ]]; then after_size=0; fi
+    if ! [[ "$before_size" =~ ^[0-9]+$ ]]; then before_size=0; fi
+
+    if (( after_size <= before_size )); then
+      issues+=("no_new_entry")
+    fi
+    if (( after_size < before_size )); then
+      issues+=("truncated")
+    fi
+
+    if (( before_size > 0 )); then
+      local prefix_hash=""
+      if command -v sha256sum >/dev/null 2>&1; then
+        prefix_hash="$(head -c "$before_size" "$progress_file" | sha256sum | awk '{print $1}')"
+      else
+        prefix_hash="$(head -c "$before_size" "$progress_file" | shasum -a 256 | awk '{print $1}')"
+      fi
+      if [[ -n "$before_hash" && "$prefix_hash" != "$before_hash" ]]; then
+        issues+=("not_append_only")
+      fi
+    fi
+
+    if (( after_size > before_size )); then
+      tail -c +$((before_size + 1)) "$progress_file" > "$appended_file" || true
+    else
+      : > "$appended_file"
+    fi
+
+    if [[ -n "$next_id" ]]; then
+      if ! grep -Fq "$next_id" "$appended_file"; then
+        issues+=("missing_story_id")
+      fi
+    else
+      issues+=("missing_story_id")
+    fi
+    if ! grep -Eq "20[0-9]{2}-[01][0-9]-[0-3][0-9]" "$appended_file"; then
+      issues+=("missing_timestamp")
+    fi
+    if ! grep -qi "summary" "$appended_file"; then
+      issues+=("missing_summary")
+    fi
+    if ! grep -qi "commands" "$appended_file"; then
+      issues+=("missing_commands")
+    fi
+    if ! grep -qi "evidence" "$appended_file"; then
+      issues+=("missing_evidence")
+    fi
+    if ! grep -qiE "(next|gotcha)" "$appended_file"; then
+      issues+=("missing_next")
+    fi
+  else
+    : > "$appended_file" 2>/dev/null || true
+  fi
+
+  if (( ${#issues[@]} > 0 )); then
+    printf '%s' "${issues[*]}"
+    return 1
+  fi
+  return 0
+}
+
 count_pass_flips() {
   local before_file="$1"
   local after_file="$2"
@@ -642,6 +731,11 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   HEAD_BEFORE="$(git rev-parse HEAD)"
   PRD_HASH_BEFORE="$(sha256_file "$PRD_FILE")"
   PRD_PASSES_BEFORE="$(jq -c '.items | map({id, passes})' "$PRD_FILE")"
+  PROGRESS_SIZE_BEFORE="$(wc -c < "$PROGRESS_FILE" | tr -d ' ')"
+  if ! [[ "$PROGRESS_SIZE_BEFORE" =~ ^[0-9]+$ ]]; then
+    PROGRESS_SIZE_BEFORE=0
+  fi
+  PROGRESS_HASH_BEFORE="$(sha256_file "$PROGRESS_FILE")"
 
   ACTIVE_SLICE="$(jq -r '
     def items:
@@ -1134,6 +1228,16 @@ PROMPT
     if (( POST_VERIFY_CONTINUE == 1 )); then
       continue
     fi
+  fi
+
+  progress_issues=""
+  if ! progress_issues="$(progress_gate "$PROGRESS_SIZE_BEFORE" "$PROGRESS_HASH_BEFORE" "$NEXT_ID" "$ITER_DIR")"; then
+    echo "ERROR: progress.txt gate failed: $progress_issues" | tee -a "$LOG_FILE"
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "progress_invalid" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_PROGRESS_INVALID</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: progress.txt gate failed in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
   fi
 
   # 5) If green, update last_good_ref
