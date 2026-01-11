@@ -255,8 +255,11 @@ cat <<'EOF' > "$TMP_DIR/prd2.json"
 EOF
 start_ts="$(date +%s)"
 out2="$TMP_DIR/out2.txt"
-RPH_DRY_RUN=1 PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" ./plans/ralph.sh 1 >"$out2" 2>&1 \
-  || fail "test2 non-zero exit"
+set +e
+RPH_DRY_RUN=1 PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" ./plans/ralph.sh 1 >"$out2" 2>&1
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test2 expected non-zero exit"
 grep -q "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" "$out2" || fail "test2 missing sentinel"
 blocked_dir="$(find_recent_blocked "$start_ts")"
 [[ -n "$blocked_dir" ]] || fail "test2 missing blocked dir"
@@ -332,8 +335,11 @@ cat <<'EOF' > "$TMP_DIR/prd3.json"
 EOF
 start_ts="$(date +%s)"
 out3="$TMP_DIR/out3.txt"
-RPH_DRY_RUN=1 VERIFY_SH="$TMP_DIR/missing_verify.sh" PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" ./plans/ralph.sh 1 >"$out3" 2>&1 \
-  || fail "test3 non-zero exit"
+set +e
+RPH_DRY_RUN=1 VERIFY_SH="$TMP_DIR/missing_verify.sh" PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" ./plans/ralph.sh 1 >"$out3" 2>&1
+rc=$?
+set -e
+[[ "$rc" -ne 0 ]] || fail "test3 expected non-zero exit"
 grep -q "missing_verify_sh" "$out3" || fail "test3 missing missing_verify_sh"
 blocked_dir="$(find_recent_blocked "$start_ts")"
 [[ -n "$blocked_dir" ]] || fail "test3 missing blocked dir"
