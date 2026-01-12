@@ -355,14 +355,16 @@ Rule: after a story is implemented and verify_post is green, a contract check MU
 
 Enforcement (fail closed, artifact-based):
 - Each iteration with verify_post green MUST produce: .ralph/iter_*/contract_review.json
-  with fields: {"status":"pass"|"fail","contract_path":"...","notes":"..."}.
-- If the contract review artifact is missing or status="fail", Ralph MUST stop and MUST NOT flip passes=true.
+- The artifact MUST conform to: docs/schemas/contract_review.schema.json (decision PASS|FAIL|BLOCKED).
+- If the contract review artifact is missing or decision!="PASS",
+  Ralph MUST stop and MUST NOT flip passes=true.
 
 Acceptable implementations:
 
 ./plans/contract_check.sh (deterministic checks) + optional LLM arbiter
 
 LLM Contract Arbiter producing .ralph/iter_*/contract_review.json
+  (schema: docs/schemas/contract_review.schema.json)
 
 Fail-closed triggers:
 
@@ -453,7 +455,7 @@ Baseline integrity
 Pass flipping integrity
 
 [ ] If any PRD item flips passes from false→true, the same iteration contains .ralph/iter_*/verify_post.log showing exit code 0.
-[ ] If .ralph/iter_*/contract_review.json is missing or has "status":"fail", Ralph does not flip passes=true and stops non-zero.
+[ ] If .ralph/iter_*/contract_review.json is missing or has decision!="PASS", Ralph does not flip passes=true and stops non-zero.
 [ ] Exactly one PRD item’s passes flips per iteration (compare .ralph/iter_*/prd_before.json vs prd_after.json).
 
 Slice gating / blocked behavior

@@ -470,26 +470,82 @@ run_final_verify() {
   return 0
 }
 
-write_contract_review() {
+write_contract_review_fail() {
   local out="$1"
-  local status="$2"
-  local notes="$3"
+  local reason="$2"
+  local violation_code="$3"
+  local iter_dir
+  iter_dir="$(cd "$(dirname "$out")" && pwd -P)"
+  local selected_id="unknown"
+  local refs_json="[]"
+  local verify_post_present=false
+
+  if [[ -f "$iter_dir/selected.json" ]]; then
+    selected_id="$(jq -r '.selected_id // "unknown"' "$iter_dir/selected.json" 2>/dev/null || echo "unknown")"
+  fi
+  if [[ -f "$PRD_FILE" && "$selected_id" != "unknown" ]]; then
+    refs_json="$(jq -c --arg id "$selected_id" '
+      def items: (if type=="array" then . else (.items // []) end);
+      (items | map(select(.id==$id)) | .[0].contract_refs // [])
+    ' "$PRD_FILE" 2>/dev/null || echo '[]')"
+  fi
+  if [[ -f "$iter_dir/verify_post.log" ]]; then
+    verify_post_present=true
+  fi
+
   jq -n \
-    --arg status "$status" \
-    --arg contract_path "$CONTRACT_FILE" \
-    --arg notes "$notes" \
-    '{status: $status, contract_path: $contract_path, notes: $notes}' \
-    > "$out"
+    --arg selected_story_id "$selected_id" \
+    --arg decision "FAIL" \
+    --arg confidence "low" \
+    --argjson contract_refs_checked "$refs_json" \
+    --argjson verify_post_present "$verify_post_present" \
+    --arg reason "$reason" \
+    --arg violation_code "$violation_code" \
+    '{
+      selected_story_id: $selected_story_id,
+      decision: $decision,
+      confidence: $confidence,
+      contract_refs_checked: $contract_refs_checked,
+      scope_check: { changed_files: [], out_of_scope_files: [], notes: [$reason] },
+      verify_check: { verify_post_present: $verify_post_present, verify_post_green: false, notes: [$reason] },
+      pass_flip_check: {
+        requested_mark_pass_id: $selected_story_id,
+        prd_passes_before: false,
+        prd_passes_after: false,
+        evidence_required: [],
+        evidence_found: [],
+        evidence_missing: [],
+        decision_on_pass_flip: "BLOCKED"
+      },
+      violations: [
+        {
+          severity: "MAJOR",
+          contract_ref: $violation_code,
+          description: $reason,
+          evidence_in_diff: $reason,
+          changed_files: [],
+          recommended_action: "NEEDS_HUMAN"
+        }
+      ],
+      required_followups: [$reason],
+      rationale: [$reason]
+    }' > "$out"
+}
+
+contract_review_valid() {
+  local file="$1"
+  if [[ ! -x "./plans/contract_review_validate.sh" ]]; then
+    return 1
+  fi
+  ./plans/contract_review_validate.sh "$file"
 }
 
 contract_review_ok() {
   local file="$1"
-  jq -e '
-    type=="object" and
-    (.status=="pass") and
-    (.contract_path|type=="string") and
-    (.notes|type=="string")
-  ' "$file" >/dev/null 2>&1
+  if ! contract_review_valid "$file"; then
+    return 1
+  fi
+  jq -e '.decision=="PASS"' "$file" >/dev/null 2>&1
 }
 
 ensure_contract_review() {
@@ -513,16 +569,12 @@ ensure_contract_review() {
   fi
 
   if [[ ! -f "$out" ]]; then
-    write_contract_review "$out" "fail" "$notes"
-  else
-    if ! jq -e '
-      type=="object" and
-      (.status=="pass" or .status=="fail") and
-      (.contract_path|type=="string") and
-      (.notes|type=="string")
-    ' "$out" >/dev/null 2>&1; then
-      write_contract_review "$out" "fail" "contract_review.json invalid schema"
-    fi
+    write_contract_review_fail "$out" "$notes" "CONTRACT_CHECK_MISSING"
+    return 1
+  fi
+  if ! contract_review_valid "$out"; then
+    write_contract_review_fail "$out" "contract_review.json invalid schema" "CONTRACT_REVIEW_INVALID"
+    return 1
   fi
 
   contract_review_ok "$out"
