@@ -1,0 +1,24 @@
+#!/bin/sh
+
+QUEUE_COUNT=$(python3 - <<'PY'
+import json
+import os
+
+home = os.path.expanduser(os.environ.get("CODEX_HOME", os.path.join("~", ".codex")))
+queue_path = os.path.join(home, "learnings-queue.json")
+
+try:
+    with open(queue_path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    if isinstance(data, list):
+        print(len(data))
+    else:
+        print(0)
+except Exception:
+    print(0)
+PY
+)
+
+if [ "$QUEUE_COUNT" -gt 0 ] 2>/dev/null; then
+  printf 'stoic-reflect: queue has %s items \xE2\x86\x92 run $stoic-reflect\n' "$QUEUE_COUNT"
+fi
