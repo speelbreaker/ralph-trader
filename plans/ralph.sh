@@ -70,6 +70,10 @@ LAST_GOOD_FILE=".ralph/last_good_ref"
 LAST_FAIL_FILE=".ralph/last_failure_path"
 STATE_FILE="$RPH_STATE_FILE"
 
+if [[ "$RPH_CHEAT_DETECTION" != "block" ]]; then
+  echo "WARN: RPH_CHEAT_DETECTION=$RPH_CHEAT_DETECTION; cheat detection will not block changes." | tee -a "$LOG_FILE"
+fi
+
 json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
