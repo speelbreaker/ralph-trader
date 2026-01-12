@@ -213,29 +213,29 @@ while IFS= read -r entry; do
     contract_refs=$(printf '%s' "$item_json" | jq -r '.contract_refs | join(" | ")')
     acceptance_refs=$(printf '%s' "$item_json" | jq -r '.acceptance | join(" | ")')
 
-    contract_lc=$(printf '%s' "$contract_refs" | tr '[:upper:]' '[:lower:]')
-    acceptance_lc=$(printf '%s' "$acceptance_refs" | tr '[:upper:]' '[:lower:]')
+    contract_lc_scope=$(printf '%s' "$contract_refs" | tr '[:upper:]' '[:lower:]')
+    acceptance_lc_scope=$(printf '%s' "$acceptance_refs" | tr '[:upper:]' '[:lower:]')
 
-    if [[ "$contract_lc" == *"reject"* ]]; then
-      if [[ "$acceptance_lc" != *"reject"* && "$acceptance_lc" != *"rejected"* ]]; then
+    if [[ "$contract_lc_scope" == *"reject"* ]]; then
+      if [[ "$acceptance_lc_scope" != *"reject"* && "$acceptance_lc_scope" != *"rejected"* ]]; then
         report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions reject but acceptance missing reject/rejected"
       fi
     fi
 
-    if [[ "$contract_lc" == *"degraded"* || "$contract_lc" == *"riskstate::degraded"* ]]; then
-      if [[ "$acceptance_lc" != *"degraded"* && "$acceptance_lc" != *"riskstate"* ]]; then
+    if [[ "$contract_lc_scope" == *"degraded"* || "$contract_lc_scope" == *"riskstate::degraded"* ]]; then
+      if [[ "$acceptance_lc_scope" != *"degraded"* && "$acceptance_lc_scope" != *"riskstate"* ]]; then
         report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions Degraded but acceptance missing Degraded/RiskState"
       fi
     fi
 
-    if [[ "$contract_lc" == *"fail-closed"* ]]; then
-      if [[ "$acceptance_lc" != *"fail-closed"* ]]; then
+    if [[ "$contract_lc_scope" == *"fail-closed"* ]]; then
+      if [[ "$acceptance_lc_scope" != *"fail-closed"* ]]; then
         report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions fail-closed but acceptance missing fail-closed"
       fi
     fi
 
-    if [[ "$contract_lc" == *"must stop"* ]]; then
-      if [[ "$acceptance_lc" != *"must stop"* ]]; then
+    if [[ "$contract_lc_scope" == *"must stop"* ]]; then
+      if [[ "$acceptance_lc_scope" != *"must stop"* ]]; then
         report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions must stop but acceptance missing must stop"
       fi
     fi
