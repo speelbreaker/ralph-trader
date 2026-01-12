@@ -49,6 +49,9 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 - `plans/rotate_progress.py` — portability-safe progress rotation
 - `plans/update_task.sh` — safe PRD mutation helper (avoid manual JSON edits)
 - `.ralph/` — iteration artifacts directory created by Ralph
+- `docs/codebase/*` — lightweight codebase map (stack/architecture/structure/testing/integrations/conventions/concerns)
+- `plans/ideas.md` — append-only deferred ideas log (non-PRD)
+- `plans/pause.md` — short pause note for mid-story handoffs
 
 ---
 
@@ -204,6 +207,14 @@ Runs inside the Ralph harness. Implements exactly one story, verifies green, app
 
 A review step (human or LLM) that compares the code diff to CONTRACT.md.
 If conflict is detected → FAIL CLOSED → revert or block.
+
+4.6 Handoff hygiene (who does what and when)
+
+- Implementer (agent or human) updates `docs/codebase/*` when a story touches new areas or changes architecture/structure/testing/integrations.
+- Implementer appends non-PRD follow-ups to `plans/ideas.md` as they arise.
+- Implementer fills `plans/pause.md` only when stopping mid-story.
+- Implementer appends a `plans/progress.txt` entry after each iteration; include assumptions or open questions when relevant.
+- Maintainers may refresh `docs/codebase/*` after major refactors or when onboarding new contributors.
 
 5) Ralph Harness Protocol (Canonical Loop)
 
@@ -406,6 +417,11 @@ commands run
 evidence produced
 
 next suggestion / gotchas
+
+Recommended fields (when relevant):
+- verify mode/result (e.g., ./plans/verify.sh full)
+- assumptions made
+- open questions requiring human decision
 
 Optional: rotate to prevent token bloat, but keep an archive (plans/progress_archive.txt).
 
