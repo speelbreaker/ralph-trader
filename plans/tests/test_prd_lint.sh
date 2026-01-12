@@ -15,7 +15,7 @@ cd "$tmp_dir"
 git init -q
 
 mkdir -p plans
-touch touch.txt
+touch test_file.txt
 
 echo '#!/usr/bin/env bash' > plans/verify.sh
 chmod +x plans/verify.sh
@@ -29,7 +29,7 @@ cat <<'JSON' > plans/prd.json
       "passes": true,
       "needs_human_decision": false,
       "description": "Missing verify gate",
-      "scope": { "touch": ["touch.txt"] },
+      "scope": { "touch": ["test_file.txt"] },
       "acceptance": ["Baseline acceptance"],
       "verify": ["echo ok"]
     },
@@ -39,7 +39,7 @@ cat <<'JSON' > plans/prd.json
       "passes": true,
       "needs_human_decision": false,
       "description": "Contract mismatch",
-      "scope": { "touch": ["touch.txt"] },
+      "scope": { "touch": ["test_file.txt"] },
       "acceptance": ["Baseline acceptance"],
       "verify": ["./plans/verify.sh"],
       "contract_refs": ["Must reject; RiskState::Degraded on failure"]
