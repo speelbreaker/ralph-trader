@@ -159,14 +159,14 @@ while IFS= read -r entry; do
   check_required '.acceptance | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' 'acceptance'
   check_required '.verify | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' 'verify'
 
-  if ! printf '%s' "$item_json" | jq -e '(.contract_refs? // empty) | (type == "array" and all(.[]; type == "string"))' >/dev/null 2>&1; then
-    if printf '%s' "$item_json" | jq -e 'has("contract_refs") and .contract_refs != null' >/dev/null 2>&1; then
+  if printf '%s' "$item_json" | jq -e 'has("contract_refs") and .contract_refs != null' >/dev/null 2>&1; then
+    if ! printf '%s' "$item_json" | jq -e '.contract_refs | (type == "array" and all(.[]; type == "string"))' >/dev/null 2>&1; then
       report_error INVALID_FIELD "$item_id" "contract_refs must be array of strings"
     fi
   fi
 
-  if ! printf '%s' "$item_json" | jq -e '(.dependencies? // empty) | (type == "array")' >/dev/null 2>&1; then
-    if printf '%s' "$item_json" | jq -e 'has("dependencies") and .dependencies != null' >/dev/null 2>&1; then
+  if printf '%s' "$item_json" | jq -e 'has("dependencies") and .dependencies != null' >/dev/null 2>&1; then
+    if ! printf '%s' "$item_json" | jq -e '.dependencies | (type == "array")' >/dev/null 2>&1; then
       report_error INVALID_FIELD "$item_id" "dependencies must be array"
     fi
   fi
