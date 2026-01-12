@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -e
+
+git fetch origin
+# Fast-forward only to avoid unintended merge commits.
+git pull --ff-only origin main
