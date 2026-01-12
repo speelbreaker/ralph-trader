@@ -61,7 +61,8 @@ MAX_REPAIR_PASSES=5
    - Repeat up to MAX_REPAIR_PASSES.
    - If still failing after MAX_REPAIR_PASSES:
      - Set needs_human_decision=true for the problematic items.
-     - Add a "BLOCKED: <reason>" note in BOTH acceptance and evidence for those items.
+     - Add a human_blocker with why/question/options/recommended/unblock_steps.
+     - Do NOT add non-testable acceptance bullets.
 4) If errors = 0:
    - Append prevention rules to plans/cutter_rules.md that would have prevented the failures encountered in this run.
    - Append-only; do not rewrite existing rules.
@@ -156,6 +157,11 @@ Common split patterns:
 - one CLI/script + its checks
 - one endpoint + endpoint-level test
 
+SCOPE/PATH VALIDATION RULE (MANDATORY)
+- scope.touch entries MUST be real, repo-correct paths. For Rust code, use `crates/<crate>/src/...` (never omit `src/`).
+- Avoid `**` globs. If unavoidable, limit to a single narrow directory and justify in the story description.
+- Never include OS artifacts (e.g., .DS_Store) or root-level globs.
+
 HUMAN DECISION RULE (FAIL CLOSED)
 Set needs_human_decision=true ONLY when genuinely blocked.
 When you set it true, you MUST add:
@@ -177,11 +183,14 @@ ACCEPTANCE CRITERIA RULES
 - Prefer GIVEN/WHEN/THEN.
 - Must encode at least one contract invariant implied by contract_refs.
 - Must not contain TBD/TODO/??? if needs_human_decision=false.
+- Every contract_ref MUST be enforced by at least one acceptance bullet; otherwise drop the ref or set needs_human_decision=true.
+- Do not reference later-slice components in acceptance/steps unless you add an explicit dependency.
 
 DEPENDENCY RULES
 - Dependencies must only point to stories in the same slice or earlier slices.
 - No forward dependencies.
 - Avoid cycles.
+- If acceptance or steps require a later-slice component, either add a dependency or set needs_human_decision=true.
 
 DETERMINISM RULES
 - Do not duplicate items.
@@ -237,7 +246,8 @@ PROCESS (DO THIS EXACTLY)
    - items grouped by slice ascending
    - every story has ./plans/verify.sh in verify[]
    - every story has non-empty contract_refs and plan_refs
-8) Run ./plans/prd_lint.sh and follow the self-correcting loop.
+8) Run ./plans/prd_lint.sh and follow the self-correcting loop until errors=0.
+9) Write plans/prd.json.
 
 FINAL OUTPUT (REQUIRED)
 - Print the final plans/prd.json content.

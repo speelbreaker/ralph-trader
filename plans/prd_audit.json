@@ -4,24 +4,25 @@
     "prd": "plans/prd.json",
     "contract": "CONTRACT.md",
     "plan": "IMPLEMENTATION_PLAN.md",
-    "workflow_contract": "WORKFLOW_CONTRACT.md"
+    "workflow_contract": "specs/WORKFLOW_CONTRACT.md"
   },
   "summary": {
     "items_total": 12,
-    "items_pass": 12,
-    "items_fail": 0,
-    "items_blocked": 0,
-    "must_fix_count": 0
+    "items_pass": 3,
+    "items_fail": 4,
+    "items_blocked": 5,
+    "must_fix_count": 4
   },
   "global_findings": {
     "must_fix": [],
-    "risk": [],
+    "risk": [
+      "Several stories rely on broad scope globs or unclear file paths; this increases the chance of violating WIP=1 and failing verify gates.",
+      "S1-003 acceptance references PolicyGuard enforcement that is planned in later slices, which risks hidden forward dependencies."
+    ],
     "improvements": [
-      "Add explicit evidence items for structured logs or metric increments (e.g., log key or counter name) when acceptance requires observability.",
-      "When acceptance includes enum or struct shape, add a targeted check (rg or unit test) so evidence is explicit.",
-      "Prefer narrower scope.touch globs when possible to keep story scope bite-sized.",
-      "Avoid listing OS artifacts like .DS_Store in scope.touch; treat as ignored files instead.",
-      "Add brief verify steps for requirements validated by code inspection (rg) when tests are not feasible."
+      "Prefer explicit file paths in scope.touch and scope.avoid; reserve ** globs for narrowly scoped directories only.",
+      "Align contract_refs strictly with acceptance criteria to avoid blocked stories.",
+      "Use evidence entries that name specific tests or artifact paths (e.g., test names, log keys, output files)."
     ]
   },
   "items": [
@@ -63,8 +64,10 @@
     {
       "id": "S1-001",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "scope.touch uses broad globs (crates/soldier_core/**, crates/soldier_infra/**) without justification; violates bite-sized scope rule."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -83,9 +86,11 @@
         "notes": []
       },
       "scope_check": {
-        "too_broad": false,
+        "too_broad": true,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Broad globs: crates/soldier_core/**, crates/soldier_infra/**"
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -93,13 +98,18 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "In S1-001 scope.touch, replace broad globs with explicit scaffold files (e.g., crates/soldier_core/Cargo.toml, crates/soldier_core/src/lib.rs, crates/soldier_infra/Cargo.toml, crates/soldier_infra/src/lib.rs).",
+        "Remove .DS_Store from scope.touch."
+      ]
     },
     {
       "id": "S1-002",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "scope.touch uses broad globs in venue/Deribit public modules without justification; violates bite-sized scope rule."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -118,9 +128,11 @@
         "notes": []
       },
       "scope_check": {
-        "too_broad": false,
+        "too_broad": true,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Broad globs: crates/soldier_core/src/venue/**, crates/soldier_infra/src/deribit/public/**"
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -128,13 +140,17 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Narrow S1-002 scope.touch to specific files (e.g., crates/soldier_core/src/venue/types.rs, crates/soldier_core/src/venue/mod.rs, crates/soldier_core/src/risk/state.rs, crates/soldier_infra/src/deribit/public/instruments.rs, crates/soldier_core/tests/test_instrument_kind_mapping.rs)."
+      ]
     },
     {
       "id": "S1-003",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "scope.touch uses broad globs (crates/soldier_core/src/venue/**, crates/soldier_core/src/policy/**) without justification; violates bite-sized scope rule."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -144,7 +160,9 @@
         "refs_specific": true,
         "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Acceptance references PolicyGuard ReduceOnly enforcement; PolicyGuard is planned in later slices (Slice 8). Consider deferring or adding an explicit dependency." 
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -153,9 +171,11 @@
         "notes": []
       },
       "scope_check": {
-        "too_broad": false,
+        "too_broad": true,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Broad globs: crates/soldier_core/src/venue/**, crates/soldier_core/src/policy/**"
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -163,13 +183,18 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Narrow S1-003 scope.touch to specific cache/policy files (e.g., crates/soldier_core/src/venue/cache.rs, crates/soldier_core/src/policy/guard.rs, crates/soldier_core/tests/test_instrument_cache_ttl.rs).",
+        "If PolicyGuard work is deferred, remove PolicyGuard enforcement from acceptance or add a dependency on the later PolicyGuard slice." 
+      ]
     },
     {
       "id": "S1-006",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "scope.touch uses a broad glob (crates/soldier_core/src/venue/**) without justification; violates bite-sized scope rule."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -188,9 +213,11 @@
         "notes": []
       },
       "scope_check": {
-        "too_broad": false,
+        "too_broad": true,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Broad glob: crates/soldier_core/src/venue/**"
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -198,7 +225,9 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Narrow S1-006 scope.touch to the specific cache/metrics file(s) where the TTL observability is implemented (e.g., crates/soldier_core/src/venue/cache.rs and crates/soldier_core/tests/test_instrument_cache_ttl.rs)."
+      ]
     },
     {
       "id": "S1-004",
@@ -238,8 +267,10 @@
     {
       "id": "S1-005",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "contract_refs include mismatch rejection, but acceptance criteria do not enforce that invariant."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -247,9 +278,11 @@
       "contract_check": {
         "refs_present": true,
         "refs_specific": true,
-        "acceptance_enforces_invariant": true,
+        "acceptance_enforces_invariant": false,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Add acceptance criteria for mismatch rejection + RiskState::Degraded or remove the mismatch contract_ref."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -268,7 +301,10 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "In S1-005 acceptance, add a criterion: 'GIVEN contracts and canonical amount mismatch WHEN mapping THEN the intent is rejected and RiskState::Degraded is returned.'",
+        "Alternatively, remove the mismatch contract_ref from S1-005 and keep mismatch enforcement solely in S1-007."
+      ]
     },
     {
       "id": "S1-007",
@@ -308,8 +344,10 @@
     {
       "id": "S2-000",
       "slice": 2,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "scope.touch references crates/soldier_core/execution/quantize.rs, which does not match repo layout (missing src/); path is unclear."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -330,7 +368,9 @@
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Update scope.touch to use the src/ path under crates/soldier_core."
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -338,13 +378,17 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "In S2-000 scope.touch, change crates/soldier_core/execution/quantize.rs to crates/soldier_core/src/execution/quantize.rs."
+      ]
     },
     {
       "id": "S2-001",
       "slice": 2,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "scope.touch references crates/soldier_core/idempotency/hash.rs, which does not match repo layout (missing src/); path is unclear."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -365,7 +409,9 @@
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Update scope.touch to use the src/ path under crates/soldier_core."
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -373,13 +419,17 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "In S2-001 scope.touch, change crates/soldier_core/idempotency/hash.rs to crates/soldier_core/src/idempotency/hash.rs."
+      ]
     },
     {
       "id": "S2-002",
       "slice": 2,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "scope.touch references crates/soldier_core/execution/label.rs, which does not match repo layout (missing src/); path is unclear."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -400,7 +450,9 @@
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Update scope.touch to use the src/ path under crates/soldier_core."
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -408,13 +460,17 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "In S2-002 scope.touch, change crates/soldier_core/execution/label.rs to crates/soldier_core/src/execution/label.rs."
+      ]
     },
     {
       "id": "S2-003",
       "slice": 2,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "scope.touch references crates/soldier_core/recovery/label_match.rs, which does not match repo layout (missing src/); path is unclear."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -435,7 +491,9 @@
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Update scope.touch to use the src/ path under crates/soldier_core."
+        ]
       },
       "dependency_check": {
         "invalid": false,
@@ -443,7 +501,9 @@
         "cycle": false,
         "notes": []
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "In S2-003 scope.touch, change crates/soldier_core/recovery/label_match.rs to crates/soldier_core/src/recovery/label_match.rs."
+      ]
     }
   ]
 }

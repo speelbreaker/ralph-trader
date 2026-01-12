@@ -83,11 +83,11 @@
       "scope": {
         "touch": [
           "Cargo.toml",
-          "Cargo.lock",
           ".gitignore",
-          ".DS_Store",
-          "crates/soldier_core/**",
-          "crates/soldier_infra/**",
+          "crates/soldier_core/Cargo.toml",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_infra/Cargo.toml",
+          "crates/soldier_infra/src/lib.rs",
           "plans/verify.sh"
         ],
         "avoid": [
@@ -144,13 +144,13 @@
       ],
       "scope": {
         "touch": [
-          "Cargo.lock",
-          "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/src/venue/mod.rs",
+          "crates/soldier_core/src/venue/types.rs",
           "crates/soldier_core/src/risk/state.rs",
           "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/lib.rs",
           "crates/soldier_core/tests/test_instrument_kind_mapping.rs",
-          "crates/soldier_infra/src/deribit/public/**",
+          "crates/soldier_infra/src/deribit/public/mod.rs",
           "crates/soldier_infra/src/deribit/mod.rs",
           "crates/soldier_infra/src/lib.rs",
           "crates/soldier_infra/Cargo.toml"
@@ -199,7 +199,6 @@
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
         "CONTRACT.md §1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-        "CONTRACT.md §2.2 PolicyGuard (Single Authoritative TradingMode Resolver)",
         "CONTRACT.md Definitions (RiskState)"
       ],
       "plan_refs": [
@@ -207,8 +206,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/venue/**",
-          "crates/soldier_core/src/policy/**",
+          "crates/soldier_core/src/venue/cache.rs",
+          "crates/soldier_core/src/venue/mod.rs",
           "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
         ],
         "avoid": [
@@ -219,15 +218,14 @@
       "acceptance": [
         "GIVEN cached instrument metadata older than the configured TTL WHEN accessed THEN RiskState::Degraded is returned for that lookup (test_stale_instrument_cache_sets_degraded).",
         "GIVEN cached metadata within TTL WHEN accessed THEN RiskState::Healthy is returned alongside the metadata.",
-        "GIVEN a TTL breach WHEN PolicyGuard evaluates THEN TradingMode::ReduceOnly is enforced within one tick and opens are blocked (closes/hedges/cancels allowed)."
+        "GIVEN cache access WHEN processing THEN the cache age is compared against instrument_cache_ttl_s deterministically."
       ],
       "steps": [
         "Locate or create the InstrumentCache structure in crates/soldier_core/venue.",
         "Add timestamp tracking for cache insert/update and compute cache age on read; record instrument_cache_age_s and increment instrument_cache_hits_total.",
         "Compare cache age to TTL and return RiskState::Degraded when stale.",
         "Add unit tests in crates/soldier_core/tests/test_instrument_cache_ttl.rs for fresh vs stale behavior.",
-        "Add or update a test to assert TTL breach forces ReduceOnly via PolicyGuard (opens blocked, closes allowed).",
-        "Ensure PolicyGuard precedence treats risk_state==Degraded as ReduceOnly per contract."
+        "Add or update a test to assert cache age comparisons against instrument_cache_ttl_s are deterministic."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -264,7 +262,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/venue/**",
+          "crates/soldier_core/src/venue/cache.rs",
+          "crates/soldier_core/src/venue/mod.rs",
           "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
         ],
         "avoid": [
@@ -369,8 +368,7 @@
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts and reject mismatches.",
       "contract_refs": [
-        "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
-        "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`"
+        "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
         "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
@@ -491,7 +489,7 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/execution/quantize.rs"
+          "crates/soldier_core/src/execution/quantize.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/label.rs",
@@ -543,7 +541,7 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/idempotency/hash.rs"
+          "crates/soldier_core/src/idempotency/hash.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/label.rs",
@@ -594,7 +592,7 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/execution/label.rs"
+          "crates/soldier_core/src/execution/label.rs"
         ],
         "avoid": [
           "crates/soldier_core/recovery/**"
@@ -647,7 +645,7 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/recovery/label_match.rs"
+          "crates/soldier_core/src/recovery/label_match.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/**"

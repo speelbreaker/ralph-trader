@@ -6,16 +6,40 @@ errors=0
 warnings=0
 strict=0
 prd_arg=""
+json_out=""
+json_out_next=0
+
+default_json_out="-"
 
 for arg in "$@"; do
   if [[ "$arg" == "--strict" ]]; then
     strict=1
+  elif [[ "$arg" == "--json" ]]; then
+    json_out_next=1
+  elif (( json_out_next == 1 )); then
+    json_out="$arg"
+    json_out_next=0
   elif [[ -z "$prd_arg" ]]; then
     prd_arg="$arg"
   fi
 done
 
+if (( json_out_next == 1 )); then
+  json_out="$default_json_out"
+fi
+
 prd_file="${PRD_FILE:-${prd_arg:-plans/prd.json}}"
+
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  printf '%s' "$s"
+}
+
+errors_json=()
+warnings_json=()
 
 report_error() {
   local code="$1"
@@ -23,6 +47,7 @@ report_error() {
   local message="$3"
   printf 'ERROR %s %s: %s\n' "$code" "$id" "$message"
   errors=$((errors + 1))
+  errors_json+=("{\"code\":\"$(json_escape "$code")\",\"id\":\"$(json_escape "$id")\",\"message\":\"$(json_escape "$message")\"}")
 }
 
 report_warn() {
@@ -31,10 +56,23 @@ report_warn() {
   local message="$3"
   printf 'WARN  %s %s: %s\n' "$code" "$id" "$message"
   warnings=$((warnings + 1))
+  warnings_json+=("{\"code\":\"$(json_escape "$code")\",\"id\":\"$(json_escape "$id")\",\"message\":\"$(json_escape "$message")\"}")
 }
 
 finish() {
   printf 'PRD_LINT: errors=%s warnings=%s\n' "$errors" "$warnings"
+  if [[ -n "$json_out" ]]; then
+    local errors_arr warnings_arr lint_json
+    errors_arr="$(printf '%s\n' "${errors_json[@]}" | jq -s '.')"
+    warnings_arr="$(printf '%s\n' "${warnings_json[@]}" | jq -s '.')"
+    lint_json="$(jq -n --argjson errors "$errors_arr" --argjson warnings "$warnings_arr" '{errors:$errors,warnings:$warnings}')"
+    if [[ "$json_out" == "-" ]]; then
+      printf '%s\n' "$lint_json"
+    else
+      mkdir -p "$(dirname "$json_out")"
+      printf '%s\n' "$lint_json" > "$json_out"
+    fi
+  fi
   if (( errors > 0 )); then
     exit 2
   fi
@@ -166,6 +204,7 @@ while IFS= read -r entry; do
   if [[ -z "$item_id" ]]; then
     item_id="ITEM_$idx"
   fi
+  item_category=$(printf '%s' "$item_json" | jq -r '.category // empty')
 
   check_required '.id | type == "string" and length > 0' 'id'
   check_required '.slice | type == "number"' 'slice'
@@ -202,6 +241,14 @@ while IFS= read -r entry; do
 
       if [[ "$touch" == *".DS_Store"* ]]; then
         report_warn JUNK_PATH "$item_id" "scope.touch contains .DS_Store"
+      fi
+
+      if [[ "$item_category" == "workflow" && "$touch" == crates/* ]]; then
+        report_error WORKFLOW_TOUCHES_CRATES "$item_id" "workflow story must not touch crates/"
+      fi
+
+      if [[ ( "$item_category" == "execution" || "$item_category" == "risk" ) && "$touch" == plans/* ]]; then
+        report_error EXECUTION_TOUCHES_PLANS "$item_id" "execution/risk story must not touch plans/"
       fi
 
       if has_glob_chars "$touch"; then
