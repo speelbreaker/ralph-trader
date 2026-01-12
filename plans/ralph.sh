@@ -1226,7 +1226,7 @@ PROMPT
   fi
 
   IFS= read -r -d '' PROMPT <<PROMPT || true
-@${PRD_FILE} @${PROGRESS_FILE}
+@${PRD_FILE} @${PROGRESS_FILE} @AGENTS.md
 
 You are running inside the Ralph harness.
 
@@ -1243,7 +1243,8 @@ You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
 Do not choose a different item even if it looks easier.
 
 PROCEDURE:
-0) Get bearings: pwd; git log --oneline -10; read prd.json + progress.txt.
+0) Get bearings: pwd; git log --oneline -10; read AGENTS.md + prd.json + progress.txt.
+0.1) Acknowledge AGENTS.md and progress.txt by noting it in your progress entry.
 0.5) Handoff hygiene (when relevant):
     - Update docs/codebase/* with verified facts if you touched new areas.
     - Append deferred ideas to plans/ideas.md.

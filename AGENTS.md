@@ -1,37 +1,34 @@
 # Agent Guide (High-Signal)
 
-## Non-negotiable: Contract Alignment
-- Any change you make to the code must be 100% aligned with CONTRACT.md.
-- Every code change MUST be 100% aligned with CONTRACT.md.
-- If any instruction, story, or implementation detail conflicts with CONTRACT.md:
-  - STOP immediately
-  - output: <promise>BLOCKED_CONTRACT_CONFLICT</promise>
-  - explain the conflict and what contract section it violates
-- NEVER "fix" a conflict by weakening gates, staleness rules, evidence requirements, or tests.
-- If uncertain which contract section applies, treat it as needs_human_decision and stop.
+Read this first. It is the shortest, enforceable workflow summary.
 
-## Modes
-- Plan Mode is mandatory for non-trivial changes.
-- Plan mode first; execution second.
-- Only after the plan is approved, execute with auto-accept edits.
-- If the plan cannot be verified, stop.
+## Non-negotiables
+- Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
+- Verification is mandatory; never weaken gates or tests.
+- WIP=1: exactly one PRD item and one commit per iteration.
+- Fail closed on ambiguity; set needs_human_decision=true and stop.
 
-## Command Permissions (Allow/Ask/Deny)
-- Never use skip-permissions.
-- Approvals are handled via Codex (/approvals) and $CODEX_HOME/config.toml.
-- Keep allow/ask/deny lists in $CODEX_HOME/config.toml.
-- Explicitly deny foot-guns (examples): `rm -rf`, destructive `docker system prune -a --volumes`, `docker volume prune`, rewriting or deleting `artifacts/`.
+## Start here (every session)
+- Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
+- Read `plans/prd.json` and `plans/progress.txt`.
+- Run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
+- Work only the selected PRD item.
 
-## CI Alignment
-- CI must run `./plans/verify.sh full` as the canonical gate.
-- If CI and `verify.sh` diverge, `verify.sh` is wrong until fixed.
+## Handoff hygiene (when relevant)
+- Update `docs/codebase/*` with verified facts if you touched new areas.
+- Append deferred ideas to `plans/ideas.md`.
+- If pausing mid-story, fill `plans/pause.md`.
+- Append to `plans/progress.txt`; include Assumptions/Open questions when applicable.
 
-## Repo map (where things live)
-- `crates/` - Rust execution + risk (run `ls crates` and keep this list accurate)
-  - `soldier_core/`
-  - `soldier_infra/`
-- `plans/` - agent harness (PRD, progress, verify)
+## Repo map
+- `crates/` - Rust execution + risk (`soldier_core/`, `soldier_infra/`).
+- `plans/` - harness (PRD, progress, verify, ralph).
+- `docs/codebase/` - codebase maps.
 
 ## Sentinel outputs
 - When blocked: `<promise>BLOCKED_CI_COMMANDS</promise>`
 - When done: `<promise>COMPLETE</promise>`
+
+## Don'ts
+- Never use skip-permissions.
+- Never delete/disable tests or weaken fail-closed gates.

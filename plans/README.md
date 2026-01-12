@@ -25,6 +25,7 @@
 - `Commands`: key commands run.
 - `Verify`: `./plans/verify.sh <mode>` (include failures if any).
 - `Notes`: status/metrics or blockers (optional).
+- `Ack`: confirm you read AGENTS.md and progress.txt.
 - `Assumptions`: call out key assumptions made (optional).
 - `Open questions`: anything needing a human decision (optional).
 - `Next`: next step.
