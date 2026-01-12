@@ -102,7 +102,9 @@ count_glob_matches() {
       report_error PYTHON3_MISSING GLOBAL "python3 required for glob checks"
       python_missing=1
     fi
-    return 1
+    # Ensure a numeric count is always returned to callers using command substitution.
+    echo 0
+    return 0
   fi
   python3 - "$repo_root" "$pattern" <<'PY'
 import glob
