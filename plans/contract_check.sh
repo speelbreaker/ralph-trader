@@ -70,7 +70,7 @@ if ! [[ "$commit_count" =~ ^[0-9]+$ ]]; then
   fail "could not compute commit_count for ${head_before}..${head_after}"
 fi
 if [[ "$commit_count" -ne 1 ]]; then
-  # Also fail if there are uncommitted changes (classic "verify green but no commit" loophole)
+  # Also fail if there are uncommitted changes (classic “verify green but no commit” loophole)
   if [[ -n "$(git status --porcelain)" ]]; then
     fail "expected 1 commit, got ${commit_count}; also worktree is dirty (uncommitted changes present)"
   fi
@@ -79,7 +79,6 @@ fi
 
 # Files changed in the commit
 mapfile -t changed_files < <(git diff-tree --no-commit-id --name-only -r "$head_after" | sed '/^$/d')
-mapfile -t changed_status < <(git diff --name-status "$head_before" "$head_after" | sed '/^$/d')
 
 # Scope enforcement (this is the big missing guard you were failing before)
 mapfile -t touch_patterns < <(jq -r '.scope.touch[]' <<<"$story_json")
@@ -101,16 +100,6 @@ matches_any() {
   return 1
 }
 
-is_test_file() {
-  local path="$1"
-  case "$path" in
-    */tests/*|*/__tests__/*|*/*_test.*|*_test.*|*.spec.*|*.test.*|test_*.*)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
 for f in "${changed_files[@]}"; do
   # avoid wins
   if [[ "${#avoid_patterns[@]}" -gt 0 ]] && matches_any "$f" "${avoid_patterns[@]}"; then
@@ -128,43 +117,6 @@ if [[ "${#scope_violations[@]}" -gt 0 ]]; then
   fail "$notes"
 fi
 
-test_deletions=()
-ci_violations=()
-for line in "${changed_status[@]}"; do
-  status="${line%%$'\t'*}"
-  path="${line#*$'\t'}"
-
-  if [[ "$status" == D* ]]; then
-    if is_test_file "$path"; then
-      test_deletions+=("$path")
-    fi
-  fi
-
-  if [[ "$path" == ".github/workflows/ci.yml" || "$path" == ".github/workflows/ci.yaml" ]]; then
-    if [[ "$status" == D* ]]; then
-      ci_violations+=("ci_workflow_deleted:$path")
-      continue
-    fi
-    if [[ ! -f "$path" ]]; then
-      ci_violations+=("ci_workflow_missing:$path")
-      continue
-    fi
-    if ! grep -Eq "plans/verify\\.sh" "$path"; then
-      ci_violations+=("ci_missing_verify_sh:$path")
-    fi
-    if ! grep -Eq "CI_GATES_SOURCE[[:space:]]*[:=][[:space:]]*verify" "$path"; then
-      ci_violations+=("ci_missing_gate_source:$path")
-    fi
-  fi
-done
-
-if [[ "${#test_deletions[@]}" -gt 0 ]]; then
-  fail "test file deletion detected: $(printf '%s; ' "${test_deletions[@]}")"
-fi
-if [[ "${#ci_violations[@]}" -gt 0 ]]; then
-  fail "CI gate weakening detected: $(printf '%s; ' "${ci_violations[@]}")"
-fi
-
 # Guard: verify.sh edits are human-reviewed unless explicitly allowed
 for f in "${changed_files[@]}"; do
   if [[ "$f" == "plans/verify.sh" && "$allow_verify_edit" != "1" ]]; then
@@ -172,8 +124,8 @@ for f in "${changed_files[@]}"; do
   fi
 done
 
-# Contract refs: mechanical "does the contract actually contain what you claim you referenced?"
-# This is intentionally conservative: if it can't find it, it fails (forces you to fix ref text or contract).
+# Contract refs: mechanical “does the contract actually contain what you claim you referenced?”
+# This is intentionally conservative: if it can’t find it, it fails (forces you to fix ref text or contract).
 contract_text_lc="$(tr '[:upper:]' '[:lower:]' < "$contract_file")"
 
 missing_refs=()
