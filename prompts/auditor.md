@@ -94,6 +94,14 @@ Mark BLOCKED (not PASS) if:
 - story appears to require repo facts that are not inferable (paths/commands unclear)
 
 ========================
+SEVERITY MAPPING (FOR NOTES)
+========================
+Keep status values strictly PASS|FAIL|BLOCKED, but tag severity in notes:
+- MUST_FIX => status FAIL and include "MUST_FIX: ..." in reasons or notes.
+- WARN => status PASS and include "WARN: ..." in reasons or notes; also add to global_findings.risk or improvements.
+- NEEDS_HUMAN_DECISION => status BLOCKED and include "NEEDS_HUMAN_DECISION: ..." in reasons or notes.
+
+========================
 C) SEMANTIC CHECKS (MANDATORY)
 ========================
 
@@ -135,6 +143,7 @@ You MUST write:
 
 {
   "project": "StoicTrader",
+  "prd_sha256": "<sha256 of plans/prd.json>",
   "inputs": {
     "prd": "plans/prd.json",
     "contract": "CONTRACT.md",
@@ -166,6 +175,7 @@ You MUST write:
       "contract_check": {
         "refs_present": true,
         "refs_specific": true,
+        "contract_refs_resolved": true,
         "acceptance_enforces_invariant": true,
         "contradiction": false,
         "notes": []
