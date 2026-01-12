@@ -37,15 +37,22 @@ RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
 RPH_ALLOW_AGENT_PRD_EDIT="${RPH_ALLOW_AGENT_PRD_EDIT:-0}"  # 0|1 (legacy compatibility)
 # Disallow verify.sh edits unless explicitly enabled (human-reviewed change).
 RPH_ALLOW_VERIFY_SH_EDIT="${RPH_ALLOW_VERIFY_SH_EDIT:-0}"  # 0|1
+# Disallow other harness file edits unless explicitly enabled (human-reviewed change).
+RPH_ALLOW_HARNESS_EDIT="${RPH_ALLOW_HARNESS_EDIT:-0}"      # 0|1
 # Contract alignment review gate (mandatory).
 CONTRACT_FILE="${CONTRACT_FILE:-CONTRACT.md}"
 IMPL_PLAN_FILE="${IMPL_PLAN_FILE:-IMPLEMENTATION_PLAN.md}"
 RPH_REQUIRE_CONTRACT_REVIEW="${RPH_REQUIRE_CONTRACT_REVIEW:-1}"  # 0|1 (mandatory)
 RPH_CHEAT_DETECTION="${RPH_CHEAT_DETECTION:-block}"  # off|warn|block
 RPH_CHEAT_ALLOWLIST="${RPH_CHEAT_ALLOWLIST:-}"      # regex of file paths to ignore
+RPH_ALLOW_CHEAT_ALLOWLIST="${RPH_ALLOW_CHEAT_ALLOWLIST:-0}"  # 0|1
+# Story verify allowlist (defense-in-depth against arbitrary commands).
+RPH_STORY_VERIFY_ALLOWLIST_FILE="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
+RPH_ALLOW_UNSAFE_STORY_VERIFY="${RPH_ALLOW_UNSAFE_STORY_VERIFY:-0}"  # 0|1
 # Agent pass-mark tags: print exactly <mark_pass>ID</mark_pass>
 RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
 RPH_MARK_PASS_CLOSE="${RPH_MARK_PASS_CLOSE:-</mark_pass>}"
+RPH_FINAL_VERIFY="${RPH_FINAL_VERIFY:-1}"  # 0|1
 
 # Parse RPH_AGENT_ARGS (space-delimited) into an array (global IFS excludes spaces).
 RPH_AGENT_ARGS_ARR=()
@@ -57,6 +64,9 @@ fi
 RPH_RATE_LIMIT_PER_HOUR="${RPH_RATE_LIMIT_PER_HOUR:-100}"
 RPH_RATE_LIMIT_FILE="${RPH_RATE_LIMIT_FILE:-.ralph/rate_limit.json}"
 RPH_RATE_LIMIT_ENABLED="${RPH_RATE_LIMIT_ENABLED:-1}"
+RPH_RATE_LIMIT_RESTART_ON_SLEEP="${RPH_RATE_LIMIT_RESTART_ON_SLEEP:-1}"  # 0|1
+RPH_RATE_LIMIT_SLEPT=0
+RPH_RATE_LIMIT_SLEEP_SECS=0
 RPH_CIRCUIT_BREAKER_ENABLED="${RPH_CIRCUIT_BREAKER_ENABLED:-1}"
 RPH_MAX_SAME_FAILURE="${RPH_MAX_SAME_FAILURE:-3}"
 RPH_MAX_NO_PROGRESS="${RPH_MAX_NO_PROGRESS:-2}"
@@ -69,6 +79,10 @@ LOG_FILE="plans/logs/ralph.$(date +%Y%m%d-%H%M%S).log"
 LAST_GOOD_FILE=".ralph/last_good_ref"
 LAST_FAIL_FILE=".ralph/last_failure_path"
 STATE_FILE="$RPH_STATE_FILE"
+
+if [[ "$RPH_CHEAT_DETECTION" != "block" ]]; then
+  echo "WARN: RPH_CHEAT_DETECTION=$RPH_CHEAT_DETECTION; cheat detection will not block changes." | tee -a "$LOG_FILE"
+fi
 
 json_escape() {
   local s="$1"
@@ -115,6 +129,9 @@ block_preflight() {
 # --- preflight ---
 command -v git >/dev/null 2>&1 || block_preflight "missing_git" "git required"
 command -v jq  >/dev/null 2>&1 || block_preflight "missing_jq" "jq required"
+if [[ -n "$RPH_CHEAT_ALLOWLIST" && "$RPH_ALLOW_CHEAT_ALLOWLIST" != "1" ]]; then
+  block_preflight "cheat_allowlist_requires_opt_in" "RPH_CHEAT_ALLOWLIST set but RPH_ALLOW_CHEAT_ALLOWLIST!=1"
+fi
 if [[ "$RPH_DRY_RUN" != "1" ]]; then
   if [[ -z "${RPH_AGENT_CMD:-}" ]]; then
     block_preflight "missing_agent_cmd" "RPH_AGENT_CMD is empty"
@@ -238,6 +255,25 @@ run_verify() {
   return $rc
 }
 
+story_verify_cmd_allowed() {
+  local cmd="$1"
+  if [[ "$RPH_ALLOW_UNSAFE_STORY_VERIFY" == "1" ]]; then
+    return 0
+  fi
+  local allow_file="$RPH_STORY_VERIFY_ALLOWLIST_FILE"
+  if [[ ! -f "$allow_file" ]]; then
+    echo "ERROR: story verify allowlist missing: $allow_file" | tee -a "$LOG_FILE"
+    return 1
+  fi
+  awk -v cmd="$cmd" '
+    { sub(/\r$/, ""); }
+    /^[[:space:]]*($|#)/ { next }
+    { line=$0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+$/, "", line); }
+    line == cmd { found=1; exit }
+    END { exit found?0:1 }
+  ' "$allow_file"
+}
+
 run_story_verify() {
   local item_json="$1"
   local iter_dir="$2"
@@ -255,6 +291,11 @@ run_story_verify() {
   while IFS= read -r cmd; do
     [[ -z "$cmd" ]] && continue
     if [[ "$cmd" == "./plans/verify.sh" ]]; then
+      continue
+    fi
+    if ! story_verify_cmd_allowed "$cmd"; then
+      rc=1
+      echo "FAIL: story verify command not allowlisted: $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
       continue
     fi
     echo "Running story verify: $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
@@ -392,6 +433,28 @@ verify_log_has_sha() {
   grep -q '^VERIFY_SH_SHA=' "$log"
 }
 
+run_final_verify() {
+  if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
+    return 0
+  fi
+  local log=".ralph/final_verify_$(date +%Y%m%d-%H%M%S).log"
+  if ! run_verify "$log"; then
+    local block_dir
+    block_dir="$(write_blocked_basic "final_verify_failed" "Final verify failed (see $log)" "blocked_final_verify")"
+    echo "<promise>BLOCKED_FINAL_VERIFY_FAILED</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: final verify failed in $block_dir" | tee -a "$LOG_FILE"
+    return 1
+  fi
+  if ! verify_log_has_sha "$log"; then
+    local block_dir
+    block_dir="$(write_blocked_basic "final_verify_missing_sha" "VERIFY_SH_SHA missing in $log" "blocked_final_verify")"
+    echo "<promise>BLOCKED_FINAL_VERIFY_MISSING_SHA</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: final verify missing SHA in $block_dir" | tee -a "$LOG_FILE"
+    return 1
+  fi
+  return 0
+}
+
 write_contract_review() {
   local out="$1"
   local status="$2"
@@ -479,6 +542,10 @@ completion_requirements_met() {
     fi
   done
   if (( missing == 1 )); then
+    return 1
+  fi
+
+  if ! verify_log_has_sha "$iter_dir/verify_post.log"; then
     return 1
   fi
 
@@ -798,6 +865,9 @@ rate_limit_before_call() {
     return 0
   fi
 
+  RPH_RATE_LIMIT_SLEPT=0
+  RPH_RATE_LIMIT_SLEEP_SECS=0
+
   local now
   local limit
   local window_start
@@ -843,6 +913,8 @@ rate_limit_before_call() {
     now="$(date +%s)"
     window_start="$now"
     count=0
+    RPH_RATE_LIMIT_SLEPT=1
+    RPH_RATE_LIMIT_SLEEP_SECS="$sleep_secs"
   fi
 
   count=$((count + 1))
@@ -852,6 +924,20 @@ rate_limit_before_call() {
     '{window_start_epoch: $window_start_epoch, count: $count}' \
     > "$RPH_RATE_LIMIT_FILE"
   update_rate_limit_state_if_present "$window_start" "$count" "$limit" "$sleep_secs"
+}
+
+rate_limit_restart_if_slept() {
+  if [[ "$RPH_RATE_LIMIT_RESTART_ON_SLEEP" != "1" ]]; then
+    return 1
+  fi
+  if [[ "${RPH_RATE_LIMIT_SLEPT:-0}" != "1" ]]; then
+    return 1
+  fi
+  if [[ -n "${ITER_DIR:-}" ]]; then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$(git rev-parse HEAD)"
+  fi
+  echo "RateLimit: slept during iteration; restarting iteration." | tee -a "$LOG_FILE"
+  return 0
 }
 
 # --- main loop ---
@@ -880,6 +966,9 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   ' "$PRD_FILE")"
   if [[ -z "$ACTIVE_SLICE" ]]; then
     if completion_requirements_met "" ""; then
+      if ! run_final_verify; then
+        exit 1
+      fi
       echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
       exit 0
     fi
@@ -942,9 +1031,19 @@ PROMPT
     set +e
     if [[ -n "$RPH_PROMPT_FLAG" ]]; then
       rate_limit_before_call
+      if rate_limit_restart_if_slept; then
+        set -e
+        i=$((i-1))
+        continue
+      fi
       ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     else
       rate_limit_before_call
+      if rate_limit_restart_if_slept; then
+        set -e
+        i=$((i-1))
+        continue
+      fi
       ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
     fi
     set -e
@@ -1150,6 +1249,11 @@ PROMPT
   set +e
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
     rate_limit_before_call
+    if rate_limit_restart_if_slept; then
+      set -e
+      i=$((i-1))
+      continue
+    fi
     if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
       ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     else
@@ -1157,6 +1261,11 @@ PROMPT
     fi
   else
     rate_limit_before_call
+    if rate_limit_restart_if_slept; then
+      set -e
+      i=$((i-1))
+      continue
+    fi
     if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
       ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     else
@@ -1203,6 +1312,17 @@ PROMPT
       echo "Blocked: plans/verify.sh was modified in this iteration (human-reviewed change required) in $BLOCK_DIR" | tee -a "$LOG_FILE"
       exit 1
     fi
+  fi
+
+  if [[ "$RPH_ALLOW_HARNESS_EDIT" != "1" ]]; then
+    for pscript in plans/ralph.sh plans/update_task.sh plans/init.sh plans/contract_check.sh plans/story_verify_allowlist.txt; do
+      if git diff --name-only "$HEAD_BEFORE" "$HEAD_AFTER" | grep -qx "$pscript"; then
+        BLOCK_DIR="$(write_blocked_with_state "harness_file_modified" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+        echo "<promise>BLOCKED_HARNESS_FILE_MODIFIED</promise>" | tee -a "$LOG_FILE"
+        echo "Blocked: $pscript was modified in this iteration (human-reviewed change required) in $BLOCK_DIR" | tee -a "$LOG_FILE"
+        exit 1
+      fi
+    done
   fi
 
   DIRTY_STATUS="$(git status --porcelain 2>/dev/null || true)"
@@ -1468,6 +1588,9 @@ PROMPT
   # 6) Completion detection: sentinel OR PRD all-pass
   if grep -qF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
+      if ! run_final_verify; then
+        exit 1
+      fi
       echo "Agent signaled COMPLETE and PRD is fully passed. Exiting." | tee -a "$LOG_FILE"
       exit 0
     fi
@@ -1479,6 +1602,9 @@ PROMPT
 
   if all_items_passed; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
+      if ! run_final_verify; then
+        exit 1
+      fi
       echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
       exit 0
     fi

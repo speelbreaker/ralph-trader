@@ -1,0 +1,16 @@
+# Story verify command allowlist (exact match per line).
+# Add or update entries as needed; require human review via RPH_ALLOW_HARNESS_EDIT=1.
+
+bash -n plans/verify.sh
+cargo test --workspace
+cargo test -p soldier_core --test test_dispatch_map
+cargo test -p soldier_core --test test_idempotency
+cargo test -p soldier_core --test test_instrument_cache_ttl
+cargo test -p soldier_core --test test_instrument_cache_ttl test_instrument_cache_ttl_blocks_opens_allows_closes
+cargo test -p soldier_core --test test_instrument_cache_ttl test_stale_instrument_cache_sets_degraded
+cargo test -p soldier_core --test test_instrument_kind_mapping
+cargo test -p soldier_core --test test_label
+cargo test -p soldier_core --test test_label_match
+cargo test -p soldier_core --test test_order_size
+cargo test -p soldier_core --test test_quantize
+rg -n "cargo test --workspace" plans/verify.sh
