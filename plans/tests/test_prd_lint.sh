@@ -59,7 +59,15 @@ if [[ $status -ne 2 ]]; then
   exit 1
 fi
 
-echo "$output" | grep -q "MISSING_VERIFY_SH"
-echo "$output" | grep -q "CONTRACT_ACCEPTANCE_MISMATCH"
+if ! echo "$output" | grep -q "MISSING_VERIFY_SH"; then
+  echo "Expected output to contain MISSING_VERIFY_SH"
+  echo "$output"
+  exit 1
+fi
 
+if ! echo "$output" | grep -q "CONTRACT_ACCEPTANCE_MISMATCH"; then
+  echo "Expected output to contain CONTRACT_ACCEPTANCE_MISMATCH"
+  echo "$output"
+  exit 1
+fi
 echo "test_prd_lint.sh: ok"
