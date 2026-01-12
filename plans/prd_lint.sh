@@ -113,7 +113,10 @@ root = sys.argv[1]
 pattern = sys.argv[2]
 abs_pattern = os.path.join(root, pattern)
 
-matches = glob.glob(abs_pattern, recursive=True)
+if "**" in abs_pattern:
+    matches = glob.glob(abs_pattern, recursive=True)
+else:
+    matches = glob.glob(abs_pattern)
 count = 0
 for path in matches:
     try:
