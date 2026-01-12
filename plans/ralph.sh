@@ -482,6 +482,10 @@ completion_requirements_met() {
     return 1
   fi
 
+  if ! contract_review_ok "$iter_dir/contract_review.json"; then
+    return 1
+  fi
+
   return 0
 }
 
