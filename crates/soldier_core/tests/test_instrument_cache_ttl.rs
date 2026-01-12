@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use soldier_core::risk::{PolicyGuard, RiskState, TradingMode};
@@ -6,8 +7,11 @@ use soldier_core::venue::{
     instrument_cache_stale_total,
 };
 
+static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
 #[test]
 fn test_fresh_instrument_cache_is_healthy() {
+    let _guard = TEST_MUTEX.lock().expect("instrument cache test mutex");
     let mut cache = InstrumentCache::new(Duration::from_secs(30));
     cache.insert("BTC-PERP", "metadata");
 
@@ -22,6 +26,7 @@ fn test_fresh_instrument_cache_is_healthy() {
 
 #[test]
 fn test_stale_instrument_cache_sets_degraded() {
+    let _guard = TEST_MUTEX.lock().expect("instrument cache test mutex");
     let ttl = Duration::from_secs(10);
     let mut cache = InstrumentCache::new(ttl);
     let updated_at = Instant::now() - Duration::from_secs(30);
@@ -44,6 +49,7 @@ fn test_stale_instrument_cache_sets_degraded() {
 
 #[test]
 fn test_instrument_cache_ttl_blocks_opens_allows_closes() {
+    let _guard = TEST_MUTEX.lock().expect("instrument cache test mutex");
     let ttl = Duration::from_secs(10);
     let mut cache = InstrumentCache::new(ttl);
     let updated_at = Instant::now() - Duration::from_secs(30);
