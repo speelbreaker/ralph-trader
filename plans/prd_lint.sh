@@ -109,10 +109,22 @@ import glob
 import os
 import sys
 
-root = sys.argv[1]
+root = os.path.abspath(sys.argv[1])
 pattern = sys.argv[2]
-abs_pattern = os.path.join(root, pattern)
+abs_pattern = os.path.abspath(os.path.join(root, pattern))
 
+# Ensure the resolved pattern does not escape the repository root.
+try:
+    common = os.path.commonpath([root, abs_pattern])
+except ValueError:
+    # On error determining common path, treat as no matches.
+    print(0)
+    raise SystemExit(0)
+
+if common != root:
+    # Pattern would escape the repo root; do not perform glob outside root.
+    print(0)
+    raise SystemExit(0)
 if "**" in abs_pattern:
     matches = glob.glob(abs_pattern, recursive=True)
 else:
