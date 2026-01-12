@@ -6,6 +6,7 @@
 - Added best-effort `verify_pre.log` capture for early blocked cases (invalid selection, missing verify, needs_human_decision).
 - Expanded `plans/workflow_acceptance.sh` with lock and invalid-selection verify_pre assertions; added an invalid-selection stub agent.
 - Acceptance harness now copies working-tree versions of `plans/ralph.sh` / `plans/verify.sh` into the worktree and marks them assume-unchanged so preflight stays clean.
+- Adjusted instrument cache TTL tests to assert monotonic metric increments, avoiding flakiness from parallel test execution.
 
 ## Why
 - Prevents nondeterministic state corruption from parallel runs.

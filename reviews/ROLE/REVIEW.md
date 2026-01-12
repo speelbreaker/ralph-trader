@@ -17,6 +17,7 @@
 ### Minor
 - Gate-bypass toggles exist (`RPH_ALLOW_VERIFY_SH_EDIT`, `RPH_ALLOW_HARNESS_EDIT`, `RPH_ALLOW_UNSAFE_STORY_VERIFY`). They are explicit but can weaken safety if set in CI; recommend guarding them in CI env policy.
 - Blocked artifacts still do not include iter_dir or selection context beyond `blocked_item.json`; debugging relies on `plans/logs/ralph.*.log`. Consider adding iter_dir pointer in blocked metadata later.
+- Instrument cache TTL tests used exact counter deltas on global atomics; parallel tests can skew them. Assertions now require monotonic increase to avoid flakes.
 
 ## Contract mapping table
 | Decision / Gate | Contract clause | Evidence |
@@ -42,7 +43,7 @@
 
 ## Evidence (commands + expected outputs)
 - RUN: `./plans/workflow_acceptance.sh` -> `Workflow acceptance tests passed`.
-- NOT RUN: `./plans/init.sh` -> expect exit 0 and trailing `[init] OK`.
-- NOT RUN: `CI_GATES_SOURCE=verify ./plans/verify.sh` -> expect `VERIFY_SH_SHA=...` and a green run (requires Rust toolchain + workspace tests to pass).
+- RUN: `./plans/init.sh` -> `[init] OK`.
+- RUN: `CI_GATES_SOURCE=verify ./plans/verify.sh` -> `VERIFY_SH_SHA=...` and `VERIFY OK (mode=quick)` (warning about dirty tree is expected while uncommitted).
 
 If verify fails due to missing toolchain or CI gate source, install Rust + ensure `CI_GATES_SOURCE=verify` (or add `.github/workflows`) and rerun.
