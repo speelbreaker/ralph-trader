@@ -80,6 +80,9 @@ allowlist_raw="${PRD_LINT_VERIFY_ALLOWLIST:-}"
 allowlist_raw="${allowlist_raw// /}"
 IFS=',' read -r -a allow_ids <<< "$allowlist_raw"
 
+# Check if an ID is in the allowlist.
+# The allowlist requires exact ID matches - no wildcards or patterns are supported.
+# IDs are matched using exact string equality only.
 is_allowlisted() {
   local id="$1"
   local entry
