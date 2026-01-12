@@ -1244,6 +1244,11 @@ Do not choose a different item even if it looks easier.
 
 PROCEDURE:
 0) Get bearings: pwd; git log --oneline -10; read prd.json + progress.txt.
+0.5) Handoff hygiene (when relevant):
+    - Update docs/codebase/* with verified facts if you touched new areas.
+    - Append deferred ideas to plans/ideas.md.
+    - If pausing mid-story, fill plans/pause.md.
+    - Append to plans/progress.txt; include Assumptions/Open questions when applicable.
 ${LAST_FAIL_NOTE}
 1) If plans/init.sh exists, run it.
 2) Run: ${VERIFY_SH} ${RPH_VERIFY_MODE}  (baseline must be green; if not, fix baseline first).

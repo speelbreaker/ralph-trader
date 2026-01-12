@@ -20,3 +20,13 @@
 - S1-005: mapped OrderSize to Deribit amount selection, added mismatch rejection counter + tests for amount mapping and contract mismatch.
 - Commands: ./plans/verify.sh full; ./plans/update_task.sh S1-005 true.
 - Next: proceed to S1-006.
+- Process: adopt one-PRD-item-per-session habit and add optional progress log fields (Verify/Notes) for handoff clarity.
+- Commands: none (doc/process only).
+- Verify: n/a.
+- Notes: append-only; no gate changes.
+- Next: proceed to S1-006 with a fresh session per PRD item.
+- Process: added codebase map templates (docs/codebase/*), ideas log, and pause note template for better handoffs.
+- Commands: none (templates/docs only).
+- Verify: n/a.
+- Notes: append-only; no gate changes.
+- Next: populate docs/codebase/* as needed and use plans/ideas.md for deferred items.
