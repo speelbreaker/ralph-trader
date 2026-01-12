@@ -18,6 +18,7 @@ PRD_FILE="${PRD_FILE:-plans/prd.json}"
 PROGRESS_FILE="${PROGRESS_FILE:-plans/progress.txt}"
 VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
 ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
+PRD_SCHEMA_CHECK_SH="${PRD_SCHEMA_CHECK_SH:-./plans/prd_schema_check.sh}"
 
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choice)
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
@@ -71,6 +72,7 @@ RPH_CIRCUIT_BREAKER_ENABLED="${RPH_CIRCUIT_BREAKER_ENABLED:-1}"
 RPH_MAX_SAME_FAILURE="${RPH_MAX_SAME_FAILURE:-3}"
 RPH_MAX_NO_PROGRESS="${RPH_MAX_NO_PROGRESS:-2}"
 RPH_STATE_FILE="${RPH_STATE_FILE:-.ralph/state.json}"
+RPH_LOCK_DIR="${RPH_LOCK_DIR:-.ralph/lock}"
 
 mkdir -p .ralph
 mkdir -p plans/logs
@@ -79,6 +81,9 @@ LOG_FILE="plans/logs/ralph.$(date +%Y%m%d-%H%M%S).log"
 LAST_GOOD_FILE=".ralph/last_good_ref"
 LAST_FAIL_FILE=".ralph/last_failure_path"
 STATE_FILE="$RPH_STATE_FILE"
+LOCK_DIR="$RPH_LOCK_DIR"
+LOCK_INFO_FILE="${LOCK_DIR}/lock.json"
+LOCK_ACQUIRED=0
 
 if [[ "$RPH_CHEAT_DETECTION" != "block" ]]; then
   echo "WARN: RPH_CHEAT_DETECTION=$RPH_CHEAT_DETECTION; cheat detection will not block changes." | tee -a "$LOG_FILE"
@@ -90,6 +95,32 @@ json_escape() {
   s="${s//\"/\\\"}"
   s="${s//$'\n'/\\n}"
   printf '%s' "$s"
+}
+
+write_lock_info() {
+  local now
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '{"pid":%s,"started_at":"%s","cwd":"%s","cmd":"%s"}\n' \
+    "$$" \
+    "$(json_escape "$now")" \
+    "$(json_escape "$PWD")" \
+    "$(json_escape "$0")" \
+    > "$LOCK_INFO_FILE" || true
+}
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    LOCK_ACQUIRED=1
+    write_lock_info
+    return 0
+  fi
+  return 1
+}
+
+release_lock() {
+  if [[ "$LOCK_ACQUIRED" == "1" ]]; then
+    rm -rf "$LOCK_DIR" || true
+  fi
 }
 
 write_blocked_basic() {
@@ -126,6 +157,12 @@ block_preflight() {
   exit "$code"
 }
 
+# --- lock (fail-closed) ---
+if ! acquire_lock; then
+  block_preflight "lock_held" "Ralph lock exists at $LOCK_DIR. If no run is active, remove $LOCK_DIR and retry."
+fi
+trap release_lock EXIT INT TERM
+
 # --- preflight ---
 command -v git >/dev/null 2>&1 || block_preflight "missing_git" "git required"
 command -v jq  >/dev/null 2>&1 || block_preflight "missing_jq" "jq required"
@@ -142,52 +179,19 @@ fi
 [[ -f "$PRD_FILE" ]] || block_preflight "missing_prd" "missing $PRD_FILE"
 jq . "$PRD_FILE" >/dev/null 2>&1 || block_preflight "invalid_prd_json" "$PRD_FILE invalid JSON"
 
-# PRD schema sanity check (fail-closed)
-if ! jq -e '
-  def is_nonempty_str($v): ($v|type=="string" and ($v|length>0));
-  def is_str_array($v): ($v|type=="array" and (($v|length)==0 or ($v|all(.[]; type=="string"))));
-  def has_verify_sh($v): ($v|type=="array" and ($v|index("./plans/verify.sh") != null));
-  def has_human_blocker($i):
-    ($i|has("human_blocker") and ($i.human_blocker|type=="object") and
-     ($i.human_blocker|has("why") and (is_nonempty_str($i.human_blocker.why))) and
-     ($i.human_blocker|has("question") and (is_nonempty_str($i.human_blocker.question))) and
-     ($i.human_blocker|has("options") and ($i.human_blocker.options|type=="array") and (($i.human_blocker.options|length)>0) and all($i.human_blocker.options[]; type=="string")) and
-     ($i.human_blocker|has("recommended") and (is_nonempty_str($i.human_blocker.recommended))) and
-     ($i.human_blocker|has("unblock_steps") and ($i.human_blocker.unblock_steps|type=="array") and (($i.human_blocker.unblock_steps|length)>0) and all($i.human_blocker.unblock_steps[]; type=="string"))
-    );
-  def source_ok($s):
-    ($s|type=="object") and
-    ($s|has("implementation_plan_path") and is_nonempty_str($s.implementation_plan_path)) and
-    ($s|has("contract_path") and is_nonempty_str($s.contract_path));
-  def item_ok($i):
-    ($i|has("id") and is_nonempty_str($i.id)) and
-    ($i|has("priority") and ($i.priority|type=="number")) and
-    ($i|has("phase") and ($i.phase|type=="number")) and
-    ($i|has("slice") and ($i.slice|type=="number")) and
-    ($i|has("slice_ref") and is_nonempty_str($i.slice_ref)) and
-    ($i|has("story_ref") and is_nonempty_str($i.story_ref)) and
-    ($i|has("category") and is_nonempty_str($i.category)) and
-    ($i|has("description") and is_nonempty_str($i.description)) and
-    ($i|has("contract_refs") and is_str_array($i.contract_refs) and ($i.contract_refs|length>=1)) and
-    ($i|has("plan_refs") and is_str_array($i.plan_refs) and ($i.plan_refs|length>=1)) and
-    ($i|has("scope") and ($i.scope|type=="object") and ($i.scope|has("touch") and is_str_array($i.scope.touch)) and ($i.scope|has("avoid") and is_str_array($i.scope.avoid))) and
-    ($i|has("acceptance") and is_str_array($i.acceptance) and ($i.acceptance|length>=3)) and
-    ($i|has("steps") and is_str_array($i.steps) and ($i.steps|length>=5)) and
-    ($i|has("verify") and is_str_array($i.verify) and has_verify_sh($i.verify)) and
-    ($i|has("evidence") and is_str_array($i.evidence)) and
-    ($i|has("dependencies") and is_str_array($i.dependencies)) and
-    ($i|has("est_size") and is_nonempty_str($i.est_size)) and
-    ($i|has("risk") and is_nonempty_str($i.risk)) and
-    ($i|has("needs_human_decision") and ($i.needs_human_decision|type=="boolean")) and
-    ($i|has("passes") and ($i.passes|type=="boolean")) and
-    (if $i.needs_human_decision==true then has_human_blocker($i) else true end);
-  (type=="object") and
-  (has("project") and is_nonempty_str(.project)) and
-  (has("source") and source_ok(.source)) and
-  (has("rules") and (.rules|type=="object")) and
-  (has("items") and (.items|type=="array") and (all(.items[]; item_ok(.))))
-' "$PRD_FILE" >/dev/null 2>&1; then
-  block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid"
+# PRD schema sanity check (single source of truth; fail-closed)
+if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
+  block_preflight "missing_prd_schema_check" "$PRD_SCHEMA_CHECK_SH missing or not executable"
+fi
+schema_out=""
+schema_rc=0
+set +e
+schema_out="$("$PRD_SCHEMA_CHECK_SH" "$PRD_FILE" 2>&1)"
+schema_rc=$?
+set -e
+if (( schema_rc != 0 )); then
+  echo "$schema_out" | tee -a "$LOG_FILE"
+  block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid (run $PRD_SCHEMA_CHECK_SH $PRD_FILE for details)"
 fi
 
 # Required harness helpers (fail-closed with blocked artifacts)
@@ -253,6 +257,17 @@ run_verify() {
   local rc=${PIPESTATUS[0]}
   set -e
   return $rc
+}
+
+attempt_blocked_verify_pre() {
+  local block_dir="$1"
+  if [[ "$RPH_DRY_RUN" == "1" ]]; then
+    return 0
+  fi
+  if [[ -x "$VERIFY_SH" ]]; then
+    run_verify "$block_dir/verify_pre.log" || true
+  fi
+  return 0
 }
 
 story_verify_cmd_allowed() {
@@ -1097,6 +1112,7 @@ PROMPT
 
   if [[ -z "$NEXT_ITEM_JSON" ]]; then
     BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+    attempt_blocked_verify_pre "$BLOCK_DIR"
     echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
     echo "Blocked selection: $NEXT_ID" | tee -a "$LOG_FILE"
     exit 1
@@ -1107,6 +1123,7 @@ PROMPT
     SEL_PASSES="$(jq -r 'if has("passes") then .passes else "" end' <<<"$NEXT_ITEM_JSON")"
     if [[ -z "$NEXT_ID" || -z "$NEXT_ITEM_JSON" || "$SEL_PASSES" != "false" || "$SEL_SLICE" != "$ACTIVE_SLICE" ]]; then
       BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+      attempt_blocked_verify_pre "$BLOCK_DIR"
       echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
       echo "Blocked selection: $NEXT_ID" | tee -a "$LOG_FILE"
       exit 1
@@ -1115,11 +1132,7 @@ PROMPT
 
   if [[ "$NEXT_NEEDS_HUMAN" == "true" ]]; then
     BLOCK_DIR="$(write_blocked_artifacts "needs_human_decision" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" true)"
-    if [[ "$RPH_DRY_RUN" != "1" ]]; then
-      if [[ -x "$VERIFY_SH" ]]; then
-        run_verify "$BLOCK_DIR/verify_pre.log" || true
-      fi
-    fi
+    attempt_blocked_verify_pre "$BLOCK_DIR"
     echo "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" | tee -a "$LOG_FILE"
     echo "Blocked item: $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
     exit 1
@@ -1127,6 +1140,7 @@ PROMPT
 
   if ! jq -e '(.verify // []) | index("./plans/verify.sh") != null' <<<"$NEXT_ITEM_JSON" >/dev/null; then
     BLOCK_DIR="$(write_blocked_artifacts "missing_verify_sh_in_story" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
+    attempt_blocked_verify_pre "$BLOCK_DIR"
     echo "<promise>BLOCKED_MISSING_VERIFY_SH_IN_STORY</promise>" | tee -a "$LOG_FILE"
     echo "Blocked item: $NEXT_ID - missing ./plans/verify.sh in verify[]" | tee -a "$LOG_FILE"
     exit 1

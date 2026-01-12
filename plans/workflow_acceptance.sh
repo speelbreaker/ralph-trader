@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+mkdir -p "$ROOT/.ralph"
 WORKTREE="$(mktemp -d "${ROOT}/.ralph/workflow_acceptance_XXXXXX")"
 
 cleanup() {
@@ -16,8 +17,13 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
-run_in_worktree git update-index --no-assume-unchanged plans/ralph.sh plans/verify.sh >/dev/null 2>&1 || true
-run_in_worktree git checkout -f -- plans/ralph.sh plans/verify.sh >/dev/null 2>&1 || true
+# Ensure tests run against the working tree versions while keeping the worktree clean.
+run_in_worktree git update-index --no-assume-unchanged plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh >/dev/null 2>&1 || true
+cp "$ROOT/plans/ralph.sh" "$WORKTREE/plans/ralph.sh"
+cp "$ROOT/plans/verify.sh" "$WORKTREE/plans/verify.sh"
+cp "$ROOT/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_schema_check.sh"
+chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" >/dev/null 2>&1 || true
+run_in_worktree git update-index --assume-unchanged plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh >/dev/null 2>&1 || true
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 echo "plans/contract_check.sh" >> "$exclude_file"
@@ -30,12 +36,31 @@ count_blocked_incomplete() {
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_incomplete_*' | wc -l | tr -d ' '
 }
 
+latest_blocked() {
+  ls -dt "$WORKTREE/.ralph"/blocked_* 2>/dev/null | head -n 1 || true
+}
+
+latest_blocked_with_reason() {
+  local reason="$1"
+  local dir
+  for dir in $(ls -dt "$WORKTREE/.ralph"/blocked_* 2>/dev/null); do
+    if [[ -f "$dir/blocked_item.json" ]]; then
+      if [[ "$(run_in_worktree jq -r '.reason' "$dir/blocked_item.json")" == "$reason" ]]; then
+        echo "$dir"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
 latest_blocked_incomplete() {
   ls -dt "$WORKTREE/.ralph"/blocked_incomplete_* 2>/dev/null | head -n 1 || true
 }
 
 reset_state() {
   rm -f "$WORKTREE/.ralph/state.json" "$WORKTREE/.ralph/last_failure_path" "$WORKTREE/.ralph/rate_limit.json" 2>/dev/null || true
+  rm -rf "$WORKTREE/.ralph/lock" 2>/dev/null || true
 }
 
 write_valid_prd() {
@@ -175,6 +200,13 @@ echo "<promise>COMPLETE</promise>"
 EOF
 chmod +x "$STUB_DIR/agent_complete.sh"
 
+cat > "$STUB_DIR/agent_invalid_selection.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "invalid_selection"
+EOF
+chmod +x "$STUB_DIR/agent_invalid_selection.sh"
+
 cat > "$WORKTREE/plans/contract_check.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -287,6 +319,83 @@ latest_block="$(latest_blocked_incomplete)"
 reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
 if [[ "$reason" != "incomplete_completion" ]]; then
   echo "FAIL: expected incomplete_completion reason in blocked artifact" >&2
+  exit 1
+fi
+
+echo "Test 4: invalid selection writes verify_pre.log (best effort)"
+reset_state
+valid_prd_4="$WORKTREE/.ralph/valid_prd_4.json"
+write_valid_prd "$valid_prd_4" "S1-003"
+before_blocked="$(count_blocked)"
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_4" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_invalid_selection.sh" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=agent \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for invalid selection" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for invalid selection" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "invalid_selection")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: could not locate blocked artifact for invalid selection" >&2
+  exit 1
+fi
+if [[ ! -f "$latest_block/verify_pre.log" ]]; then
+  echo "FAIL: expected verify_pre.log in blocked artifact for invalid selection" >&2
+  exit 1
+fi
+if ! grep -q "VERIFY_SH_SHA=stub" "$latest_block/verify_pre.log"; then
+  echo "FAIL: expected VERIFY_SH_SHA in verify_pre.log for invalid selection" >&2
+  exit 1
+fi
+
+echo "Test 5: lock prevents concurrent runs"
+reset_state
+valid_prd_5="$WORKTREE/.ralph/valid_prd_5.json"
+write_valid_prd "$valid_prd_5" "S1-004"
+mkdir -p "$WORKTREE/.ralph/lock"
+before_blocked="$(count_blocked)"
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_5" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit when lock is held" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for lock held" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "lock_held")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: could not locate blocked artifact for lock_held" >&2
+  exit 1
+fi
+reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
+if [[ "$reason" != "lock_held" ]]; then
+  echo "FAIL: expected lock_held reason in blocked artifact" >&2
   exit 1
 fi
 
