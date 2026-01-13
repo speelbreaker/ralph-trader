@@ -10,8 +10,8 @@ It is separate from the trading behavior contract:
 - **Workflow Contract (source of truth):** this file
 
 Precedence (fail-closed):
-- Trading behavior rules: `CONTRACT.md` is canonical. If this workflow contract conflicts with `CONTRACT.md` on behavior, STOP and set needs_human_decision=true.
-- Workflow/process rules: this file is canonical. If other workflow docs conflict with this file, this file wins.
+- [WF-0.1] Trading behavior rules: `CONTRACT.md` is canonical. If this workflow contract conflicts with `CONTRACT.md` on behavior, STOP and set needs_human_decision=true.
+- [WF-0.2] Workflow/process rules: this file is canonical. If other workflow docs conflict with this file, this file wins.
 
 ---
 
@@ -34,14 +34,14 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 ## 1) Canonical Files (Required)
 
 ### 1.1 Required inputs
-- `CONTRACT.md` (canonical trading contract)
-- `IMPLEMENTATION_PLAN.md` (slice map; may be `specs/IMPLEMENTATION_PLAN.md`)
+- [WF-1.1] `CONTRACT.md` (canonical trading contract)
+- [WF-1.2] `IMPLEMENTATION_PLAN.md` (slice map; may be `specs/IMPLEMENTATION_PLAN.md`)
 
 ### 1.2 Required workflow artifacts
-- `plans/prd.json` — story backlog (machine-readable)
-- `plans/ralph.sh` — execution harness (iterative loop)
-- `plans/verify.sh` — verification gate (CI must run this)
-- `plans/progress.txt` — append-only shift handoff log
+- [WF-1.3] `plans/prd.json` — story backlog (machine-readable)
+- [WF-1.4] `plans/ralph.sh` — execution harness (iterative loop)
+- [WF-1.5] `plans/verify.sh` — verification gate (CI must run this)
+- [WF-1.6] `plans/progress.txt` — append-only shift handoff log
 
 ### 1.3 Optional but recommended
 - `plans/bootstrap.sh` — one-time harness scaffolding
@@ -57,36 +57,36 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 
 ## 2) Non-Negotiables (Fail-Closed)
 
-1) **[WF-2.1] Contract alignment is mandatory.**
+1) [WF-2.1] **Contract alignment is mandatory.**
    - Any change must be 100% aligned with `CONTRACT.md`.
    - Uncertainty → `needs_human_decision=true` → stop.
 
-2) **[WF-2.2] Verification is mandatory.**
+2) [WF-2.2] **Verification is mandatory.**
    - Every story MUST include `./plans/verify.sh` in its `verify[]`.
    - `passes=true` is allowed ONLY after verify is green.
    - State transition rule (enforced by harness):
      - The Ralph harness (`plans/ralph.sh`), not the agent, is the sole authority to flip passes=false → true.
      - Ralph MUST NOT flip passes=true unless verify_post exits 0 in the same iteration AND a contract review gate has passed (see “Contract Alignment Gate”).
 
-3) **[WF-2.3] WIP = 1.**
+3) [WF-2.3] **WIP = 1.**
    - Exactly one story per iteration.
    - Exactly one commit per iteration.
 
-4) **[WF-2.4] Slices are executed in order.**
+4) [WF-2.4] **Slices are executed in order.**
    - Ralph may only select stories from the currently-active slice (lowest slice containing any `passes=false`).
 
-5) **[WF-2.5] No cheating.**
+5) [WF-2.5] **No cheating.**
    - Do not delete/disable tests to “make green”.
    - Do not weaken fail-closed gates or staleness rules.
 
-Observable gate requirement [WF-2.6]:
-- plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.
+Observable gate requirement:
+- [WF-2.6] plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.
 
 ---
 
 ## 3) PRD Schema (Canonical)
 
-`plans/prd.json` MUST be valid JSON with this shape:
+[WF-3.1] `plans/prd.json` MUST be valid JSON with this shape:
 
 ```json
 {
@@ -105,13 +105,13 @@ Observable gate requirement [WF-2.6]:
 }
 ```
 
-Schema gating (fail closed, enforced by harness preflight) [WF-3.1]:
-- Ralph MUST validate required top-level keys exist: project, source, rules, items.
-- Ralph MUST validate for every item: required fields per §3 are present; acceptance has ≥ 3 entries; steps has ≥ 5 entries; verify[] contains ./plans/verify.sh.
-- Ralph MUST validate: if needs_human_decision=true then human_blocker object is present.
+Schema gating (fail closed, enforced by harness preflight):
+- [WF-3.2] Ralph MUST validate required top-level keys exist: project, source, rules, items.
+- [WF-3.3] Ralph MUST validate for every item: required fields per §3 are present; acceptance has ≥ 3 entries; steps has ≥ 5 entries; verify[] contains ./plans/verify.sh.
+- [WF-3.4] Ralph MUST validate: if needs_human_decision=true then human_blocker object is present.
 
 
-Each item MUST include:
+[WF-3.5] Each item MUST include:
 
 id (string): S{slice}-{NNN} (e.g. S2-004)
 
@@ -155,7 +155,7 @@ needs_human_decision (bool)
 
 passes (bool; default false)
 
-If needs_human_decision=true, item MUST also include:
+[WF-3.6] If needs_human_decision=true, item MUST also include:
 
 "human_blocker": {
   "why": "...",
@@ -165,8 +165,11 @@ If needs_human_decision=true, item MUST also include:
   "unblock_steps": ["..."]
 }
 
-4) Roles (Agents) and Responsibilities
-4.1 Story Cutter (generator)
+---
+
+## 4) Roles (Agents) and Responsibilities
+
+### 4.1 Story Cutter (generator) [WF-4.1]
 
 Creates/extends plans/prd.json from the implementation plan and the contract.
 
@@ -178,7 +181,7 @@ MUST populate contract_refs for every story.
 
 MUST block (needs_human_decision=true) when contract mapping is unclear.
 
-4.2 Auditor (reviewer)
+### 4.2 Auditor (reviewer) [WF-4.2]
 
 Audits plans/prd.json vs:
 
@@ -194,21 +197,21 @@ plans/prd_audit.json (machine-readable)
 
 optional plans/prd_audit.md
 
-4.3 PRD Patcher (surgical editor)
+### 4.3 PRD Patcher (surgical editor) [WF-4.3]
 
 Applies minimal field-level fixes to plans/prd.json based on the audit.
 Never rewrites/reorders the file. Never changes IDs. Never flips passes=true.
 
-4.4 Implementer (Ralph execution agent)
+### 4.4 Implementer (Ralph execution agent) [WF-4.4]
 
 Runs inside the Ralph harness. Implements exactly one story, verifies green, appends progress, commits.
 
-4.5 Contract Arbiter (post-commit contract check)
+### 4.5 Contract Arbiter (post-commit contract check) [WF-4.5]
 
 A review step (human or LLM) that compares the code diff to CONTRACT.md.
 If conflict is detected → FAIL CLOSED → revert or block.
 
-4.6 Handoff hygiene (who does what and when)
+### 4.6 Handoff hygiene (who does what and when) [WF-4.6]
 
 - Implementer (agent or human) updates `docs/codebase/*` when a story touches new areas or changes architecture/structure/testing/integrations.
 - Implementer appends non-PRD follow-ups to `plans/ideas.md` as they arise.
@@ -216,21 +219,41 @@ If conflict is detected → FAIL CLOSED → revert or block.
 - Implementer appends a `plans/progress.txt` entry after each iteration; include assumptions or open questions when relevant.
 - Maintainers may refresh `docs/codebase/*` after major refactors or when onboarding new contributors.
 
-5) Ralph Harness Protocol (Canonical Loop)
+### 4.7 Workflow skill memory (manual, versioned) [WF-4.7]
 
-Ralph is the only allowed automation for “overnight” changes.
+- All agents MUST read `docs/skills/workflow.md` before starting a task.
+- Updates are manual-only and allowed only when a new repeated pattern is discovered (soft requirement; manual judgment).
+- No automation or new gates are allowed for this document.
 
-5.1 Preflight invariants (before iteration 1) [WF-5.1]
+---
+
+## 5) Ralph Harness Protocol (Canonical Loop)
+
+[WF-5.0] Ralph is the only allowed automation for “overnight” changes.
+
+### 5.1 Preflight invariants (before iteration 1) [WF-5.1]
 
 Ralph MUST fail if:
 
 plans/prd.json is missing or invalid JSON
 
+PRD schema check fails (plans/prd_schema_check.sh)
+
 git working tree is dirty (unless explicitly overridden in code, which is discouraged)
 
 required tools (git, jq) missing
 
-5.2 Active slice gating [WF-5.2]
+Ralph lock is held (.ralph/lock exists) to prevent concurrent runs
+
+required harness scripts are missing or not executable: ./plans/verify.sh, ./plans/update_task.sh
+
+CONTRACT.md or IMPLEMENTATION_PLAN.md is missing (fallbacks to specs/* allowed if present)
+
+RPH_AGENT_CMD is empty or not executable when RPH_DRY_RUN!=1
+
+RPH_CHEAT_ALLOWLIST is set while RPH_ALLOW_CHEAT_ALLOWLIST!=1
+
+### 5.2 Active slice gating [WF-5.2]
 
 At each iteration:
 
@@ -238,7 +261,7 @@ Compute ACTIVE_SLICE = min(slice) among items where passes=false
 
 Only stories from ACTIVE_SLICE are eligible
 
-5.3 Selection modes [WF-5.3]
+### 5.3 Selection modes [WF-5.3]
 
 Ralph supports two selection modes:
 
@@ -261,7 +284,7 @@ slice == ACTIVE_SLICE
 
 invalid selection → block and stop
 
-5.4 Hard stop on human decision [WF-5.4]
+### 5.4 Hard stop on human decision [WF-5.4]
 
 If selected story has needs_human_decision=true:
 
@@ -275,7 +298,7 @@ editing the story to remove ambiguity, OR
 
 splitting into discovery story + implementation story
 
-5.5 Verify gates (pre/post) [WF-5.5]
+### 5.5 Verify gates (pre/post) [WF-5.5]
 
 Each iteration MUST perform:
 
@@ -287,17 +310,23 @@ If verify fails:
 
 default: stop (fail closed)
 
-optional: self-heal behavior (see §5.7)
+optional: self-heal behavior (see §5.8)
 
 Baseline integrity (fail closed):
 - If verify_pre fails, Ralph MUST NOT run implementation steps.
 - If RPH_SELF_HEAL=1, Ralph MAY attempt a reset and rerun verify_pre once, but MUST stop if verify_pre remains red.
 
-5.6 Story verify requirement gate [WF-5.6]
+[WF-5.5.1] verify.sh MUST enforce the endpoint-level test gate: if endpoint-ish files change, corresponding tests must change, unless ENDPOINT_GATE=0 in a non-CI run.
+
+### 5.6 Story verify requirement gate [WF-5.6]
 
 Ralph MUST block any story missing ./plans/verify.sh in its verify[].
 
-5.7 Optional self-heal [WF-5.7]
+### 5.7 Story verify allowlist gate [WF-5.7]
+
+Story-specific verify commands (verify[] entries other than ./plans/verify.sh) MUST be allowlisted in plans/story_verify_allowlist.txt unless RPH_ALLOW_UNSAFE_STORY_VERIFY=1.
+
+### 5.8 Optional self-heal [WF-5.8]
 
 If RPH_SELF_HEAL=1 and verification fails:
 
@@ -307,7 +336,7 @@ Ralph SHOULD preserve failure logs in .ralph/ iteration artifacts
 
 Self-heal must never continue building new features on top of a red baseline.
 
-5.8 Completion [WF-5.8]
+### 5.9 Completion [WF-5.9]
 
 Ralph considers the run complete if and only if:
 - all PRD items have passes=true, AND
@@ -320,7 +349,19 @@ If completion conditions are not met, Ralph MUST stop (non-zero) and write a .ra
 Anti-spin safeguard (fail closed) [WF-5.9]:
 - Ralph MUST support RPH_MAX_ITERS (default 50) and MUST stop with a blocked artifact when exceeded.
 
-6) Iteration Artifacts (Required for Debuggability)
+### 5.10 Scope enforcement gate [WF-5.10]
+
+Ralph MUST enforce scope.touch and scope.avoid: any changed file outside scope.touch or matching scope.avoid MUST block the iteration.
+
+### 5.11 Rate limiting and circuit breaker [WF-5.11]
+
+Ralph MUST enforce rate limiting on agent calls (RPH_RATE_LIMIT_*), and MUST stop with a blocked artifact when circuit breaker thresholds are exceeded (RPH_MAX_SAME_FAILURE, RPH_MAX_NO_PROGRESS).
+
+---
+
+## 6) Iteration Artifacts (Required for Debuggability)
+
+### 6.1 Iteration artifacts [WF-6.1]
 
 Every iteration MUST write [WF-6.1]:
 
@@ -350,24 +391,42 @@ Every iteration MUST write [WF-6.1]:
 
 .ralph/iter_*/selection.out (if agent selection mode is used)
 
-Blocked cases MUST write [WF-6.2]:
+### 6.2 Blocked artifacts [WF-6.2]
+
+Blocked cases MUST write:
 
 .ralph/blocked_*/prd_snapshot.json
 
 .ralph/blocked_*/blocked_item.json
 
-.ralph/blocked_*/verify_pre.log (best effort)
+.ralph/blocked_*/verify_pre.log (best effort when verify.sh is available/executable)
 
-7) Contract Alignment Gate (Default)
+### 6.3 Optional diagnostics [WF-6.3]
+
+When applicable, Ralph SHOULD also write:
+
+.ralph/iter_*/story_verify.log
+
+.ralph/iter_*/diff_for_cheat_check.patch
+
+.ralph/iter_*/diff_for_cheat_check.filtered.patch
+
+.ralph/iter_*/progress_appended.txt
+
+.ralph/iter_*/verify_pre_after_heal.log
+
+---
+
+## 7) Contract Alignment Gate (Default)
 
 This is mandatory even if initially performed by a human reviewer.
 
-Rule [WF-7.1]: after a story is implemented and verify_post is green, a contract check MUST occur.
+[WF-7.1] Rule: after a story is implemented and verify_post is green, a contract check MUST occur.
 
-Enforcement (fail closed, artifact-based) [WF-7.2]:
-- Each iteration with verify_post green MUST produce: .ralph/iter_*/contract_review.json
-- The artifact MUST conform to: docs/schemas/contract_review.schema.json (decision PASS|FAIL|BLOCKED).
-- If the contract review artifact is missing or decision!="PASS",
+Enforcement (fail closed, artifact-based):
+- [WF-7.2] Each iteration with verify_post green MUST produce: .ralph/iter_*/contract_review.json
+- [WF-7.3] The artifact MUST conform to: docs/schemas/contract_review.schema.json (decision PASS|FAIL|BLOCKED) and the validator MUST load that schema.
+- [WF-7.4] If the contract review artifact is missing or decision!="PASS",
   Ralph MUST stop and MUST NOT flip passes=true.
 
 Acceptable implementations:
@@ -385,9 +444,11 @@ Any removal/disablement of tests required by contract/workflow
 
 Any change that contradicts explicit contract invariants
 
-8) CI Policy (Single Source of Truth)
+---
 
-CI MUST execute [WF-8.1]:
+## 8) CI Policy (Single Source of Truth)
+
+[WF-8.1] CI MUST execute:
 
 ./plans/verify.sh (preferred as single source of truth)
 
@@ -399,14 +460,19 @@ CI mirrors it, but then ./plans/verify.sh must be updated alongside CI changes.
 
 If CI and verify drift, the repo is lying to itself. Fix drift immediately.
 
-Drift observability requirement [WF-8.2]:
-- ./plans/verify.sh MUST print a single line at start: VERIFY_SH_SHA=<hash>.
-- Ralph MUST capture this line in .ralph/iter_*/verify_pre.log and verify_post.log.
-- CI logs (or CI artifacts) MUST contain the same VERIFY_SH_SHA line for the run.
+Drift observability requirement:
+- [WF-8.2] ./plans/verify.sh MUST print a single line at start: VERIFY_SH_SHA=<hash>.
+- [WF-8.3] Ralph MUST capture this line in .ralph/iter_*/verify_pre.log and verify_post.log.
+- [WF-8.4] CI logs (or CI artifacts) MUST contain the same VERIFY_SH_SHA line for the run.
 
-9) Progress Log (Shift Handoff)
+CI gate source requirement:
+- [WF-8.5] ./plans/verify.sh MUST fail with <promise>BLOCKED_CI_COMMANDS</promise> if CI_GATES_SOURCE is not github/verify and no .github/workflows directory is present.
 
-plans/progress.txt is append-only and MUST include per-iteration entries [WF-9.1]:
+---
+
+## 9) Progress Log (Shift Handoff)
+
+[WF-9.1] plans/progress.txt is append-only and MUST include per-iteration entries:
 
 timestamp
 
@@ -427,9 +493,11 @@ Recommended fields (when relevant):
 
 Optional: rotate to prevent token bloat, but keep an archive (plans/progress_archive.txt).
 
-10) Human Unblock Protocol (How blocks get cleared)
+---
 
-When Ralph stops on a blocked story:
+## 10) Human Unblock Protocol (How blocks get cleared)
+
+[WF-10.1] When Ralph stops on a blocked story:
 
 Read .ralph/blocked_*/blocked_item.json
 
@@ -443,9 +511,11 @@ Re-run Story Cutter/Auditor/Patcher as needed
 
 Restart Ralph
 
-11) Change Control
+---
 
-This file is canonical. Any workflow changes MUST be:
+## 11) Change Control
+
+[WF-11.1] This file is canonical. Any workflow changes MUST be:
 
 made here first
 
@@ -453,43 +523,50 @@ reflected in scripts (plans/ralph.sh, plans/verify.sh) second
 
 enforced in CI third
 
-12) Acceptance Tests (REQUIRED)
+---
+
+## 12) Acceptance Tests (REQUIRED)
 
 Workflow Contract Acceptance Tests (checklist) [WF-12.1]
 
-Preflight / PRD validation
+Preflight / PRD validation [WF-12.1]
 
 [ ] Running ./plans/ralph.sh with missing plans/prd.json exits non-zero and writes a .ralph/* stop artifact.
 [ ] Running ./plans/ralph.sh with invalid JSON in plans/prd.json exits non-zero before any implementation work.
 [ ] Running ./plans/ralph.sh with a PRD item missing required fields (e.g., empty contract_refs, missing verify, acceptance < 3, steps < 5, missing ./plans/verify.sh in verify[]) exits non-zero.
 
-Baseline integrity
+Baseline integrity [WF-12.2]
 
 [ ] If ./plans/verify.sh fails during verify_pre, Ralph performs no implementation steps and stops (observable via .ralph/iter_*/verify_pre.log + no code diff beyond reset).
 [ ] If RPH_SELF_HEAL=1 and verify_pre remains red after one reset attempt, Ralph stops non-zero.
 
-Pass flipping integrity
+Pass flipping integrity [WF-12.3]
 
 [ ] If any PRD item flips passes from false→true, the same iteration contains .ralph/iter_*/verify_post.log showing exit code 0.
 [ ] If .ralph/iter_*/contract_review.json is missing or has decision!="PASS", Ralph does not flip passes=true and stops non-zero.
 [ ] Exactly one PRD item’s passes flips per iteration (compare .ralph/iter_*/prd_before.json vs prd_after.json).
 
-Slice gating / blocked behavior
+Slice gating / blocked behavior [WF-12.4]
 
 [ ] With any passes=false item in slice N, Ralph never selects an item from slice > N (observable via .ralph/iter_*/selected.json).
 [ ] If the selected story has needs_human_decision=true, Ralph stops immediately and writes .ralph/blocked_*/blocked_item.json.
 
-Completion semantics (no fail-open)
+Completion semantics (no fail-open) [WF-12.5]
 
 [ ] If the agent outputs COMPLETE while any PRD item has passes=false, Ralph stops non-zero and writes a .ralph/blocked_incomplete_* artifact.
 [ ] Ralph only exits “complete” when all items have passes=true and the most recent verify_post is green.
 
-Anti-spin
+Anti-spin [WF-12.6]
 
 [ ] With RPH_MAX_ITERS=2, a scenario that would otherwise continue past 2 iterations stops at the limit and writes a blocked artifact documenting the stop reason.
 
-CI / verify drift observability
+CI / verify drift observability [WF-12.7]
 
 [ ] ./plans/verify.sh emits VERIFY_SH_SHA=... as the first line.
 [ ] .ralph/iter_*/verify_pre.log and verify_post.log contain that same VERIFY_SH_SHA=....
 [ ] CI logs/artifacts for a run contain the same VERIFY_SH_SHA=... line.
+
+Traceability / drift gate [WF-12.8]
+
+[ ] plans/workflow_contract_gate.sh fails if any WF-* rule_id in specs/WORKFLOW_CONTRACT.md is unmapped or lacks enforcement + artifact metadata.
+[ ] plans/workflow_acceptance.sh runs the traceability gate.

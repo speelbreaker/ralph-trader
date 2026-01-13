@@ -18,17 +18,22 @@ run_in_worktree() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 cp "$ROOT/plans/ralph.sh" "$WORKTREE/plans/ralph.sh"
 cp "$ROOT/plans/verify.sh" "$WORKTREE/plans/verify.sh"
 cp "$ROOT/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_schema_check.sh"
 cp "$ROOT/plans/contract_review_validate.sh" "$WORKTREE/plans/contract_review_validate.sh"
-chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" >/dev/null 2>&1 || true
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh >/dev/null 2>&1 || true
+cp "$ROOT/plans/workflow_contract_gate.sh" "$WORKTREE/plans/workflow_contract_gate.sh"
+cp "$ROOT/plans/workflow_contract_map.json" "$WORKTREE/plans/workflow_contract_map.json"
+cp "$ROOT/specs/WORKFLOW_CONTRACT.md" "$WORKTREE/specs/WORKFLOW_CONTRACT.md"
+chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 echo "plans/contract_check.sh" >> "$exclude_file"
 echo "plans/contract_review_validate.sh" >> "$exclude_file"
+echo "plans/workflow_contract_gate.sh" >> "$exclude_file"
+echo "plans/workflow_contract_map.json" >> "$exclude_file"
 
 count_blocked() {
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' | wc -l | tr -d ' '
@@ -61,7 +66,7 @@ latest_blocked_incomplete() {
 }
 
 reset_state() {
-  rm -f "$WORKTREE/.ralph/state.json" "$WORKTREE/.ralph/last_failure_path" "$WORKTREE/.ralph/rate_limit.json" 2>/dev/null || true
+  rm -f "$WORKTREE/.ralph/state.json" "$WORKTREE/.ralph/last_failure_path" "$WORKTREE/.ralph/last_good_ref" "$WORKTREE/.ralph/rate_limit.json" 2>/dev/null || true
   rm -rf "$WORKTREE/.ralph/lock" 2>/dev/null || true
 }
 
@@ -187,6 +192,14 @@ exit 0
 EOF
 chmod +x "$STUB_DIR/verify_pass.sh"
 
+cat > "$STUB_DIR/verify_fail.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "VERIFY_SH_SHA=stub"
+exit 1
+EOF
+chmod +x "$STUB_DIR/verify_fail.sh"
+
 cat > "$STUB_DIR/agent_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -212,6 +225,33 @@ echo "<mark_pass>${id}</mark_pass>"
 EOF
 chmod +x "$STUB_DIR/agent_mark_pass_with_progress.sh"
 
+cat > "$STUB_DIR/agent_commit_with_progress.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance commit without pass
+Commands: echo >> ${touch_file}; git add; git commit
+Evidence: acceptance stub
+Next: continue
+EOT
+echo "tick $(date +%s)" >> "$touch_file"
+git add "$touch_file" "$progress"
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: tick" >/dev/null 2>&1
+EOF
+chmod +x "$STUB_DIR/agent_commit_with_progress.sh"
+
+cat > "$STUB_DIR/agent_commit_progress_no_mark_pass.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec "$(dirname "$0")/agent_commit_with_progress.sh"
+EOF
+chmod +x "$STUB_DIR/agent_commit_progress_no_mark_pass.sh"
+
 cat > "$STUB_DIR/agent_complete.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -225,6 +265,16 @@ set -euo pipefail
 echo "invalid_selection"
 EOF
 chmod +x "$STUB_DIR/agent_invalid_selection.sh"
+
+cat > "$STUB_DIR/agent_delete_test_file_and_commit.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+file="${DELETE_TEST_FILE:-tests/test_dummy.rs}"
+rm -f "$file"
+git add -u
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "delete test" >/dev/null 2>&1
+EOF
+chmod +x "$STUB_DIR/agent_delete_test_file_and_commit.sh"
 
 write_contract_check_stub() {
   local decision="${1:-PASS}"
@@ -619,18 +669,133 @@ if [[ "$rc" -ne 0 ]]; then
   exit 1
 fi
 
-echo "Test 10: needs_human_decision=true blocks execution"
+
+
+echo "Test 10: contract_review_validate enforces schema file"
+valid_review="$WORKTREE/.ralph/contract_review_valid.json"
+cat > "$valid_review" <<'JSON'
+{
+  "selected_story_id": "S1-000",
+  "decision": "PASS",
+  "confidence": "high",
+  "contract_refs_checked": ["CONTRACT.md §1"],
+  "scope_check": { "changed_files": [], "out_of_scope_files": [], "notes": ["ok"] },
+  "verify_check": { "verify_post_present": true, "verify_post_green": true, "notes": ["ok"] },
+  "pass_flip_check": {
+    "requested_mark_pass_id": "S1-000",
+    "prd_passes_before": false,
+    "prd_passes_after": false,
+    "evidence_required": [],
+    "evidence_found": [],
+    "evidence_missing": [],
+    "decision_on_pass_flip": "DENY"
+  },
+  "violations": [],
+  "required_followups": [],
+  "rationale": ["ok"]
+}
+JSON
+bad_schema="$WORKTREE/.ralph/contract_review.schema.bad.json"
+echo '{}' > "$bad_schema"
+set +e
+run_in_worktree env CONTRACT_REVIEW_SCHEMA="$bad_schema" ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected contract_review_validate to fail with invalid schema" >&2
+  exit 1
+fi
+run_in_worktree ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2>&1
+
+echo "Test 11: workflow contract traceability gate"
+run_in_worktree ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+bad_map="$WORKTREE/.ralph/workflow_contract_map.bad.json"
+run_in_worktree jq 'del(.rules[0])' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_map"
+set +e
+run_in_worktree env WORKFLOW_CONTRACT_MAP="$bad_map" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected workflow_contract_gate to fail with missing rule id" >&2
+  exit 1
+fi
+
+echo "Test 12: missing PRD file stops preflight"
 reset_state
-valid_prd_10="$WORKTREE/.ralph/valid_prd_10.json"
-write_valid_prd "$valid_prd_10" "S1-010"
-# Modify to set needs_human_decision=true
-tmp=$(mktemp)
-run_in_worktree jq '.items[0].needs_human_decision = true | .items[0].human_blocker = {"why":"test","question":"?","options":["A"],"recommended":"A","unblock_steps":["fix"]}' "$valid_prd_10" > "$tmp" && mv "$tmp" "$valid_prd_10"
+missing_prd="$WORKTREE/.ralph/missing_prd.json"
+before_blocked="$(count_blocked)"
 set +e
 run_in_worktree env \
-  PRD_FILE="$valid_prd_10" \
+  PRD_FILE="$missing_prd" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for missing PRD file" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for missing PRD file" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "missing_prd")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected missing_prd blocked artifact" >&2
+  exit 1
+fi
+
+echo "Test 13: verify_pre failure stops before implementation"
+reset_state
+valid_prd_13="$WORKTREE/.ralph/valid_prd_13.json"
+write_valid_prd "$valid_prd_13" "S1-010"
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_13" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_fail.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  SELECTED_ID="S1-010" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for verify_pre failure" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "verify_pre_failed")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected verify_pre_failed blocked artifact" >&2
+  exit 1
+fi
+dirty_status="$(run_in_worktree git status --porcelain)"
+if [[ -n "$dirty_status" ]]; then
+  echo "FAIL: expected clean worktree after verify_pre failure" >&2
+  echo "$dirty_status" >&2
+  exit 1
+fi
+
+echo "Test 14: needs_human_decision=true blocks execution"
+reset_state
+valid_prd_14="$WORKTREE/.ralph/valid_prd_14.json"
+write_valid_prd "$valid_prd_14" "S1-010"
+# Modify to set needs_human_decision=true
+_tmp=$(mktemp)
+run_in_worktree jq '.items[0].needs_human_decision = true | .items[0].human_blocker = {"why":"test","question":"?","options":["A"],"recommended":"A","unblock_steps":["fix"]}' "$valid_prd_14" > "$_tmp" && mv "$_tmp" "$valid_prd_14"
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_14" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_commit_progress_no_mark_pass.sh" \
   RPH_SELECTION_MODE=harness \
   ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
@@ -645,42 +810,35 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 
-echo "Test 11: cheating detected (deleted test file)"
+echo "Test 15: cheating detected (deleted test file)"
 reset_state
-valid_prd_11="$WORKTREE/.ralph/valid_prd_11.json"
-write_valid_prd "$valid_prd_11" "S1-011"
+valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
+write_valid_prd "$valid_prd_15" "S1-011"
 # Update scope to include tests/test_dummy.rs
-tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["tests/test_dummy.rs"]' "$valid_prd_11" > "$tmp" && mv "$tmp" "$valid_prd_11"
+_tmp=$(mktemp)
+run_in_worktree jq '.items[0].scope.touch += ["tests/test_dummy.rs"]' "$valid_prd_15" > "$_tmp" && mv "$_tmp" "$valid_prd_15"
 
 # Create a dummy test file to delete
 run_in_worktree mkdir -p tests
 run_in_worktree touch "tests/test_dummy.rs"
 run_in_worktree git add "tests/test_dummy.rs"
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "add dummy test" >/dev/null 2>&1
-
-# Agent script that deletes the file
-cat > "$STUB_DIR/agent_cheat.sh" <<'EOF_CHEAT'
-#!/usr/bin/env bash
-rm tests/test_dummy.rs
-git add -u
-git -c user.name="test" -c user.email="test@local" commit -m "delete test"
-EOF_CHEAT
-chmod +x "$STUB_DIR/agent_cheat.sh"
+start_sha="$(run_in_worktree git rev-parse HEAD)"
 
 set +e
 run_in_worktree env \
-  PRD_FILE="$valid_prd_11" \
+  PRD_FILE="$valid_prd_15" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_cheat.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_delete_test_file_and_commit.sh" \
   RPH_CHEAT_DETECTION="block" \
+  RPH_SELF_HEAL=1 \
   RPH_SELECTION_MODE=harness \
   ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
 set -e
-if [[ "$rc" -eq 0 ]]; then
-  echo "FAIL: expected non-zero exit for cheating (deleted test)" >&2
+if [[ "$rc" -ne 9 ]]; then
+  echo "FAIL: expected exit code 9 for cheating (deleted test), got $rc" >&2
   exit 1
 fi
 latest_block="$(latest_blocked_with_reason "cheating_detected")"
@@ -688,46 +846,150 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for cheating_detected" >&2
   exit 1
 fi
+reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
+if [[ "$reason" != "cheating_detected" ]]; then
+  echo "FAIL: expected reason=cheating_detected, got ${reason}" >&2
+  exit 1
+fi
+end_sha="$(run_in_worktree git rev-parse HEAD)"
+if [[ "$start_sha" != "$end_sha" ]]; then
+  echo "FAIL: expected self-heal to revert to last_good_ref after cheating_detected" >&2
+  exit 1
+fi
+last_good="$(run_in_worktree cat "$WORKTREE/.ralph/last_good_ref" 2>/dev/null || true)"
+if [[ -z "$last_good" ]]; then
+  echo "FAIL: expected last_good_ref to be recorded for self-heal" >&2
+  exit 1
+fi
+if [[ "$end_sha" != "$last_good" ]]; then
+  echo "FAIL: expected HEAD to match last_good_ref after self-heal" >&2
+  exit 1
+fi
+if ! run_in_worktree test -f "tests/test_dummy.rs"; then
+  echo "FAIL: expected test file restored after self-heal" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
 
-echo "Test 12: max iterations exceeded"
+echo "Test 16: active slice gating selects lowest slice"
 reset_state
-valid_prd_12="$WORKTREE/.ralph/valid_prd_12.json"
-write_valid_prd "$valid_prd_12" "S1-012"
-# Agent that does NOT mark pass, just spins
-cat > "$STUB_DIR/agent_spin.sh" <<'EOF_SPIN'
-#!/usr/bin/env bash
-echo "spinning..."
-pf="${PROGRESS_FILE:-plans/progress.txt}"
-cat >> "$pf" <<TXT
-$(date +%Y-%m-%d) - S1-012
-Summary: spinning
-Commands: none
-Evidence: none
-Next: more spinning
-TXT
-git add "$pf"
-git -c user.name="test" -c user.email="test@local" commit -m "update progress"
-EOF_SPIN
-chmod +x "$STUB_DIR/agent_spin.sh"
+valid_prd_16="$WORKTREE/.ralph/valid_prd_16.json"
+cat > "$valid_prd_16" <<'JSON'
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-012",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Slice 1 story",
+      "category": "acceptance",
+      "description": "slice 1 story",
+      "contract_refs": ["CONTRACT.md §1"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": { "touch": ["acceptance_tick.txt"], "avoid": [] },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    },
+    {
+      "id": "S2-001",
+      "priority": 100,
+      "phase": 1,
+      "slice": 2,
+      "slice_ref": "Slice 2",
+      "story_ref": "Slice 2 story",
+      "category": "acceptance",
+      "description": "slice 2 story",
+      "contract_refs": ["CONTRACT.md §1"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": { "touch": ["acceptance_tick.txt"], "avoid": [] },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+run_in_worktree env \
+  PRD_FILE="$valid_prd_16" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+selected_id="$(run_in_worktree jq -r '.selected_id // empty' "$WORKTREE/$iter_dir/selected.json")"
+if [[ "$selected_id" != "S1-012" ]]; then
+  echo "FAIL: expected slice 1 selection (S1-012), got ${selected_id}" >&2
+  exit 1
+fi
 
+echo "Test 17: max iterations exceeded"
+reset_state
+valid_prd_17="$WORKTREE/.ralph/valid_prd_17.json"
+write_valid_prd "$valid_prd_17" "S1-012"
+_tmp=$(mktemp)
+run_in_worktree jq '.items[0].scope.touch += ["acceptance_tick.txt"]' "$valid_prd_17" > "$_tmp" && mv "$_tmp" "$valid_prd_17"
 set +e
-  run_in_worktree env PRD_FILE="$valid_prd_12" PROGRESS_FILE="plans/progress.txt" VERIFY_SH="$STUB_DIR/verify_pass.sh" RPH_AGENT_CMD="$STUB_DIR/agent_spin.sh" RPH_MAX_ITERS=2 RPH_SELECTION_MODE=harness ./plans/ralph.sh 2 >/dev/null 2>&1
+run_in_worktree env \
+  PRD_FILE="$valid_prd_17" \
+  PROGRESS_FILE="plans/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_commit_progress_no_mark_pass.sh" \
+  SELECTED_ID="S1-012" \
+  RPH_CIRCUIT_BREAKER_ENABLED=0 \
+  RPH_MAX_ITERS=2 \
+  RPH_SELECTION_MODE=harness \
+  ./plans/ralph.sh 2 >/dev/null 2>&1
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for max iters exceeded" >&2
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "max_iters_exceeded")"
+latest_block="$(ls -dt "$WORKTREE/.ralph"/blocked_max_iters_* 2>/dev/null | head -n 1 || true)"
 if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for max_iters_exceeded" >&2
   exit 1
 fi
+reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
+if [[ "$reason" != "max_iters_exceeded" ]]; then
+  echo "FAIL: expected reason=max_iters_exceeded, got ${reason}" >&2
+  exit 1
+fi
 
-echo "Test 13: self-heal reverts bad changes"
+echo "Test 18: self-heal reverts bad changes"
 reset_state
-valid_prd_13="$WORKTREE/.ralph/valid_prd_13.json"
-write_valid_prd "$valid_prd_13" "S1-013"
+valid_prd_18="$WORKTREE/.ralph/valid_prd_18.json"
+write_valid_prd "$valid_prd_18" "S1-013"
+# Allow the self-heal agent to touch the file it creates.
+_tmp=$(mktemp)
+run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_18" > "$_tmp" && mv "$_tmp" "$valid_prd_18"
 # Start with clean slate
 run_in_worktree git add . >/dev/null 2>&1 || true
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "pre-self-heal" >/dev/null 2>&1 || true
@@ -736,20 +998,23 @@ start_sha="$(run_in_worktree git rev-parse HEAD)"
 # Agent that breaks something
 cat > "$STUB_DIR/agent_break.sh" <<'SH'
 #!/usr/bin/env bash
+set -euo pipefail
 echo "broken" > broken_root.rs
+git add broken_root.rs
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "break" >/dev/null 2>&1
 SH
 chmod +x "$STUB_DIR/agent_break.sh"
 
 set +e
 run_in_worktree env \
-  PRD_FILE="$valid_prd_13" \
+  PRD_FILE="$valid_prd_18" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
-  VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test13" \
+  VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test18" \
   RPH_AGENT_CMD="$STUB_DIR/agent_break.sh" \
   RPH_SELF_HEAL=1 \
   RPH_SELECTION_MODE=harness \
-  ./plans/ralph.sh 1 >/dev/null 2>&1
+  ./plans/ralph.sh 2 >/dev/null 2>&1
 rc=$?
 set -e
 end_sha="$(run_in_worktree git rev-parse HEAD)"

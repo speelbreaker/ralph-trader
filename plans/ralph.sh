@@ -147,12 +147,34 @@ write_blocked_basic() {
   echo "$block_dir"
 }
 
+run_verify() {
+  local out="$1"
+  shift
+  set +e
+  "$VERIFY_SH" "$RPH_VERIFY_MODE" "$@" 2>&1 | tee "$out"
+  local rc=${PIPESTATUS[0]}
+  set -e
+  return $rc
+}
+
+attempt_blocked_verify_pre() {
+  local block_dir="$1"
+  if [[ "$RPH_DRY_RUN" == "1" ]]; then
+    return 0
+  fi
+  if [[ -x "$VERIFY_SH" ]]; then
+    run_verify "$block_dir/verify_pre.log" || true
+  fi
+  return 0
+}
+
 block_preflight() {
   local reason="$1"
   local details="$2"
   local code="${3:-1}"
   local block_dir
   block_dir="$(write_blocked_basic "$reason" "$details")"
+  attempt_blocked_verify_pre "$block_dir" || true
   echo "Blocked preflight: $reason ($details) in $block_dir" | tee -a "$LOG_FILE"
   exit "$code"
 }
@@ -247,27 +269,6 @@ rotate_progress() {
   if [[ -x "$ROTATE_PY" ]]; then
     "$ROTATE_PY" --file "$PROGRESS_FILE" --keep 200 --archive plans/progress_archive.txt --max-lines 500 || true
   fi
-}
-
-run_verify() {
-  local out="$1"
-  shift
-  set +e
-  "$VERIFY_SH" "$RPH_VERIFY_MODE" "$@" 2>&1 | tee "$out"
-  local rc=${PIPESTATUS[0]}
-  set -e
-  return $rc
-}
-
-attempt_blocked_verify_pre() {
-  local block_dir="$1"
-  if [[ "$RPH_DRY_RUN" == "1" ]]; then
-    return 0
-  fi
-  if [[ -x "$VERIFY_SH" ]]; then
-    run_verify "$block_dir/verify_pre.log" || true
-  fi
-  return 0
 }
 
 story_verify_cmd_allowed() {

@@ -57,6 +57,17 @@ TXT
   echo "[init] created $PROGRESS_FILE"
 fi
 
+# --- optional logs (create if missing)
+if [[ ! -f "plans/ideas.md" ]]; then
+  echo "# Ideas & Deferred Items" > "plans/ideas.md"
+  echo "[init] created plans/ideas.md"
+fi
+
+if [[ ! -f "plans/pause.md" ]]; then
+  echo "# Pause / Handoff Notes" > "plans/pause.md"
+  echo "[init] created plans/pause.md"
+fi
+
 # --- PRD must exist + be valid JSON (otherwise Ralph is blind)
 if [[ ! -f "$PRD_FILE" ]]; then
   echo "[init] ERROR: missing $PRD_FILE"
@@ -123,6 +134,10 @@ fi
 
 if [[ -f "$CONTRACT_CHECK_SH" ]]; then
   chmod +x "$CONTRACT_CHECK_SH" || true
+fi
+
+if [[ -f "plans/contract_review_validate.sh" ]]; then
+  chmod +x "plans/contract_review_validate.sh" || true
 fi
 
 # --- shell sanity (cheap, catches 80% of dumb)

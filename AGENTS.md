@@ -11,6 +11,7 @@ Read this first. It is the shortest, enforceable workflow summary.
 ## Start here (every session)
 - Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
 - Read `plans/prd.json` and `plans/progress.txt`.
+- Read `docs/skills/workflow.md`.
 - Run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
 - Work only the selected PRD item.
 
@@ -19,6 +20,7 @@ Read this first. It is the shortest, enforceable workflow summary.
 - Append deferred ideas to `plans/ideas.md`.
 - If pausing mid-story, fill `plans/pause.md`.
 - Append to `plans/progress.txt`; include Assumptions/Open questions when applicable.
+- Update `docs/skills/workflow.md` only when a new repeated pattern is discovered (manual judgment).
 
 ## Repo map
 - `crates/` - Rust execution + risk (`soldier_core/`, `soldier_infra/`).
