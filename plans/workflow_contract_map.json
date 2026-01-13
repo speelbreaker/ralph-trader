@@ -5,20 +5,21 @@
       "id": "WF-0.1",
       "title": "Trading behavior rules CONTRACT.md is canonical. If this workflow contract conflicts with CONTRACT.md on behavior, STOP and set needs human decision=true.",
       "enforcement": [
-        "manual"
+        "plans/contract_check.sh",
+        "plans/contract_review_validate.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "CONTRACT.md"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 6-9)"
       ]
     },
     {
       "id": "WF-0.2",
       "title": "Workflow/process rules this file is canonical. If other workflow docs conflict with this file, this file wins.",
       "enforcement": [
-        "manual"
+        "specs/WORKFLOW_CONTRACT.md"
       ],
       "artifacts": [
         "specs/WORKFLOW_CONTRACT.md"
@@ -31,10 +32,11 @@
       "id": "WF-1.1",
       "title": "CONTRACT.md (canonical trading contract)",
       "enforcement": [
-        "manual"
+        "plans/init.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "CONTRACT.md"
       ],
       "tests": [
         "manual"
@@ -44,10 +46,11 @@
       "id": "WF-1.2",
       "title": "IMPLEMENTATION PLAN.md (slice map; may be specs/IMPLEMENTATION PLAN.md )",
       "enforcement": [
-        "manual"
+        "plans/init.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "IMPLEMENTATION_PLAN.md"
       ],
       "tests": [
         "manual"
@@ -55,25 +58,26 @@
     },
     {
       "id": "WF-1.3",
-      "title": "plans/prd.json  story backlog (machine readable)",
+      "title": "plans/prd.json  story backlog (machine-readable)",
       "enforcement": [
-        "manual"
+        "plans/init.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 12)"
       ]
     },
     {
       "id": "WF-1.4",
       "title": "plans/ralph.sh  execution harness (iterative loop)",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/ralph.sh"
       ],
       "tests": [
         "manual"
@@ -83,10 +87,11 @@
       "id": "WF-1.5",
       "title": "plans/verify.sh  verification gate (CI must run this)",
       "enforcement": [
-        "manual"
+        "plans/verify.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/verify.sh"
       ],
       "tests": [
         "manual"
@@ -94,12 +99,13 @@
     },
     {
       "id": "WF-1.6",
-      "title": "plans/progress.txt  append only shift handoff log",
+      "title": "plans/progress.txt  append-only shift handoff log",
       "enforcement": [
-        "manual"
+        "plans/init.sh",
+        "plans/ralph.sh (progress append)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/progress.txt"
       ],
       "tests": [
         "manual"
@@ -107,38 +113,44 @@
     },
     {
       "id": "WF-2.1",
-      "title": "Contract alignment is mandatory.",
+      "title": "1) Contract alignment is mandatory.",
       "enforcement": [
-        "manual"
+        "plans/contract_check.sh",
+        "plans/contract_review_validate.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "CONTRACT.md",
+        ".ralph/iter_*/contract_review.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 6-9)"
       ]
     },
     {
       "id": "WF-2.2",
-      "title": "Verification is mandatory.",
+      "title": "2) Verification is mandatory.",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (verify_pre/post)",
+        "plans/verify.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/iter_*/verify_post.log"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 2, Test 13)"
       ]
     },
     {
       "id": "WF-2.3",
-      "title": "WIP = 1 (Ralph execution only).",
+      "title": "3) WIP = 1 (Ralph execution only).",
       "enforcement": [
-        "manual"
+        "plans/contract_check.sh (commit count)",
+        "plans/ralph.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/head_before.txt",
+        ".ralph/iter_*/head_after.txt"
       ],
       "tests": [
         "manual"
@@ -146,41 +158,42 @@
     },
     {
       "id": "WF-2.4",
-      "title": "Slices are executed in order.",
+      "title": "4) Slices are executed in order.",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (active slice gating)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/selected.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 16)"
       ]
     },
     {
       "id": "WF-2.5",
-      "title": "No cheating.",
+      "title": "5) No cheating.",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (cheat detection)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_*/blocked_item.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 15)"
       ]
     },
     {
       "id": "WF-2.6",
-      "title": "plans/ralph.sh MUST exit non zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.",
+      "title": "plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (blocked artifacts)",
+        "plans/contract_check.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_*/blocked_item.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1-5)"
       ]
     },
     {
@@ -200,83 +213,89 @@
       "id": "WF-3.1",
       "title": "plans/prd.json MUST be valid JSON with this shape",
       "enforcement": [
-        "manual"
+        "plans/prd_schema_check.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1)"
       ]
     },
     {
       "id": "WF-3.2",
-      "title": "Ralph MUST validate required top level keys exist project, source, rules, items.",
+      "title": "Ralph MUST validate required top-level keys exist project, source, rules, items.",
       "enforcement": [
-        "manual"
+        "plans/prd_schema_check.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1)"
       ]
     },
     {
       "id": "WF-3.3",
       "title": "Ralph MUST validate for every item required fields per 3 are present; acceptance has  3 entries; steps has  5 entries; verify[] contains ./plans/verify.sh.",
       "enforcement": [
-        "manual"
+        "plans/prd_schema_check.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1)"
       ]
     },
     {
       "id": "WF-3.4",
       "title": "Ralph MUST validate if needs human decision=true then human blocker object is present.",
       "enforcement": [
-        "manual"
+        "plans/prd_schema_check.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1)"
       ]
     },
     {
       "id": "WF-3.5",
       "title": "Each item MUST include",
       "enforcement": [
-        "manual"
+        "plans/prd_schema_check.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1)"
       ]
     },
     {
       "id": "WF-3.6",
       "title": "If needs human decision=true, item MUST also include",
       "enforcement": [
-        "manual"
+        "plans/prd_schema_check.sh",
+        "plans/ralph.sh (preflight)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/prd.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 14)"
       ]
     },
     {
       "id": "WF-4.1",
-      "title": "Workflow rule",
+      "title": "4.1 Story Cutter (generator)",
       "enforcement": [
         "manual"
       ],
@@ -289,7 +308,7 @@
     },
     {
       "id": "WF-4.2",
-      "title": "Workflow rule",
+      "title": "4.2 Auditor (reviewer)",
       "enforcement": [
         "manual"
       ],
@@ -302,7 +321,7 @@
     },
     {
       "id": "WF-4.3",
-      "title": "Workflow rule",
+      "title": "4.3 PRD Patcher (surgical editor)",
       "enforcement": [
         "manual"
       ],
@@ -315,7 +334,7 @@
     },
     {
       "id": "WF-4.4",
-      "title": "Workflow rule",
+      "title": "4.4 Implementer (Ralph execution agent)",
       "enforcement": [
         "manual"
       ],
@@ -328,7 +347,7 @@
     },
     {
       "id": "WF-4.5",
-      "title": "Workflow rule",
+      "title": "4.5 Contract Arbiter (post-commit contract check)",
       "enforcement": [
         "manual"
       ],
@@ -341,7 +360,7 @@
     },
     {
       "id": "WF-4.6",
-      "title": "Workflow rule",
+      "title": "4.6 Handoff hygiene (who does what and when)",
       "enforcement": [
         "manual"
       ],
@@ -354,7 +373,7 @@
     },
     {
       "id": "WF-4.7",
-      "title": "Workflow rule",
+      "title": "4.7 Workflow skill memory (manual, versioned)",
       "enforcement": [
         "manual"
       ],
@@ -369,10 +388,10 @@
       "id": "WF-5.0",
       "title": "Ralph is the only allowed automation for overnight changes. This loop applies to PRD execution only; workflow maintenance tasks follow 11 and do not require PRD items.",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/ralph.sh"
       ],
       "tests": [
         "manual"
@@ -380,72 +399,77 @@
     },
     {
       "id": "WF-5.1",
-      "title": "Workflow rule",
+      "title": "5.1 Preflight invariants (before iteration 1)",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (preflight)",
+        "plans/prd_schema_check.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_*/blocked_item.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1, Test 5, Test 12)"
       ]
     },
     {
       "id": "WF-5.2",
-      "title": "Workflow rule",
+      "title": "5.2 Active slice gating",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (selection)",
+        "plans/prd.json"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/selected.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 16)"
       ]
     },
     {
       "id": "WF-5.3",
-      "title": "Workflow rule",
+      "title": "5.3 Selection modes",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (selection modes)",
+        "plans/prd.json"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/selection.out"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 4)"
       ]
     },
     {
       "id": "WF-5.4",
-      "title": "Workflow rule",
+      "title": "5.4 Hard stop on human decision",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (needs_human_decision)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_*/blocked_item.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 14)"
       ]
     },
     {
       "id": "WF-5.5",
-      "title": "Workflow rule",
+      "title": "5.5 Verify gates (pre/post)",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (verify_pre/post)",
+        "plans/verify.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/iter_*/verify_post.log"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 2, Test 13)"
       ]
     },
     {
       "id": "WF-5.5.1",
-      "title": "verify.sh MUST enforce the endpoint level test gate if endpoint ish files change, corresponding tests must change, unless ENDPOINT GATE=0 in a non CI run.",
+      "title": "verify.sh MUST enforce the endpoint-level test gate if endpoint-ish files change, corresponding tests must change, unless ENDPOINT GATE=0 in a non-CI run.",
       "enforcement": [
         "manual"
       ],
@@ -458,12 +482,13 @@
     },
     {
       "id": "WF-5.6",
-      "title": "Workflow rule",
+      "title": "5.6 Story verify requirement gate",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (story verify gate)",
+        "plans/story_verify_allowlist.txt"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/story_verify.log"
       ],
       "tests": [
         "manual"
@@ -471,12 +496,13 @@
     },
     {
       "id": "WF-5.7",
-      "title": "Workflow rule",
+      "title": "5.7 Story verify allowlist gate",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (allowlist)",
+        "plans/story_verify_allowlist.txt"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/story_verify_allowlist.txt"
       ],
       "tests": [
         "manual"
@@ -484,38 +510,41 @@
     },
     {
       "id": "WF-5.8",
-      "title": "Workflow rule",
+      "title": "5.8 Optional self-heal",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (self-heal)",
+        ".ralph/last_good_ref"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/last_good_ref"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 18)"
       ]
     },
     {
       "id": "WF-5.9",
-      "title": "Workflow rule",
+      "title": "5.9 Completion",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (completion)",
+        "plans/contract_check.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_incomplete_*/blocked_item.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 3)"
       ]
     },
     {
       "id": "WF-5.10",
-      "title": "Workflow rule",
+      "title": "5.10 Scope enforcement gate",
       "enforcement": [
-        "manual"
+        "plans/contract_check.sh (scope)",
+        "plans/ralph.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/diff.patch"
       ],
       "tests": [
         "manual"
@@ -523,12 +552,12 @@
     },
     {
       "id": "WF-5.11",
-      "title": "Workflow rule",
+      "title": "5.11 Rate limiting and circuit breaker",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (rate limit, circuit breaker)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/rate_limit.json"
       ],
       "tests": [
         "manual"
@@ -536,7 +565,7 @@
     },
     {
       "id": "WF-5.12",
-      "title": "Workflow rule",
+      "title": "5.12 Iteration timeouts (optional)",
       "enforcement": [
         "manual"
       ],
@@ -549,7 +578,7 @@
     },
     {
       "id": "WF-5.13",
-      "title": "Workflow rule",
+      "title": "5.13 Profiles (optional presets)",
       "enforcement": [
         "manual"
       ],
@@ -562,12 +591,12 @@
     },
     {
       "id": "WF-6.1",
-      "title": "Workflow rule",
+      "title": "6.1 Iteration artifacts",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (iteration artifacts)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/selected.json"
       ],
       "tests": [
         "manual"
@@ -575,20 +604,20 @@
     },
     {
       "id": "WF-6.2",
-      "title": "Workflow rule",
+      "title": "6.2 Blocked artifacts",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (blocked artifacts)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_*/blocked_item.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1-5)"
       ]
     },
     {
       "id": "WF-6.3",
-      "title": "Workflow rule",
+      "title": "6.3 Optional diagnostics",
       "enforcement": [
         "manual"
       ],
@@ -603,62 +632,63 @@
       "id": "WF-7.1",
       "title": "Rule after a story is implemented and verify post is green, a contract check MUST occur.",
       "enforcement": [
-        "manual"
+        "plans/contract_check.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/contract_review.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 6-9)"
       ]
     },
     {
       "id": "WF-7.2",
       "title": "Each iteration with verify post green MUST produce .ralph/iter /contract review.json",
       "enforcement": [
-        "manual"
+        "plans/contract_check.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/contract_review.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 6-9)"
       ]
     },
     {
       "id": "WF-7.3",
       "title": "The artifact MUST conform to docs/schemas/contract review.schema.json (decision PASS|FAIL|BLOCKED) and the validator MUST load that schema.",
       "enforcement": [
-        "manual"
+        "plans/contract_review_validate.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "docs/schemas/contract_review.schema.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 10)"
       ]
     },
     {
       "id": "WF-7.4",
       "title": "If the contract review artifact is missing or decision!=\"PASS\",",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (contract review gate)",
+        "plans/contract_check.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/contract_review.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 6-9)"
       ]
     },
     {
       "id": "WF-8.1",
       "title": "CI MUST execute",
       "enforcement": [
-        "manual"
+        "plans/verify.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/verify.sh"
       ],
       "tests": [
         "manual"
@@ -668,10 +698,11 @@
       "id": "WF-8.2",
       "title": "./plans/verify.sh MUST print a single line at start VERIFY SH SHA=<hash .",
       "enforcement": [
-        "manual"
+        "plans/verify.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/iter_*/verify_post.log"
       ],
       "tests": [
         "manual"
@@ -681,10 +712,11 @@
       "id": "WF-8.3",
       "title": "Ralph MUST capture this line in .ralph/iter /verify pre.log and verify post.log.",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/iter_*/verify_post.log"
       ],
       "tests": [
         "manual"
@@ -694,10 +726,10 @@
       "id": "WF-8.4",
       "title": "CI logs (or CI artifacts) MUST contain the same VERIFY SH SHA line for the run.",
       "enforcement": [
-        "manual"
+        "CI"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "CI logs"
       ],
       "tests": [
         "manual"
@@ -707,10 +739,10 @@
       "id": "WF-8.5",
       "title": "./plans/verify.sh MUST fail with <promise BLOCKED CI COMMANDS</promise if CI GATES SOURCE is not github/verify and no .github/workflows directory is present.",
       "enforcement": [
-        "manual"
+        "plans/verify.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/verify.sh"
       ],
       "tests": [
         "manual"
@@ -718,12 +750,12 @@
     },
     {
       "id": "WF-9.1",
-      "title": "plans/progress.txt is append only and MUST include per iteration entries",
+      "title": "plans/progress.txt is append-only and MUST include per-iteration entries",
       "enforcement": [
-        "manual"
+        "plans/ralph.sh (progress append)"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/progress.txt"
       ],
       "tests": [
         "manual"
@@ -736,7 +768,7 @@
         "manual"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        ".ralph/blocked_*/blocked_item.json"
       ],
       "tests": [
         "manual"
@@ -770,90 +802,90 @@
     },
     {
       "id": "WF-12.1",
-      "title": "Workflow rule",
+      "title": "Workflow Contract Acceptance Tests (checklist)",
       "enforcement": [
-        "manual"
+        "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 1)"
       ]
     },
     {
       "id": "WF-12.2",
-      "title": "Workflow rule",
+      "title": "Baseline integrity",
       "enforcement": [
-        "manual"
+        "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 2, Test 13)"
       ]
     },
     {
       "id": "WF-12.3",
-      "title": "Workflow rule",
+      "title": "Pass flipping integrity",
       "enforcement": [
-        "manual"
+        "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 2)"
       ]
     },
     {
       "id": "WF-12.4",
-      "title": "Workflow rule",
+      "title": "Slice gating / blocked behavior",
       "enforcement": [
-        "manual"
+        "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 4, Test 16)"
       ]
     },
     {
       "id": "WF-12.5",
-      "title": "Workflow rule",
+      "title": "Completion semantics (no fail-open)",
       "enforcement": [
-        "manual"
+        "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 3)"
       ]
     },
     {
       "id": "WF-12.6",
-      "title": "Workflow rule",
+      "title": "Anti-spin",
       "enforcement": [
-        "manual"
+        "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 17)"
       ]
     },
     {
       "id": "WF-12.7",
-      "title": "Workflow rule",
+      "title": "CI / verify drift observability",
       "enforcement": [
-        "manual"
+        "plans/verify.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/verify.sh"
       ],
       "tests": [
         "manual"
@@ -861,15 +893,15 @@
     },
     {
       "id": "WF-12.8",
-      "title": "Workflow rule",
+      "title": "Traceability / drift gate",
       "enforcement": [
-        "manual"
+        "plans/workflow_contract_gate.sh"
       ],
       "artifacts": [
-        "specs/WORKFLOW_CONTRACT.md"
+        "plans/workflow_contract_map.json"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (Test 11)"
       ]
     }
   ]
