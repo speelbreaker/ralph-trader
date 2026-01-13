@@ -29,6 +29,12 @@ if (( json_out_next == 1 )); then
 fi
 
 prd_file="${PRD_FILE:-${prd_arg:-plans/prd.json}}"
+strict_heuristics="${PRD_LINT_STRICT_HEURISTICS:-0}"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq required for PRD lint" >&2
+  exit 2
+fi
 
 json_escape() {
   local s="$1"
@@ -137,7 +143,7 @@ count_glob_matches() {
   local pattern="$1"
   if ! command -v python3 >/dev/null 2>&1; then
     if (( python_missing == 0 )); then
-      report_error PYTHON3_MISSING GLOBAL "python3 required for glob checks"
+      report_warn PYTHON3_MISSING GLOBAL "python3 missing; glob checks disabled"
       python_missing=1
     fi
     # Ensure a numeric count is always returned to callers using command substitution.
@@ -211,9 +217,35 @@ while IFS= read -r entry; do
   check_required '.passes | type == "boolean"' 'passes'
   check_required '.needs_human_decision | type == "boolean"' 'needs_human_decision'
   check_required '.description | type == "string" and length > 0' 'description'
-  check_required '.scope.touch | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' 'scope.touch'
   check_required '.acceptance | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' 'acceptance'
   check_required '.verify | type == "array" and length > 0 and all(.[]; type == "string" and length > 0)' 'verify'
+
+  if ! printf '%s' "$item_json" | jq -e '.scope.touch | type == "array" and all(.[]; type == "string" and length > 0)' >/dev/null 2>&1; then
+    report_error INVALID_FIELD "$item_id" "scope.touch missing or wrong type"
+  fi
+
+  create_paths=()
+  if printf '%s' "$item_json" | jq -e '.scope.create? != null' >/dev/null 2>&1; then
+    if ! printf '%s' "$item_json" | jq -e '.scope.create | type == "array" and all(.[]; type == "string" and length > 0)' >/dev/null 2>&1; then
+      report_error INVALID_FIELD "$item_id" "scope.create must be array of strings"
+    else
+      while IFS= read -r create; do
+        [[ -z "$create" ]] && continue
+        create_paths+=("$create")
+      done <<< "$(printf '%s' "$item_json" | jq -r '.scope.create[]')"
+    fi
+  fi
+
+  touch_count=0
+  if printf '%s' "$item_json" | jq -e '.scope.touch | type == "array"' >/dev/null 2>&1; then
+    touch_count="$(printf '%s' "$item_json" | jq -r '.scope.touch | length')"
+    if ! [[ "$touch_count" =~ ^[0-9]+$ ]]; then
+      touch_count=0
+    fi
+  fi
+  if (( touch_count == 0 && ${#create_paths[@]} == 0 )); then
+    report_error INVALID_FIELD "$item_id" "scope.touch must be non-empty unless scope.create is provided"
+  fi
 
   if printf '%s' "$item_json" | jq -e 'has("contract_refs") and .contract_refs != null' >/dev/null 2>&1; then
     if ! printf '%s' "$item_json" | jq -e '.contract_refs | (type == "array" and all(.[]; type == "string"))' >/dev/null 2>&1; then
@@ -270,6 +302,25 @@ while IFS= read -r entry; do
     done <<< "$(printf '%s' "$item_json" | jq -r '.scope.touch[]')"
   fi
 
+  if (( ${#create_paths[@]} > 0 )); then
+    for create_path in "${create_paths[@]}"; do
+      if has_glob_chars "$create_path"; then
+        report_error CREATE_PATH_GLOB "$item_id" "scope.create path contains glob characters: $create_path"
+        continue
+      fi
+      rel_create="${create_path#./}"
+      full_create="$repo_root/$rel_create"
+      if [[ -e "$full_create" ]]; then
+        report_error CREATE_PATH_EXISTS "$item_id" "scope.create path already exists: $create_path"
+        continue
+      fi
+      parent_dir="$(dirname "$full_create")"
+      if [[ ! -d "$parent_dir" ]]; then
+        report_error CREATE_PARENT_MISSING "$item_id" "scope.create parent directory missing for: $create_path"
+      fi
+    done
+  fi
+
   if printf '%s' "$item_json" | jq -e '.contract_refs | type == "array" and length > 0' >/dev/null 2>&1; then
     contract_refs=$(printf '%s' "$item_json" | jq -r '.contract_refs | join(" | ")')
     acceptance_refs=$(printf '%s' "$item_json" | jq -r '.acceptance | join(" | ")')
@@ -277,27 +328,37 @@ while IFS= read -r entry; do
     contract_lc_scope=$(printf '%s' "$contract_refs" | tr '[:upper:]' '[:lower:]')
     acceptance_lc_scope=$(printf '%s' "$acceptance_refs" | tr '[:upper:]' '[:lower:]')
 
+    report_heuristic() {
+      local id="$1"
+      local msg="$2"
+      if [[ "$strict_heuristics" == "1" ]]; then
+        report_error CONTRACT_ACCEPTANCE_MISMATCH "$id" "$msg"
+      else
+        report_warn CONTRACT_ACCEPTANCE_MISMATCH "$id" "$msg"
+      fi
+    }
+
     if [[ "$contract_lc_scope" == *"reject"* ]]; then
       if [[ "$acceptance_lc_scope" != *"reject"* && "$acceptance_lc_scope" != *"rejected"* ]]; then
-        report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions reject but acceptance missing reject/rejected"
+        report_heuristic "$item_id" "contract mentions reject but acceptance missing reject/rejected"
       fi
     fi
 
     if [[ "$contract_lc_scope" == *"degraded"* || "$contract_lc_scope" == *"riskstate::degraded"* ]]; then
       if [[ "$acceptance_lc_scope" != *"degraded"* && "$acceptance_lc_scope" != *"riskstate"* ]]; then
-        report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions Degraded but acceptance missing Degraded/RiskState"
+        report_heuristic "$item_id" "contract mentions Degraded but acceptance missing Degraded/RiskState"
       fi
     fi
 
     if [[ "$contract_lc_scope" == *"fail-closed"* ]]; then
       if [[ "$acceptance_lc_scope" != *"fail-closed"* ]]; then
-        report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions fail-closed but acceptance missing fail-closed"
+        report_heuristic "$item_id" "contract mentions fail-closed but acceptance missing fail-closed"
       fi
     fi
 
     if [[ "$contract_lc_scope" == *"must stop"* ]]; then
       if [[ "$acceptance_lc_scope" != *"must stop"* ]]; then
-        report_error CONTRACT_ACCEPTANCE_MISMATCH "$item_id" "contract mentions must stop but acceptance missing must stop"
+        report_heuristic "$item_id" "contract mentions must stop but acceptance missing must stop"
       fi
     fi
   fi

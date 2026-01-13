@@ -150,6 +150,12 @@ is_timeout_rc() {
   [[ "$rc" == "124" || "$rc" == "137" ]]
 }
 
+ensure_agent_args_array() {
+  if [[ "${RPH_AGENT_ARGS_ARR[@]+x}" != "x" ]]; then
+    RPH_AGENT_ARGS_ARR=()
+  fi
+}
+
 timeout_cmd() {
   local timeout_s="$1"
   shift
@@ -354,6 +360,9 @@ if (( schema_rc != 0 )); then
   echo "$schema_out" | tee -a "$LOG_FILE"
   block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid (run $PRD_SCHEMA_CHECK_SH $PRD_FILE for details)"
 fi
+if [[ "${PRD_SCHEMA_DRAFT_MODE:-0}" == "1" ]]; then
+  block_preflight "prd_schema_draft_mode" "PRD_SCHEMA_DRAFT_MODE=1 set; drafting mode is blocked from execution."
+fi
 
 # Required harness helpers (fail-closed with blocked artifacts)
 [[ -x "$VERIFY_SH" ]] || block_preflight "missing_verify_sh" "$VERIFY_SH missing or not executable"
@@ -505,7 +514,7 @@ select_next_item() {
   local slice="$1"
   jq -c --argjson s "$slice" '
     def items:
-      if type=="array" then . else (.items // []) end;
+      (.items // []);
     items | map(select(.passes==false and .slice==$s)) | sort_by(.priority) | reverse | .[0] // empty
   ' "$PRD_FILE"
 }
@@ -514,7 +523,7 @@ item_by_id() {
   local id="$1"
   jq -c --arg id "$id" '
     def items:
-      if type=="array" then . else (.items // []) end;
+      (.items // []);
     items[] | select(.id==$id)
   ' "$PRD_FILE"
 }
@@ -522,7 +531,7 @@ item_by_id() {
 all_items_passed() {
   jq -e '
     def items:
-      if type=="array" then . else (.items // []) end;
+      (.items // []);
     (items | length) > 0 and all(items[]; .passes == true)
   ' "$PRD_FILE" >/dev/null
 }
@@ -625,7 +634,7 @@ write_contract_review_fail() {
   fi
   if [[ -f "$PRD_FILE" && "$selected_id" != "unknown" ]]; then
     refs_json="$(jq -c --arg id "$selected_id" '
-      def items: (if type=="array" then . else (.items // []) end);
+      def items: (.items // []);
       (items | map(select(.id==$id)) | .[0].contract_refs // [])
     ' "$PRD_FILE" 2>/dev/null || echo '[]')"
   fi
@@ -824,11 +833,21 @@ scope_gate() {
   local head_after="$2"
   local item_json="$3"
   local touch_patterns
+  local create_patterns
   local avoid_patterns
+  local allowed_patterns
   local changed_files
   local out_of_scope=""
 
   touch_patterns="$(jq -r '.scope.touch[]?' <<<"$item_json")"
+  create_patterns="$(jq -r '.scope.create[]?' <<<"$item_json")"
+  if [[ -n "$touch_patterns" && -n "$create_patterns" ]]; then
+    allowed_patterns="${touch_patterns}"$'\n'"${create_patterns}"
+  elif [[ -n "$touch_patterns" ]]; then
+    allowed_patterns="$touch_patterns"
+  else
+    allowed_patterns="$create_patterns"
+  fi
   avoid_patterns="$(jq -r '.scope.avoid[]?' <<<"$item_json")"
   changed_files="$(git diff --name-only "$head_before" "$head_after")"
 
@@ -842,13 +861,13 @@ scope_gate() {
       out_of_scope+="${file} (scope.avoid)"$'\n'
       continue
     fi
-    if [[ -n "$touch_patterns" ]]; then
-      if ! matches_patterns "$file" "$touch_patterns"; then
-        out_of_scope+="${file} (not in scope.touch)"$'\n'
+    if [[ -n "$allowed_patterns" ]]; then
+      if ! matches_patterns "$file" "$allowed_patterns"; then
+        out_of_scope+="${file} (not in scope.touch/create)"$'\n'
         continue
       fi
     else
-      out_of_scope+="${file} (not in scope.touch)"$'\n'
+      out_of_scope+="${file} (not in scope.touch/create)"$'\n'
       continue
     fi
   done <<<"$changed_files"
@@ -1017,7 +1036,7 @@ count_pass_flips() {
   local before_file="$1"
   local after_file="$2"
   jq -n --slurpfile before "$before_file" --slurpfile after "$after_file" '
-    def items($x): ($x[0].items // $x[0] // []);
+    def items($x): ($x[0].items // []);
     (items($before) | map({key:.id, value:.passes}) | from_entries) as $b
     | (items($after) | map({key:.id, value:.passes}) | from_entries) as $a
     | [ $b | keys[] as $id | select(($b[$id] == false) and ($a[$id] == true)) ] | length
@@ -1168,7 +1187,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
 
   ACTIVE_SLICE="$(jq -r '
     def items:
-      if type=="array" then . else (.items // []) end;
+      (.items // []);
     [items[] | select(.passes==false) | .slice] | min // empty
   ' "$PRD_FILE")"
   if [[ -z "$ACTIVE_SLICE" ]]; then
@@ -1219,7 +1238,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   if [[ "$RPH_SELECTION_MODE" == "agent" ]]; then
     CANDIDATE_LINES="$(jq -r --argjson s "$ACTIVE_SLICE" '
       def items:
-        if type=="array" then . else (.items // []) end;
+      (.items // []);
       items[] | select(.passes==false and .slice==$s) | "\(.id) - \(.description)"
     ' "$PRD_FILE")"
 
@@ -1243,7 +1262,11 @@ PROMPT
         i=$((i-1))
         continue
       fi
-      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
+        ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      else
+        ($RPH_AGENT_CMD "$RPH_PROMPT_FLAG" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      fi
     else
       rate_limit_before_call
       if rate_limit_restart_if_slept; then
@@ -1251,7 +1274,11 @@ PROMPT
         i=$((i-1))
         continue
       fi
-      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
+        ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      else
+        ($RPH_AGENT_CMD "$SEL_PROMPT") > "$SEL_OUT" 2>&1
+      fi
     fi
     set -e
 
@@ -1465,6 +1492,7 @@ PROMPT
   echo "$PROMPT" > "${ITER_DIR}/prompt.txt"
 
   set +e
+  ensure_agent_args_array
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
     rate_limit_before_call
     if rate_limit_restart_if_slept; then
@@ -1624,10 +1652,16 @@ PROMPT
     echo "Skipped story-specific verify commands because verify.sh failed." >> "${ITER_DIR}/story_verify.log"
   fi
 
+  VERIFY_POST_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
+  VERIFY_POST_LOG_SHA="$(sha256_file "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_TS="$(date +%s)"
   state_merge \
     --argjson last_verify_post_rc "$verify_post_rc" \
     --arg verify_post_log "${ITER_DIR}/verify_post.log" \
-    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log'
+    --arg verify_post_head "$VERIFY_POST_HEAD" \
+    --arg verify_post_log_sha256 "$VERIFY_POST_LOG_SHA" \
+    --argjson verify_post_ts "$VERIFY_POST_TS" \
+    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log | .last_verify_post_head=$verify_post_head | .last_verify_post_log_sha256=$verify_post_log_sha256 | .last_verify_post_ts=$verify_post_ts'
 
   POST_VERIFY_FAILED=0
   POST_VERIFY_EXIT=0

@@ -16,6 +16,9 @@
 - Optional presets: set `RPH_PROFILE=fast|thorough|audit|max` to apply default knobs (env overrides win).
 - Optional helper: source `plans/profile.sh <profile>` to export the preset env vars in your shell.
 - Optional timeout: set `RPH_ITER_TIMEOUT_SECS` to cap agent/verify runtime.
+- PRD drafting knobs: PRD schema floors (acceptance/steps) can be raised with `PRD_SCHEMA_MIN_ACCEPTANCE` / `PRD_SCHEMA_MIN_STEPS`; lowering requires `PRD_SCHEMA_DRAFT_MODE=1` and is blocked from Ralph execution.
+- PRD scope: use `scope.create[]` for new paths (must not exist yet); scope gating allows `scope.touch` + `scope.create`.
+- PRD pipeline: `plans/prd_pipeline.sh` expects `PRD_*_CMD` to be an executable path and supports optional `PRD_*_ARGS` for arguments.
 
 ## Workflow discipline
 
