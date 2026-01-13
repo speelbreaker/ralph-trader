@@ -10,14 +10,20 @@
 #   ./plans/verify.sh [quick|full]
 #
 # Philosophy:
-#   - quick: same core gates as full (CI parity), no optional heavy gates.
-#   - full: same core gates + optional heavy gates (explicitly enabled).
+#   - quick: fast gate set for local iteration (subset of full).
+#   - full: CI-grade gates (default for Ralph/CI).
 #   - promotion: optional release gate checks (e.g., F1 cert) ONLY when explicitly enabled.
+#
+# Logging/timeouts:
+#   - VERIFY_RUN_ID=YYYYmmdd_HHMMSS (auto if unset)
+#   - VERIFY_ARTIFACTS_DIR=artifacts/verify/<run_id>
+#   - VERIFY_LOG_CAPTURE=1 (set 0 to disable per-step logs)
+#   - ENABLE_TIMEOUTS=1 (set 0 to disable; uses timeout/gtimeout if available)
 #
 # CI alignment:
 #   - If CI runs this script as the sole gate, set CI_GATES_SOURCE=verify.
 #   - Otherwise, this script expects .github/workflows to exist so it can mirror CI.
-#   - If neither is true, it emits <promise>BLOCKED_CI_COMMANDS</promise> and exits non-zero.
+#   - If neither is true, it emits <promise>BLOCKED_CI_COMMANDS</promise> in CI and exits non-zero.
 # =============================================================================
 
 set -euo pipefail
@@ -41,9 +47,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 CI_GATES_SOURCE="${CI_GATES_SOURCE:-auto}"
+VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
+VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
+VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture
+
+mkdir -p "$VERIFY_ARTIFACTS_DIR"
 if [[ "$CI_GATES_SOURCE" == "auto" ]]; then
   if [[ -d "$ROOT/.github/workflows" ]]; then
     CI_GATES_SOURCE="github"
+  elif [[ -z "${CI:-}" ]]; then
+    CI_GATES_SOURCE="verify"
   else
     CI_GATES_SOURCE=""
   fi
@@ -95,7 +108,11 @@ node_run_script() {
   case "$NODE_PM" in
     pnpm) pnpm -s run "$script" --if-present ;;
     npm) npm run -s "$script" --if-present ;;
-    yarn) yarn -s run "$script" --if-present ;;
+    yarn)
+      if node_script_exists "$script"; then
+        yarn -s run "$script"
+      fi
+      ;;
     *) fail "No node package manager selected (missing lockfile)" ;;
   esac
 }
@@ -118,6 +135,62 @@ node_run_bin() {
     *) return 1 ;;
   esac
 }
+
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="gtimeout"
+fi
+TIMEOUT_WARNED=0
+ENABLE_TIMEOUTS="${ENABLE_TIMEOUTS:-1}"
+
+run_with_timeout() {
+  local duration="$1"
+  shift
+  if [[ "$ENABLE_TIMEOUTS" != "1" || -z "$duration" ]]; then
+    "$@"
+    return $?
+  fi
+  if [[ -z "$TIMEOUT_BIN" ]]; then
+    "$@"
+    return $?
+  fi
+  "$TIMEOUT_BIN" "$duration" "$@"
+}
+
+run_logged() {
+  local name="$1"
+  local duration="$2"
+  shift 2
+  local logfile="${VERIFY_ARTIFACTS_DIR}/${name}.log"
+  local rc=0
+
+  if [[ "$ENABLE_TIMEOUTS" == "1" && -n "$duration" && -z "$TIMEOUT_BIN" && "$TIMEOUT_WARNED" == "0" ]]; then
+    warn "timeout not available; running without time limits (install coreutils for gtimeout on macOS)"
+    TIMEOUT_WARNED=1
+  fi
+
+  if [[ "$VERIFY_LOG_CAPTURE" == "1" ]]; then
+    run_with_timeout "$duration" "$@" 2>&1 | tee "$logfile"
+    rc="${PIPESTATUS[0]}"
+  else
+    run_with_timeout "$duration" "$@"
+    rc=$?
+  fi
+
+  if [[ "$rc" == "124" || "$rc" == "137" ]]; then
+    fail "Timeout running ${name} (limit=${duration})"
+  fi
+  return "$rc"
+}
+
+RUST_FMT_TIMEOUT="${RUST_FMT_TIMEOUT:-10m}"
+RUST_CLIPPY_TIMEOUT="${RUST_CLIPPY_TIMEOUT:-20m}"
+RUST_TEST_TIMEOUT="${RUST_TEST_TIMEOUT:-20m}"
+PYTEST_TIMEOUT="${PYTEST_TIMEOUT:-10m}"
+RUFF_TIMEOUT="${RUFF_TIMEOUT:-5m}"
+MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
 
 has_playwright_config() {
   [[ -f playwright.config.ts || -f playwright.config.js || -f playwright.config.mjs || -f playwright.config.cjs ]]
@@ -175,6 +248,7 @@ if [[ -z "$NODE_PM" && -f yarn.lock ]]; then NODE_PM="yarn"; fi
 log "0) Repo sanity"
 
 echo "mode=$MODE verify_mode=${VERIFY_MODE:-none} root=$ROOT"
+echo "verify_run_id=$VERIFY_RUN_ID artifacts_dir=$VERIFY_ARTIFACTS_DIR"
 if is_ci; then echo "CI=1"; fi
 
 # Dirty tree warning (never fail; Ralph should keep tree clean via commits)
@@ -228,6 +302,7 @@ else
       changed_files="$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || true)"
 
       # Broad but practical patterns across stacks
+      # TODO: tighten ENDPOINT_PATTERNS to repo-specific paths once Python/HTTP layout is introduced.
       ENDPOINT_PATTERNS="${ENDPOINT_PATTERNS:-'(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/'}"
       TEST_PATTERNS="${TEST_PATTERNS:-'(^|/)(tests?|__tests__)/|(\\.spec\\.|\\.test\\.)|(^|/)integration_tests/'}"
       endpoint_changed="$(echo "$changed_files" | grep -E "$ENDPOINT_PATTERNS" || true)"
@@ -259,13 +334,21 @@ if [[ -f Cargo.toml ]]; then
   need cargo
 
   log "2a) Rust format"
-  cargo fmt --all -- --check
+  run_logged "rust_fmt" "$RUST_FMT_TIMEOUT" cargo fmt --all -- --check
 
-  log "2b) Rust clippy"
-  cargo clippy --workspace --all-targets --all-features -- -D warnings
+  if [[ "$MODE" == "full" ]]; then
+    log "2b) Rust clippy"
+    run_logged "rust_clippy" "$RUST_CLIPPY_TIMEOUT" cargo clippy --workspace --all-targets --all-features -- -D warnings
+  else
+    warn "Skipping clippy in quick mode"
+  fi
 
   log "2c) Rust tests"
-  cargo test --workspace --all-features --locked
+  if [[ "$MODE" == "full" ]]; then
+    run_logged "rust_tests_full" "$RUST_TEST_TIMEOUT" cargo test --workspace --all-features --locked
+  else
+    run_logged "rust_tests_quick" "$RUST_TEST_TIMEOUT" cargo test --workspace --lib --locked
+  fi
 
   echo "✓ rust gates passed"
 fi
@@ -279,10 +362,10 @@ if [[ -f pyproject.toml || -f requirements.txt ]]; then
   # Ruff: required in CI (best ROI for agent-heavy workflows)
   if command -v ruff >/dev/null 2>&1; then
     log "3a) Python ruff lint"
-    ruff check .
+    run_logged "python_ruff_check" "$RUFF_TIMEOUT" ruff check .
 
     log "3b) Python ruff format"
-    ruff format --check .
+    run_logged "python_ruff_format" "$RUFF_TIMEOUT" ruff format --check .
   else
     if is_ci; then
       fail "ruff not found in CI (install it or adjust verify.sh)"
@@ -294,7 +377,15 @@ if [[ -f pyproject.toml || -f requirements.txt ]]; then
   # Pytest: required in CI if present in toolchain
   if command -v pytest >/dev/null 2>&1; then
     log "3c) Python tests"
-    pytest -q
+    if [[ "$MODE" == "quick" ]]; then
+      PYTEST_QUICK_EXPR="${PYTEST_QUICK_EXPR:-not integration and not slow}"
+      if ! run_logged "python_pytest_quick" "$PYTEST_TIMEOUT" pytest -q -m "$PYTEST_QUICK_EXPR"; then
+        warn "pytest quick selection failed; retrying full pytest -q"
+        run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
+      fi
+    else
+      run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
+    fi
   else
     if is_ci; then
       fail "pytest not found in CI (install it or adjust verify.sh)"
@@ -308,9 +399,9 @@ if [[ -f pyproject.toml || -f requirements.txt ]]; then
   if command -v mypy >/dev/null 2>&1; then
     log "3d) Python mypy"
     if [[ "$REQUIRE_MYPY" == "1" ]]; then
-      mypy .
+      run_logged "python_mypy" "$MYPY_TIMEOUT" mypy .
     else
-      mypy . --ignore-missing-imports || warn "mypy reported issues"
+      run_logged "python_mypy" "$MYPY_TIMEOUT" mypy . --ignore-missing-imports || warn "mypy reported issues"
     fi
   else
     if [[ "$REQUIRE_MYPY" == "1" ]]; then
@@ -372,6 +463,7 @@ F1_CERT="$ROOT/artifacts/F1_CERT.json"
 F1_TOOL="$ROOT/python/tools/f1_certify.py"
 
 if [[ "$VERIFY_MODE" == "promotion" || "$REQUIRE_F1_CERT" == "1" ]]; then
+  log "5b) Promotion gates active"
   need jq
 
   # Generate cert if requested and tool exists
@@ -431,7 +523,7 @@ fi
 # 5d) UI end-to-end verification (opt-in)
 E2E="${E2E:-0}"
 E2E_CMD="${E2E_CMD:-}"
-E2E_ARTIFACTS_DIR="${E2E_ARTIFACTS_DIR:-$ROOT/artifacts/e2e}"
+E2E_ARTIFACTS_DIR="${E2E_ARTIFACTS_DIR:-$ROOT/artifacts/e2e/$VERIFY_RUN_ID}"
 
 if [[ "$E2E" == "1" ]]; then
   log "5d) UI E2E (opt-in)"

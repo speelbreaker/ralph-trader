@@ -14,7 +14,5 @@ cargo test -p soldier_core --test test_label_match
 cargo test -p soldier_core --test test_order_size
 cargo test -p soldier_core --test test_quantize
 rg -n "cargo test --workspace" plans/verify.sh
-test -f docs/dispatch_map_discovery.md
 test -f docs/order_size_discovery.md
 rg -n "OrderSize" docs/order_size_discovery.md
-rg -n "dispatch" docs/dispatch_map_discovery.md

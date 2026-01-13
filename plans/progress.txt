@@ -35,3 +35,23 @@
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow.
 - Next: proceed to S1-009 discovery.
+- 2026-01-13: workflow maintenance — scoped WIP=1 to Ralph execution only; clarified PRD scope for workflow tasks in specs/WORKFLOW_CONTRACT.md and AGENTS.md.
+- Summary: Updated workflow contract and agent guide to state PRD/WIP rules apply to Ralph loop execution; workflow maintenance tasks are change-controlled but not PRD-scoped.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: proceed with verify.sh quick/full adjustments or other workflow maintenance as separate tasks.
+- 2026-01-13: verify.sh improvements — quick/full split, log capture, timeouts, local CI gate fallback, per-run artifacts, yarn script check.
+- Summary: Added per-run verify logs/timeouts, made quick mode lighter for Rust/Python, defaulted CI_GATES_SOURCE=verify locally, fixed yarn script handling, and scoped E2E artifacts per run.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: consider endpoint pattern tuning or node log capture if needed.
+- 2026-01-13: verify.sh note — added TODO to tighten endpoint patterns once Python/HTTP layout exists.
+- Summary: Documented future endpoint pattern tuning next to ENDPOINT_PATTERNS.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: adjust ENDPOINT_PATTERNS when HTTP routes land.
+- 2026-01-13: add helper script scripts/push_main.sh for safe rebase+push to main.
+- Summary: Added push_main helper that checks clean tree, avoids other main worktrees, rebases on origin/main, and fast-forward pushes to origin/main.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: use scripts/push_main.sh for direct-to-main updates.

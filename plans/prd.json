@@ -16,7 +16,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.0 Verify harness baseline",
       "category": "workflow",
       "description": "Confirm plans/verify.sh is the canonical verification script and runnable.",
@@ -70,7 +70,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.0 Workspace scaffolding",
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
@@ -130,17 +130,17 @@
       "priority": 80,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 InstrumentKind and RiskState",
       "category": "execution",
       "description": "Implement InstrumentKind derivation and RiskState enum per contract definitions.",
       "contract_refs": [
         "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
-        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) \u2014 MUST implement"
+        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) — MUST implement"
       ],
       "plan_refs": [
-        "S1.1 \u2014 InstrumentKind derivation \\+ instrument cache TTL (fail\u2011closed)"
+        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -169,7 +169,7 @@
         "Define the RiskState enum in crates/soldier_core/risk/state.rs with the contract variants.",
         "Define the InstrumentKind enum in crates/soldier_core/venue/types.rs with contract values.",
         "Define the minimal Deribit public instrument structs needed for mapping in crates/soldier_infra/deribit/public.",
-        "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual \u2192 linear_future.",
+        "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual → linear_future.",
         "Add unit tests in crates/soldier_core/tests/test_instrument_kind_mapping.rs for mapping behavior.",
         "Wire any required imports so the new enums are accessible where used."
       ],
@@ -193,16 +193,16 @@
       "priority": 70,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL",
       "category": "risk",
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "S1.1 \u2014 InstrumentKind derivation \\+ instrument cache TTL (fail\u2011closed)"
+        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -250,15 +250,15 @@
       "priority": 65,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL observability",
       "category": "risk",
       "description": "Add required TTL observability hooks for instrument cache freshness.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement"
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md \u00a7Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation \\+ instrument cache TTL (fail\u2011closed)"
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -307,7 +307,7 @@
       "priority": 60,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize canonical sizing",
       "category": "execution",
       "description": "Implement OrderSize canonical sizing with deterministic notional_usd using the discovery report.",
@@ -316,7 +316,7 @@
         "CONTRACT.md Canonical internal units (single source of truth):"
       ],
       "plan_refs": [
-        "S1.2 \u2014 OrderSize canonical sizing \\+ notional invariant"
+        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
       ],
       "scope": {
         "touch": [
@@ -364,7 +364,7 @@
       "priority": 50,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher amount mapping",
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts using the discovery report.",
@@ -372,7 +372,7 @@
         "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
-        "S1.3 \u2014 Dispatcher amount mapping \\+ mismatch reject\u2192Degraded"
+        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
@@ -420,7 +420,7 @@
       "priority": 55,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mismatch rejection",
       "category": "execution",
       "description": "Reject contract/amount mismatches and emit mismatch metrics.",
@@ -429,7 +429,7 @@
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md \u00a7Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping \\+ mismatch reject\u2192Degraded"
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
@@ -480,25 +480,22 @@
       "priority": 95,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize discovery",
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "CONTRACT.md OrderSize struct (MUST implement):",
-        "CONTRACT.md Canonical internal units (single source of truth):"
+        "1.0 Instrument Units"
       ],
       "plan_refs": [
-        "S1.2 \u2014 OrderSize canonical sizing \\+ notional invariant"
+        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
       ],
       "scope": {
         "touch": [
-          "docs/"
+          "docs/",
+          "plans/prd.json"
         ],
-        "avoid": [
-          "crates/**",
-          "plans/**"
-        ]
+        "avoid": []
       },
       "acceptance": [
         "GIVEN the current OrderSize implementation WHEN inspected THEN docs/order_size_discovery.md lists current fields, call sites, and gaps vs the contract OrderSize struct.",
@@ -531,7 +528,7 @@
       "priority": 85,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mapping discovery",
       "category": "qa",
       "description": "Discover current dispatcher mapping logic and document gaps vs contract before implementation.",
@@ -539,7 +536,7 @@
         "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
-        "S1.3 \u2014 Dispatcher amount mapping \\+ mismatch reject\u2192Degraded"
+        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
@@ -581,7 +578,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.1 Quantization rounding",
       "category": "execution",
       "description": "Implement deterministic quantization for qty and limit price with safe rounding.",
@@ -589,7 +586,7 @@
         "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.1 \u2014 Integer tick/step quantization (safer direction)"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.1 — Integer tick/step quantization (safer direction)"
       ],
       "scope": {
         "touch": [
@@ -632,7 +629,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.2 Intent hash from quantized fields",
       "category": "durability",
       "description": "Compute intent_hash from quantized fields only and exclude timestamps.",
@@ -641,7 +638,7 @@
         "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.2 \u2014 Intent hash from quantized fields only"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.2 — Intent hash from quantized fields only"
       ],
       "scope": {
         "touch": [
@@ -684,7 +681,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.3 Compact label schema",
       "category": "durability",
       "description": "Implement compact label encode/decode with 64-character limit enforcement.",
@@ -692,7 +689,7 @@
         "CONTRACT.md Compact Label Schema (must implement):"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.3 \u2014 Compact label schema encode/decode (\u226464 chars)"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.3 — Compact label schema encode/decode (≤64 chars)"
       ],
       "scope": {
         "touch": [
@@ -703,13 +700,13 @@
         ]
       },
       "acceptance": [
-        "GIVEN strat_id, group_id, leg_idx, and intent_hash WHEN encoding THEN the label matches s4:{sid8}:{gid12}:{li}:{ih16} and is \u2264 64 chars.",
+        "GIVEN strat_id, group_id, leg_idx, and intent_hash WHEN encoding THEN the label matches s4:{sid8}:{gid12}:{li}:{ih16} and is ≤ 64 chars.",
         "GIVEN a compact label WHEN decoding THEN sid8, gid12, leg_idx, and ih16 are parsed correctly.",
         "GIVEN an overlength label WHEN encoding THEN only hashed fields are truncated and structural fields remain intact."
       ],
       "steps": [
         "Implement label encoding in crates/soldier_core/execution/label.rs to produce sid8, gid12, and ih16.",
-        "Enforce the \u226464 character limit and truncate only hashed components when required.",
+        "Enforce the ≤64 character limit and truncate only hashed components when required.",
         "Implement label decoding to parse sid8, gid12, leg_idx, and ih16.",
         "Add counter label_truncated_total for truncation events.",
         "Add unit tests in crates/soldier_core/tests/test_label.rs for length limits and parsing.",
@@ -736,7 +733,7 @@
       "priority": 70,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.4 Label match disambiguation",
       "category": "risk",
       "description": "Disambiguate label matches deterministically and degrade on ambiguity.",
@@ -745,7 +742,7 @@
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.4 \u2014 Label match disambiguation; ambiguity\u2192Degraded"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.4 — Label match disambiguation; ambiguity→Degraded"
       ],
       "scope": {
         "touch": [

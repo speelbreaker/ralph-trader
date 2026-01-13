@@ -7,4 +7,4 @@
 ## Entries
 
 - [YYYY-MM-DD] TBD
-- Consider documenting Codex sandbox + worktree gotcha: Ralph/Codex cannot commit if .git lives outside the workspace; prefer a full clone inside the workspace.
+- [2026-01-13] Consider an unattended profile that sets approval_mode=never; requires explicit policy decision vs AGENTS.md "Never use skip-permissions" plus extra guardrails.
