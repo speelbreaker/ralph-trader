@@ -882,6 +882,36 @@
       "tests": [
         "plans/workflow_acceptance.sh (Test 11)"
       ]
+    },
+    {
+      "id": "WF-5.12",
+      "title": "Iteration timeouts (optional)",
+      "enforcement": [
+        "plans/ralph.sh timeout_cmd"
+      ],
+      "artifacts": [
+        ".ralph/iter_*/agent.out",
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/iter_*/verify_post.log"
+      ],
+      "tests": [
+        "manual"
+      ]
+    },
+    {
+      "id": "WF-5.13",
+      "title": "Profiles (optional presets)",
+      "enforcement": [
+        "plans/ralph.sh profile defaults",
+        "plans/profile.sh"
+      ],
+      "artifacts": [
+        "plans/profile.sh",
+        "plans/ralph.sh"
+      ],
+      "tests": [
+        "manual"
+      ]
     }
   ]
 }

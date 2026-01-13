@@ -59,7 +59,7 @@ RPH_SELF_HEAL="${RPH_SELF_HEAL:-${RPH_PROFILE_SELF_HEAL:-0}}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
-RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"       # claude|codex|opencode|etc
+RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"       # codex|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
 RPH_ITER_TIMEOUT_SECS="${RPH_ITER_TIMEOUT_SECS:-${RPH_PROFILE_ITER_TIMEOUT_SECS:-0}}"
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then

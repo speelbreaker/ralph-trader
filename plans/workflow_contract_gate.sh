@@ -7,6 +7,12 @@ map_file="${WORKFLOW_CONTRACT_MAP:-plans/workflow_contract_map.json}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 
+# Check that at least one of rg or grep is available
+if ! command -v rg >/dev/null 2>&1 && ! command -v grep >/dev/null 2>&1; then
+  echo "ERROR: either ripgrep or grep required" >&2
+  exit 2
+fi
+
 if [[ ! -f "$spec_file" ]]; then
   echo "ERROR: workflow contract not found: $spec_file" >&2
   exit 1

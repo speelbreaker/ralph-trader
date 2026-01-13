@@ -105,17 +105,6 @@ resolve_plan_path() {
   return 1
 }
 
-# --- ensure optional logs exist
-if [[ ! -f "plans/ideas.md" ]]; then
-  echo "# Ideas & Deferred Items" > "plans/ideas.md"
-  echo "[init] created plans/ideas.md"
-fi
-
-if [[ ! -f "plans/pause.md" ]]; then
-  echo "# Pause / Handoff Notes" > "plans/pause.md"
-  echo "[init] created plans/pause.md"
-fi
-
 PRD_CONTRACT_PATH="$(jq -r '.source.contract_path // empty' "$PRD_FILE")"
 PRD_PLAN_PATH="$(jq -r '.source.implementation_plan_path // empty' "$PRD_FILE")"
 
