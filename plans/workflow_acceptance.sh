@@ -411,6 +411,102 @@ EOF
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
 
+echo "Test 0: contract_check resolves contract refs without SIGPIPE"
+reset_state
+contract_test_root="$WORKTREE/.ralph/contract_check_ref_ok"
+iter_dir="$contract_test_root/iter_1"
+run_in_worktree mkdir -p "$iter_dir"
+cat > "$contract_test_root/CONTRACT.md" <<'EOF'
+# Contract
+## 1.0 Instrument Units
+EOF
+cat > "$contract_test_root/prd.json" <<'JSON'
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-008",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "Contract refs match test",
+      "contract_refs": ["1.0 Instrument Units"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": {
+        "touch": ["docs/**"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["docs/order_size_discovery.md"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+cat > "$iter_dir/selected.json" <<'JSON'
+{"selected_id":"S1-008"}
+JSON
+run_in_worktree git rev-parse HEAD~1 > "$iter_dir/head_before.txt"
+run_in_worktree git rev-parse HEAD > "$iter_dir/head_after.txt"
+cp "$contract_test_root/prd.json" "$iter_dir/prd_before.json"
+cp "$contract_test_root/prd.json" "$iter_dir/prd_after.json"
+cat > "$iter_dir/diff.patch" <<'EOF'
+diff --git a/docs/order_size_discovery.md b/docs/order_size_discovery.md
+index 0000000..1111111 100644
+--- a/docs/order_size_discovery.md
++++ b/docs/order_size_discovery.md
+@@ -0,0 +1 @@
++test
+EOF
+echo "VERIFY_SH_SHA=stub" > "$iter_dir/verify_post.log"
+cat > "$WORKTREE/.ralph/state.json" <<'JSON'
+{"last_verify_post_rc":0}
+JSON
+cp "$ROOT/plans/contract_check.sh" "$WORKTREE/plans/contract_check.sh"
+chmod +x "$WORKTREE/plans/contract_check.sh"
+set +e
+run_in_worktree env \
+  CONTRACT_REVIEW_OUT="$iter_dir/contract_review.json" \
+  CONTRACT_FILE="$contract_test_root/CONTRACT.md" \
+  PRD_FILE="$contract_test_root/prd.json" \
+  ./plans/contract_check.sh "$iter_dir/contract_review.json" >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected contract_check.sh to exit 0 for matching contract_refs" >&2
+  exit 1
+fi
+decision="$(run_in_worktree jq -r '.decision' "$iter_dir/contract_review.json")"
+if [[ "$decision" != "PASS" ]]; then
+  echo "FAIL: expected decision=PASS for matching contract_refs, got ${decision}" >&2
+  exit 1
+fi
+if run_in_worktree jq -e '.violations[]? | select(.contract_ref=="CONTRACT_REFS")' "$iter_dir/contract_review.json" >/dev/null 2>&1; then
+  echo "FAIL: unexpected CONTRACT_REFS violation for matching contract_refs" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
+run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
+
 echo "Test 1: schema-violating PRD stops preflight"
 run_in_worktree mkdir -p .ralph
 reset_state

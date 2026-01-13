@@ -278,6 +278,12 @@ normalize_ref() {
   echo "$r" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
 }
 
+contract_contains_lc() {
+  local needle_lc="$1"
+  [[ -z "$needle_lc" ]] && return 1
+  grep -Fqi -- "$needle_lc" <<<"$contract_text_lc"
+}
+
 ref_ok() {
   local ref="$1"
   local r; r="$(normalize_ref "$ref")"
@@ -288,7 +294,9 @@ ref_ok() {
     inner="$(echo "$r" | sed -n 's/.*(\(.*\)).*/\1/p' | head -n 1)"
     inner="$(echo "$inner" | sed 's/^ *//; s/ *$//')"
     [[ -z "$inner" ]] && return 1
-    echo "$contract_text_lc" | grep -Fqi "$(echo "$inner" | tr '[:upper:]' '[:lower:]')" && return 0
+    local inner_lc
+    inner_lc="$(echo "$inner" | tr '[:upper:]' '[:lower:]')"
+    contract_contains_lc "$inner_lc" && return 0
     return 1
   fi
 
@@ -299,7 +307,7 @@ ref_ok() {
     local num_fmt="$num"
     if [[ "$num" =~ ^[0-9]+$ ]]; then
       num_fmt="${num}."
-      echo "$contract_text_lc" | grep -Fqi "${num}.0" && return 0
+      contract_contains_lc "${num}.0" && return 0
     fi
 
     local title_key
@@ -307,12 +315,12 @@ ref_ok() {
     local needle="${num_fmt} ${title_key}"
     needle="$(echo "$needle" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//')"
 
-    [[ -n "$title_key" ]] && echo "$contract_text_lc" | grep -Fqi "$needle" && return 0
-    echo "$contract_text_lc" | grep -Fqi "$num" && return 0
+    [[ -n "$title_key" ]] && contract_contains_lc "$needle" && return 0
+    contract_contains_lc "$num" && return 0
   fi
 
   if [[ "${#r_lc}" -ge 8 ]]; then
-    echo "$contract_text_lc" | grep -Fqi "$r_lc" && return 0
+    contract_contains_lc "$r_lc" && return 0
   fi
 
   return 1

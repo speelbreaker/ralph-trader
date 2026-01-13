@@ -84,3 +84,9 @@
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow.
 - Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 19:15:55 UTC: workflow maintenance — fix contract_check SIGPIPE false-fails and add acceptance regression test for contract refs matching.
+- Summary: replaced echo|grep pipelines in plans/contract_check.sh with here-string helper to avoid SIGPIPE under pipefail; added Test 0 in plans/workflow_acceptance.sh to exercise contract_refs match and require decision=PASS.
+- Commands: ./plans/workflow_acceptance.sh (failed: missing plans/workflow_contract_gate.sh); VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: updated plans/contract_check.sh and plans/workflow_acceptance.sh.
+- Notes: workflow_acceptance currently fails due to missing plans/workflow_contract_gate.sh.
+- Next: decide whether to add plans/workflow_contract_gate.sh or adjust acceptance harness to handle its absence.
