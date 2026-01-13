@@ -38,7 +38,7 @@ read_lines() {
 story_jq_r() {
   local filter="$1"
   jq -r --arg id "$selected_id" "
-    def items: (if type==\"array\" then . else (.items // []) end);
+    def items: (.items // []);
     (items | map(select(.id==\$id)) | .[0]) // {} | ${filter}
   " "$prd_file"
 }
@@ -46,7 +46,7 @@ story_jq_r() {
 story_jq_c() {
   local filter="$1"
   jq -c --arg id "$selected_id" "
-    def items: (if type==\"array\" then . else (.items // []) end);
+    def items: (.items // []);
     (items | map(select(.id==\$id)) | .[0]) // {} | ${filter}
   " "$prd_file"
 }
@@ -152,7 +152,7 @@ write_fail_schema() {
   fi
   if [[ -f "$prd_file" && "$selected" != "unknown" ]]; then
     refs_json="$(jq -c --arg id "$selected" '
-      def items: (if type=="array" then . else (.items // []) end);
+      def items: (.items // []);
       (items | map(select(.id==$id)) | .[0].contract_refs // [])
     ' "$prd_file" 2>/dev/null || echo '[]')"
   fi
@@ -223,7 +223,7 @@ fi
 story_json=""
 if [[ -f "$prd_file" && "$selected_id" != "unknown" ]]; then
   story_json="$(jq -c --arg id "$selected_id" '
-    def items: (if type=="array" then . else (.items // []) end);
+    def items: (.items // []);
     (items | map(select(.id==$id)) | .[0]) // empty
   ' "$prd_file" 2>/dev/null || true)"
 fi
@@ -453,11 +453,11 @@ prd_passes_after=false
 pass_flip=false
 if [[ -f "$prd_before_json" && -f "$prd_after_json" && "$selected_id" != "unknown" ]]; then
   prd_passes_before="$(jq -r --arg id "$selected_id" '
-    def items: (if type=="array" then . else (.items // []) end);
+    def items: (.items // []);
     (items | map(select(.id==$id)) | .[0].passes // empty)
   ' "$prd_before_json" 2>/dev/null || true)"
   prd_passes_after="$(jq -r --arg id "$selected_id" '
-    def items: (if type=="array" then . else (.items // []) end);
+    def items: (.items // []);
     (items | map(select(.id==$id)) | .[0].passes // empty)
   ' "$prd_after_json" 2>/dev/null || true)"
 else

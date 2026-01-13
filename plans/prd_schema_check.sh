@@ -3,6 +3,30 @@ set -euo pipefail
 IFS=$'\n\t'
 
 PRD_FILE="${1:-plans/prd.json}"
+PRD_SCHEMA_MIN_ACCEPTANCE="${PRD_SCHEMA_MIN_ACCEPTANCE:-3}"
+PRD_SCHEMA_MIN_STEPS="${PRD_SCHEMA_MIN_STEPS:-5}"
+PRD_SCHEMA_DRAFT_MODE="${PRD_SCHEMA_DRAFT_MODE:-0}"
+
+FLOOR_ACCEPTANCE=3
+FLOOR_STEPS=5
+
+if ! [[ "$PRD_SCHEMA_MIN_ACCEPTANCE" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: PRD_SCHEMA_MIN_ACCEPTANCE must be an integer" >&2
+  exit 2
+fi
+if ! [[ "$PRD_SCHEMA_MIN_STEPS" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: PRD_SCHEMA_MIN_STEPS must be an integer" >&2
+  exit 2
+fi
+
+if (( PRD_SCHEMA_MIN_ACCEPTANCE < FLOOR_ACCEPTANCE || PRD_SCHEMA_MIN_STEPS < FLOOR_STEPS )); then
+  if [[ "$PRD_SCHEMA_DRAFT_MODE" == "1" ]]; then
+    echo "WARN: PRD_SCHEMA_DRAFT_MODE=1 allows thresholds below contract floors (acceptance>=${PRD_SCHEMA_MIN_ACCEPTANCE}, steps>=${PRD_SCHEMA_MIN_STEPS}). Drafting mode is blocked from execution." >&2
+  else
+    echo "ERROR: PRD_SCHEMA_MIN_ACCEPTANCE/MIN_STEPS below contract floors (${FLOOR_ACCEPTANCE}/${FLOOR_STEPS}). Set PRD_SCHEMA_DRAFT_MODE=1 to allow draft-only checks." >&2
+    exit 2
+  fi
+fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "ERROR: jq required for PRD schema validation" >&2
@@ -20,9 +44,8 @@ if ! jq . "$PRD_FILE" >/dev/null 2>&1; then
 fi
 
 errors="$(
-  jq -r '
+  jq -r --argjson min_acceptance "$PRD_SCHEMA_MIN_ACCEPTANCE" --argjson min_steps "$PRD_SCHEMA_MIN_STEPS" '
     def err($id; $msg): "\($id): \($msg)";
-    def items($doc): if ($doc|type)=="array" then $doc else ($doc.items // []) end;
     def missing_fields($obj; $fields):
       [$fields[] as $f | select($obj | has($f) | not) | $f];
 
@@ -62,12 +85,12 @@ errors="$(
       )
       + (
         if ($it.acceptance|type)!="array" then [err($id; "acceptance must be array")]
-        elif ($it.acceptance|length < 3) then [err($id; "acceptance must have >=3 items")]
+        elif ($it.acceptance|length < $min_acceptance) then [err($id; "acceptance must have >=\($min_acceptance) items")]
         else [] end
       )
       + (
         if ($it.steps|type)!="array" then [err($id; "steps must be array")]
-        elif ($it.steps|length < 5) then [err($id; "steps must have >=5 items")]
+        elif ($it.steps|length < $min_steps) then [err($id; "steps must have >=\($min_steps) items")]
         else [] end
       )
       + (
@@ -97,7 +120,7 @@ errors="$(
         if ($it.risk|type)!="string" or ($it.risk|test("^(low|med|high)$")|not) then [err($id; "risk must be low|med|high")] else [] end
       );
 
-    (check_top + (items(.) | map(check_item(.)) | add // [])) | .[]
+    (check_top + ((.items | if type=="array" then . else [] end) | map(check_item(.)) | add // [])) | .[]
   ' "$PRD_FILE"
 )"
 
@@ -110,8 +133,7 @@ fi
 # Soft warnings (non-fatal)
 warnings="$(
   jq -r '
-    def items($doc): if ($doc|type)=="array" then $doc else ($doc.items // []) end;
-    items(.)[] | select(.est_size=="M") | "WARN: \(.id): est_size=M (should be split)"
+    (.items | if type=="array" then . else [] end)[] | select(.est_size=="M") | "WARN: \(.id): est_size=M (should be split)"
   ' "$PRD_FILE"
 )"
 

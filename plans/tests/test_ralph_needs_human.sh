@@ -127,14 +127,21 @@ cat > "$TMP_DIR/prd1.json" <<EOF
 EOF
 cat <<'EOF' > "$TMP_DIR/select_agent.sh"
 #!/usr/bin/env bash
-echo "<selected_id>A1</selected_id>"
+echo "<selected_id>S1-001</selected_id>"
 EOF
 chmod +x "$TMP_DIR/select_agent.sh"
 
 out1="$TMP_DIR/out1.txt"
 start_ts="$(date +%s)"
+set +e
 RPH_SELECTION_MODE=agent RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" RPH_AGENT_ARGS= RPH_PROMPT_FLAG= \
-  PRD_FILE="$TMP_DIR/prd1.json" PROGRESS_FILE="$TMP_DIR/progress1.txt" ./plans/ralph.sh 1 >"$out1" 2>&1 || fail "test1 non-zero exit"
+  PRD_FILE="$TMP_DIR/prd1.json" PROGRESS_FILE="$TMP_DIR/progress1.txt" VERIFY_ARTIFACTS_DIR="$TMP_DIR/verify_artifacts_1" \
+  ./plans/ralph.sh 1 >"$out1" 2>&1
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then
+  fail "test1 expected non-zero exit on needs_human_decision"
+fi
 grep -q "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" "$out1" || fail "test1 missing sentinel"
 iter_dir="$(find_recent_iter "$start_ts")"
 [[ -n "$iter_dir" ]] || fail "test1 missing iter dir"
@@ -190,8 +197,14 @@ cat > "$TMP_DIR/prd2.json" <<EOF
 EOF
 start_ts="$(date +%s)"
 out2="$TMP_DIR/out2.txt"
-PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" ./plans/ralph.sh 1 >"$out2" 2>&1 \
-  || fail "test2 non-zero exit"
+set +e
+PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" VERIFY_ARTIFACTS_DIR="$TMP_DIR/verify_artifacts_2" \
+  ./plans/ralph.sh 1 >"$out2" 2>&1
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then
+  fail "test2 expected non-zero exit on needs_human_decision"
+fi
 grep -q "<promise>BLOCKED_NEEDS_HUMAN_DECISION</promise>" "$out2" || fail "test2 missing sentinel"
 blocked_dir="$(find_recent_blocked "$start_ts")"
 [[ -n "$blocked_dir" ]] || fail "test2 missing blocked dir"
@@ -241,8 +254,17 @@ cat > "$TMP_DIR/prd3.json" <<EOF
 EOF
 start_ts="$(date +%s)"
 out3="$TMP_DIR/out3.txt"
-PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" ./plans/ralph.sh 1 >"$out3" 2>&1 \
-  && fail "test3 expected non-zero exit"
-grep -q "<promise>BLOCKED_PRD_SCHEMA</promise>" "$out3" || fail "test3 missing schema sentinel"
+set +e
+PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" VERIFY_ARTIFACTS_DIR="$TMP_DIR/verify_artifacts_3" \
+  ./plans/ralph.sh 1 >"$out3" 2>&1
+rc=$?
+set -e
+if [[ $rc -eq 0 ]]; then
+  fail "test3 expected non-zero exit"
+fi
+blocked_dir="$(find_recent_blocked "$start_ts")"
+[[ -n "$blocked_dir" ]] || fail "test3 missing blocked dir"
+[[ -f "$blocked_dir/blocked_item.json" ]] || fail "test3 missing blocked_item.json"
+jq -e '.reason=="invalid_prd_schema"' "$blocked_dir/blocked_item.json" >/dev/null || fail "test3 reason mismatch"
 
 echo "OK"

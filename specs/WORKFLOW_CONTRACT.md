@@ -71,6 +71,7 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
    - State transition rule (enforced by harness):
      - The Ralph harness (`plans/ralph.sh`), not the agent, is the sole authority to flip passes=false → true.
      - Ralph MUST NOT flip passes=true unless verify_post exits 0 in the same iteration AND a contract review gate has passed (see “Contract Alignment Gate”).
+     - Pass flips MUST be bound to the selected story and to a fresh verify on the current HEAD (no stale verify artifacts).
 
 3) [WF-2.3] **WIP = 1 (Ralph execution only).**
    - Exactly one story per Ralph iteration.
@@ -115,6 +116,8 @@ Observable gate requirement:
 Schema gating (fail closed, enforced by harness preflight):
 - [WF-3.2] Ralph MUST validate required top-level keys exist: project, source, rules, items.
 - [WF-3.3] Ralph MUST validate for every item: required fields per §3 are present; acceptance has ≥ 3 entries; steps has ≥ 5 entries; verify[] contains ./plans/verify.sh.
+  - Thresholds are floors. They may be raised via PRD_SCHEMA_MIN_ACCEPTANCE / PRD_SCHEMA_MIN_STEPS.
+  - Lowering below floors requires PRD_SCHEMA_DRAFT_MODE=1 and is blocked from Ralph execution.
 - [WF-3.4] Ralph MUST validate: if needs_human_decision=true then human_blocker object is present.
 
 
@@ -143,6 +146,8 @@ plan_refs (string[]): MANDATORY, specific plan references (slice/sub-slice label
 scope.touch (string[])
 
 scope.avoid (string[])
+
+scope.create (string[], optional) — new paths expected to be created; must not exist at lint time; parent dir must exist
 
 acceptance (string[]) — ≥ 3, testable
 
@@ -358,7 +363,7 @@ Anti-spin safeguard (fail closed) [WF-5.9]:
 
 ### 5.10 Scope enforcement gate [WF-5.10]
 
-Ralph MUST enforce scope.touch and scope.avoid: any changed file outside scope.touch or matching scope.avoid MUST block the iteration.
+Ralph MUST enforce scope.touch, scope.create, and scope.avoid: any changed file outside scope.touch/scope.create or matching scope.avoid MUST block the iteration.
 
 ### 5.11 Rate limiting and circuit breaker [WF-5.11]
 
