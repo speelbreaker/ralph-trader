@@ -1,40 +1,47 @@
-# OrderSize Discovery (S1-008)
+# OrderSize Discovery Report (S1-008)
 
-## Current implementation
-- Location: `crates/soldier_core/src/execution/order_size.rs`
-- Struct fields:
-  - `contracts: Option<i64>`
-  - `qty_coin: Option<f64>`
-  - `qty_usd: Option<f64>`
-  - `notional_usd: f64`
-- Constructor: `OrderSize::new(instrument_kind, contracts, qty_coin, qty_usd, index_price)`
-  - `Option | LinearFuture`: requires `qty_coin` (panics if missing), sets `notional_usd = qty_coin * index_price`, clears `qty_usd`.
-  - `Perpetual | InverseFuture`: requires `qty_usd` (panics if missing), sets `notional_usd = qty_usd`, clears `qty_coin`.
-  - Emits `eprintln!` with `instrument_kind` and `notional_usd`.
+## 1. Current Implementation Overview
 
-## Call sites / usage
-- Exported from `crates/soldier_core/src/execution/mod.rs`.
-- Used directly in tests only:
-  - `crates/soldier_core/tests/test_order_size.rs`
-  - `crates/soldier_core/tests/test_dispatch_map.rs`
-- Dispatcher mapping uses `OrderSize` in `crates/soldier_core/src/execution/dispatch_map.rs`:
-  - Rejects if both `qty_coin` and `qty_usd` are set.
-  - For USD-sized instruments, derives `derived_qty_coin = qty_usd / index_price` in the outbound amount mapping.
+### Struct Definition
+Location: `crates/soldier_core/src/execution/order_size.rs`
+```rust
+pub struct OrderSize {
+    pub contracts: Option<i64>,
+    pub qty_coin: Option<f64>,
+    pub qty_usd: Option<f64>,
+    pub notional_usd: f64,
+}
+```
 
-## Gaps vs contract
-- Contract requires derived `qty_coin = qty_usd / index_price` for USD-sized instruments; `OrderSize::new` currently leaves `qty_coin` as `None`.
-- Contract says never mix coin and USD sizing for the same intent; `OrderSize::new` does not reject when both are supplied (it silently ignores the non-canonical field).
-- Constructor panics on missing canonical fields (`expect`), but the contract implies a fail-closed rejection rather than a panic.
-- No explicit guard for `index_price <= 0.0` when computing `notional_usd` for coin-sized instruments.
+### Construction Logic
+Currently uses a `new()` function that enforces field presence via `expect()`:
+- `InstrumentKind::Option | InstrumentKind::LinearFuture` -> Requires `qty_coin`.
+- `InstrumentKind::Perpetual | InstrumentKind::InverseFuture` -> Requires `qty_usd`.
 
-## Required tests to add (canonical sizing)
-- USD-sized instruments populate `qty_coin` as `qty_usd / index_price` (and remain consistent with `notional_usd`).
-- Reject (error result) when both `qty_coin` and `qty_usd` are provided for a single intent.
-- Reject (error result) when the canonical field is missing instead of panicking.
-- Reject when `index_price <= 0.0` for any path that needs it (coin-sized notional or derived qty).
+## 2. Gaps vs. Contract (§1.0)
 
-## Minimal implementation diff to align with contract
-- Change `OrderSize::new` to return `Result<OrderSize, OrderSizeError>` instead of panicking.
-- Enforce the "never mix units" rule by rejecting if both `qty_coin` and `qty_usd` are set.
-- For `Perpetual | InverseFuture`, set `qty_coin = Some(qty_usd / index_price)` with an `index_price > 0.0` guard.
-- Add an `index_price > 0.0` guard for coin-sized `notional_usd` computation (fail-closed on invalid).
+| Gap | Description | Risk |
+|---|---|---|
+| **Safety** | Uses `.expect()`, causing panics on invalid input. | **CRITICAL** (Violates "Panic-Free" foundation) |
+| **Derivation** | `contracts` is passed as an optional input but never derived from `qty` if missing. | **MINOR** (Friction in strategy implementation) |
+| **Derivation** | `qty_coin` is not derived for USD-sized instruments in the constructor. | **MEDIUM** (Inconsistency between `qty_usd` and `qty_coin`) |
+| **Interface** | Returns `Self` instead of `Result`. | **MEDIUM** (Prevents graceful error handling in hot loop) |
+
+## 3. Call Sites
+- `crates/soldier_core/src/execution/order_size.rs`: Definition and implementation.
+- `crates/soldier_core/src/execution/dispatch_map.rs`: Consumes `OrderSize` for Deribit mapping.
+- `crates/soldier_core/tests/test_order_size.rs`: Happy path and mismatch tests.
+- `crates/soldier_core/tests/test_dispatch_map.rs`: Indirect usage through tests.
+
+## 4. Required Test Gaps
+- **Unhappy Path:** No test exists for missing mandatory `qty` fields (currently causes panic).
+- **Consistency:** No test verifying that `contracts` matches `canonical_qty` within the constructor itself.
+
+## 5. Minimal Implementation Diff (Proposed)
+1. Rename `new` to `try_new`.
+2. Return `Result<Self, Error>`.
+3. Implement derivation logic:
+   - For `qty_usd` instruments: `qty_coin = qty_usd / index_price`.
+   - For `qty_coin` instruments: `qty_usd = qty_coin * index_price`.
+4. Validate `contracts` if provided vs. `canonical_qty`.
+5. Remove all `expect()` calls.
