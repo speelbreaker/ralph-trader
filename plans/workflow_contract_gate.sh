@@ -9,7 +9,7 @@ command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 
 # Check that at least one of rg or grep is available
 if ! command -v rg >/dev/null 2>&1 && ! command -v grep >/dev/null 2>&1; then
-  echo "ERROR: either rg (ripgrep) or grep required" >&2
+  echo "ERROR: either ripgrep or grep required" >&2
   exit 2
 fi
 
