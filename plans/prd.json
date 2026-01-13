@@ -492,8 +492,7 @@
       ],
       "scope": {
         "touch": [
-          "docs/",
-          "plans/prd.json"
+          "docs/**"
         ],
         "avoid": []
       },
@@ -540,7 +539,7 @@
       ],
       "scope": {
         "touch": [
-          "docs/"
+        "docs/**"
         ],
         "avoid": [
           "crates/**",
