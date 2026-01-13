@@ -30,11 +30,11 @@
 - Verify: n/a.
 - Notes: append-only; no gate changes.
 - Next: populate docs/codebase/* as needed and use plans/ideas.md for deferred items.
-- 2026-01-13 15:46:26 UTC S1-008: documented current OrderSize implementation, call sites, and contract gaps with proposed tests/minimal diff in docs/order_size_discovery.md.
-- Commands: ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,200p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full.
+- 2026-01-13 15:46:26 UTC S1-008: documented current OrderSize implementation, call sites, and gaps vs contract in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,200p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,200p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,200p' crates/soldier_core/tests/test_dispatch_map.rs; rg -n "OrderSize::new|map_order_size_to_deribit_amount|OrderSize" crates/soldier_core/src; ./plans/verify.sh full.
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow.
-- Next: proceed to S1-009 discovery.
+- Next: proceed to S1-009 dispatcher mapping discovery.
 - 2026-01-13: workflow maintenance — scoped WIP=1 to Ralph execution only; clarified PRD scope for workflow tasks in specs/WORKFLOW_CONTRACT.md and AGENTS.md.
 - Summary: Updated workflow contract and agent guide to state PRD/WIP rules apply to Ralph loop execution; workflow maintenance tasks are change-controlled but not PRD-scoped.
 - Commands: ./plans/verify.sh full.
