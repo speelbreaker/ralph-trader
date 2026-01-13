@@ -485,20 +485,17 @@
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "CONTRACT.md OrderSize struct (MUST implement):",
-        "CONTRACT.md Canonical internal units (single source of truth):"
+        "### **1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) — MUST implement**"
       ],
       "plan_refs": [
         "S1.2 — OrderSize canonical sizing \\+ notional invariant"
       ],
       "scope": {
         "touch": [
-          "docs/"
+          "docs/",
+          "plans/prd.json"
         ],
-        "avoid": [
-          "crates/**",
-          "plans/**"
-        ]
+        "avoid": []
       },
       "acceptance": [
         "GIVEN the current OrderSize implementation WHEN inspected THEN docs/order_size_discovery.md lists current fields, call sites, and gaps vs the contract OrderSize struct.",
