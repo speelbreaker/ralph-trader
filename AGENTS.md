@@ -5,15 +5,15 @@ Read this first. It is the shortest, enforceable workflow summary.
 ## Non-negotiables
 - Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
 - Verification is mandatory; never weaken gates or tests.
-- WIP=1: exactly one PRD item and one commit per iteration.
-- Fail closed on ambiguity; set needs_human_decision=true and stop.
+- WIP=1 applies to Ralph execution only: exactly one PRD item and one commit per iteration.
+- Fail closed on ambiguity; for PRD work set needs_human_decision=true and stop.
 
 ## Start here (every session)
 - Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
-- Read `plans/prd.json` and `plans/progress.txt`.
+- If running the Ralph loop, read `plans/prd.json` and `plans/progress.txt`.
 - Read `docs/skills/workflow.md`.
 - Run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
-- Work only the selected PRD item.
+- If running the Ralph loop, work only the selected PRD item.
 
 ## Handoff hygiene (when relevant)
 - Update `docs/codebase/*` with verified facts if you touched new areas.

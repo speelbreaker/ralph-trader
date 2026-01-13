@@ -1,6 +1,6 @@
 # Workflow Contract — Ralph Harness (Canonical)
 
-**Purpose (TOC constraint relief):** maximize *contract-aligned, green-verified throughput* with WIP=1.
+**Purpose (TOC constraint relief):** maximize *contract-aligned, green-verified throughput* with WIP=1 **for Ralph execution iterations**.
 If it’s not provably aligned to the contract and provably green, it doesn’t ship.
 
 This contract governs **how we change the repo** (planning → execution → verification → review).
@@ -25,6 +25,9 @@ A bite-sized, single-commit unit of work that can be completed in one Ralph iter
 
 ### PRD
 A JSON backlog file `plans/prd.json` that contains stories. Ralph executes stories from this file.
+
+### Workflow maintenance task
+Changes to the workflow/harness itself (e.g., `specs/WORKFLOW_CONTRACT.md`, `plans/ralph.sh`, `plans/verify.sh`, PRD tooling). These tasks are **not** executed via PRD stories; they are governed by §11 Change Control.
 
 ### “Contract-first”
 The trading behavior contract is the source of truth. If a plan/story conflicts with the contract, we **fail closed** and block.
@@ -68,9 +71,10 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
      - The Ralph harness (`plans/ralph.sh`), not the agent, is the sole authority to flip passes=false → true.
      - Ralph MUST NOT flip passes=true unless verify_post exits 0 in the same iteration AND a contract review gate has passed (see “Contract Alignment Gate”).
 
-3) [WF-2.3] **WIP = 1.**
-   - Exactly one story per iteration.
-   - Exactly one commit per iteration.
+3) [WF-2.3] **WIP = 1 (Ralph execution only).**
+   - Exactly one story per Ralph iteration.
+   - Exactly one commit per Ralph iteration.
+   - Workflow maintenance tasks are outside PRD/WIP scope; they still must follow §11 Change Control and §2.2 Verification.
 
 4) [WF-2.4] **Slices are executed in order.**
    - Ralph may only select stories from the currently-active slice (lowest slice containing any `passes=false`).
@@ -85,6 +89,8 @@ Observable gate requirement:
 ---
 
 ## 3) PRD Schema (Canonical)
+
+[WF-3.0] The PRD applies **only** to Ralph loop execution (implementation stories). Workflow maintenance tasks are **not** entered into PRD; they are handled via §11 Change Control.
 
 [WF-3.1] `plans/prd.json` MUST be valid JSON with this shape:
 
@@ -229,7 +235,7 @@ If conflict is detected → FAIL CLOSED → revert or block.
 
 ## 5) Ralph Harness Protocol (Canonical Loop)
 
-[WF-5.0] Ralph is the only allowed automation for “overnight” changes.
+[WF-5.0] Ralph is the only allowed automation for “overnight” changes. This loop applies to PRD execution only; workflow maintenance tasks follow §11 and do not require PRD items.
 
 ### 5.1 Preflight invariants (before iteration 1) [WF-5.1]
 
@@ -522,6 +528,8 @@ made here first
 reflected in scripts (plans/ralph.sh, plans/verify.sh) second
 
 enforced in CI third
+
+[WF-11.2] Workflow maintenance tasks (changes to this contract or harness scripts) are not PRD stories and are outside the Ralph WIP=1 rule, but they still must honor §2.1 Contract alignment and §2.2 Verification.
 
 ---
 
