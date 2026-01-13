@@ -6,3 +6,7 @@ plans/progress_archive.txt
 
 # Local Codex config
 .codex/
+
+# Local IDE/Agent state
+.claude/
+.obsidian/
