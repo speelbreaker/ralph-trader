@@ -12,7 +12,6 @@ if ! command -v rg >/dev/null 2>&1 && ! command -v grep >/dev/null 2>&1; then
   echo "ERROR: either ripgrep or grep required" >&2
   exit 2
 fi
-
 if [[ ! -f "$spec_file" ]]; then
   echo "ERROR: workflow contract not found: $spec_file" >&2
   exit 1

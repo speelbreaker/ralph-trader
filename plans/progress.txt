@@ -90,3 +90,8 @@
 - Evidence: updated plans/contract_check.sh and plans/workflow_acceptance.sh.
 - Notes: workflow_acceptance currently fails due to missing plans/workflow_contract_gate.sh.
 - Next: decide whether to add plans/workflow_contract_gate.sh or adjust acceptance harness to handle its absence.
+- 2026-01-13 19:34:15 UTC: workflow maintenance — added workflow_contract_gate + generated workflow_contract_map; acceptance now passes.
+- Summary: added plans/workflow_contract_gate.sh and plans/workflow_contract_map.json, fixed workflow_acceptance to run with new gate, and verified contract traceability gate passes.
+- Commands: ./plans/workflow_contract_gate.sh; ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/workflow_contract_gate.sh; plans/workflow_contract_map.json.
+- Next: rerun ./ralph 1 for S1-008 contract review now that contract_check no longer false-fails.
