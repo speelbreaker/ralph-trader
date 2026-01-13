@@ -5,15 +5,50 @@ Read this first. It is the shortest, enforceable workflow summary.
 ## Non-negotiables
 - Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
 - Verification is mandatory; never weaken gates or tests.
-- WIP=1 applies to Ralph execution only: exactly one PRD item and one commit per iteration.
-- Fail closed on ambiguity; for PRD work set needs_human_decision=true and stop.
 
 ## Start here (every session)
 - Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
 - If running the Ralph loop, read `plans/prd.json` and `plans/progress.txt`.
 - Read `docs/skills/workflow.md`.
-- Run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
-- If running the Ralph loop, work only the selected PRD item.
+- If running the Ralph loop, run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
+
+## Ralph loop only (PRD iterations)
+- WIP=1: exactly one PRD item and one commit per iteration.
+- Work only the selected PRD item.
+- Fail closed on PRD ambiguity; set needs_human_decision=true and stop.
+
+## Repo Path Guardrails (Non-Negotiable)
+
+### Canonical workflow files (use THESE paths)
+- Workflow contract: `specs/WORKFLOW_CONTRACT.md`
+- Ralph orchestrator: `plans/ralph.sh`
+- Verification gate (canonical): `plans/verify.sh`
+- Acceptance harness: `plans/workflow_acceptance.sh`
+- Initializer: `plans/init.sh`
+- PRD backlog: `plans/prd.json`
+- Contract review tooling: `plans/contract_check.sh`, `plans/contract_review_validate.sh`
+
+### State + logs (expected runtime artifacts)
+- Ralph state directory: `.ralph/`
+- Canonical state file: `.ralph/state.json`
+- Run logs directory: `plans/logs/`
+
+### Critical ambiguity guard
+There is also a `./verify.sh` at repo root. **DO NOT edit or reference it** unless explicitly instructed.
+All workflow gating must target **`plans/verify.sh`**.
+
+### Contract vs workflow contract
+- `CONTRACT.md` = trading engine contract (runtime behavior/safety gates)
+- `specs/WORKFLOW_CONTRACT.md` = coding workflow contract (Ralph loop + harness rules)
+Do not mix them. If a workflow rule is being enforced, it must cite `specs/WORKFLOW_CONTRACT.md`.
+
+### Changes must be self-proving
+Any change to `plans/*` must include:
+- updated/added assertions in `plans/workflow_acceptance.sh` (or a dedicated gate script invoked by it)
+- and a run that passes `./plans/verify.sh`
+
+### Fail-closed default
+If a required script/artifact is missing or invalid, the workflow must produce a deterministic BLOCKED outcome (not a silent pass).
 
 ## Handoff hygiene (when relevant)
 - Update `docs/codebase/*` with verified facts if you touched new areas.

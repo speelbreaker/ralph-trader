@@ -302,7 +302,11 @@ Evidence: acceptance stub
 Next: continue
 EOT
 echo "tick $(date +%s)" >> "$touch_file"
-git add "$touch_file" "$progress"
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file"
+else
+  git add "$touch_file" "$progress"
+fi
 git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: tick" >/dev/null 2>&1
 EOF
 chmod +x "$STUB_DIR/agent_commit_with_progress.sh"
@@ -322,6 +326,28 @@ set -euo pipefail
 echo "<promise>COMPLETE</promise>"
 EOF
 chmod +x "$STUB_DIR/agent_complete.sh"
+
+cat > "$STUB_DIR/agent_mentions_complete.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mention complete
+Commands: none
+Evidence: acceptance stub
+Next: continue
+EOT
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+git add "$touch_file" "$progress"
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: tick" >/dev/null 2>&1
+echo "If ALL items pass, output exactly: <promise>COMPLETE</promise>"
+EOF
+chmod +x "$STUB_DIR/agent_mentions_complete.sh"
 
 cat > "$STUB_DIR/agent_invalid_selection.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -408,6 +434,159 @@ EOF
   chmod +x "$WORKTREE/plans/contract_check.sh"
 }
 
+write_contract_check_stub_require_iter_artifacts() {
+  cat > "$WORKTREE/plans/contract_check.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+out="${CONTRACT_REVIEW_OUT:-${1:-}}"
+if [[ -z "$out" ]]; then
+  echo "missing contract review output path" >&2
+  exit 1
+fi
+iter_dir="$(cd "$(dirname "$out")" && pwd -P)"
+selected_id="unknown"
+if [[ -f "$iter_dir/selected.json" ]]; then
+  selected_id="$(jq -r '.selected_id // "unknown"' "$iter_dir/selected.json" 2>/dev/null || echo "unknown")"
+fi
+missing=()
+for f in head_before.txt head_after.txt prd_before.json prd_after.json diff.patch; do
+  if [[ ! -f "$iter_dir/$f" ]]; then
+    missing+=("$f")
+  fi
+done
+decision="PASS"
+confidence="high"
+required_followups_json="[]"
+if (( ${#missing[@]} > 0 )); then
+  decision="BLOCKED"
+  confidence="med"
+  required_followups_json="$(printf '%s\n' "${missing[@]}" | jq -R . | jq -s .)"
+fi
+jq -n \
+  --arg selected_story_id "$selected_id" \
+  --arg decision "$decision" \
+  --arg confidence "$confidence" \
+  --argjson required_followups "$required_followups_json" \
+  '{
+    selected_story_id: $selected_story_id,
+    decision: $decision,
+    confidence: $confidence,
+    contract_refs_checked: ["CONTRACT.md §1"],
+    scope_check: { changed_files: [], out_of_scope_files: [], notes: ["acceptance stub"] },
+    verify_check: { verify_post_present: true, verify_post_green: true, notes: ["acceptance stub"] },
+    pass_flip_check: {
+      requested_mark_pass_id: $selected_story_id,
+      prd_passes_before: false,
+      prd_passes_after: false,
+      evidence_required: [],
+      evidence_found: [],
+      evidence_missing: [],
+      decision_on_pass_flip: "DENY"
+    },
+    violations: [],
+    required_followups: $required_followups,
+    rationale: ["acceptance stub"]
+  }' > "$out"
+EOF
+  chmod +x "$WORKTREE/plans/contract_check.sh"
+}
+
+write_contract_check_stub "PASS"
+run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
+
+echo "Test 0: contract_check resolves contract refs without SIGPIPE"
+reset_state
+contract_test_root="$WORKTREE/.ralph/contract_check_ref_ok"
+iter_dir="$contract_test_root/iter_1"
+run_in_worktree mkdir -p "$iter_dir"
+cat > "$contract_test_root/CONTRACT.md" <<'EOF'
+# Contract
+## 1.0 Instrument Units
+EOF
+cat > "$contract_test_root/prd.json" <<'JSON'
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-008",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "Contract refs match test",
+      "contract_refs": ["1.0 Instrument Units"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": {
+        "touch": ["docs/**"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["docs/order_size_discovery.md"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+cat > "$iter_dir/selected.json" <<'JSON'
+{"selected_id":"S1-008"}
+JSON
+run_in_worktree git rev-parse HEAD~1 > "$iter_dir/head_before.txt"
+run_in_worktree git rev-parse HEAD > "$iter_dir/head_after.txt"
+cp "$contract_test_root/prd.json" "$iter_dir/prd_before.json"
+cp "$contract_test_root/prd.json" "$iter_dir/prd_after.json"
+cat > "$iter_dir/diff.patch" <<'EOF'
+diff --git a/docs/order_size_discovery.md b/docs/order_size_discovery.md
+index 0000000..1111111 100644
+--- a/docs/order_size_discovery.md
++++ b/docs/order_size_discovery.md
+@@ -0,0 +1 @@
++test
+EOF
+echo "VERIFY_SH_SHA=stub" > "$iter_dir/verify_post.log"
+cat > "$WORKTREE/.ralph/state.json" <<'JSON'
+{"last_verify_post_rc":0}
+JSON
+cp "$ROOT/plans/contract_check.sh" "$WORKTREE/plans/contract_check.sh"
+chmod +x "$WORKTREE/plans/contract_check.sh"
+set +e
+run_in_worktree env \
+  CONTRACT_REVIEW_OUT="$iter_dir/contract_review.json" \
+  CONTRACT_FILE="$contract_test_root/CONTRACT.md" \
+  PRD_FILE="$contract_test_root/prd.json" \
+  ./plans/contract_check.sh "$iter_dir/contract_review.json" >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected contract_check.sh to exit 0 for matching contract_refs" >&2
+  exit 1
+fi
+decision="$(run_in_worktree jq -r '.decision' "$iter_dir/contract_review.json")"
+if [[ "$decision" != "PASS" ]]; then
+  echo "FAIL: expected decision=PASS for matching contract_refs, got ${decision}" >&2
+  exit 1
+fi
+if run_in_worktree jq -e '.violations[]? | select(.contract_ref=="CONTRACT_REFS")' "$iter_dir/contract_review.json" >/dev/null 2>&1; then
+  echo "FAIL: unexpected CONTRACT_REFS violation for matching contract_refs" >&2
+  exit 1
+fi
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
 
@@ -472,6 +651,7 @@ echo "Test 3: COMPLETE printed early blocks with blocked_incomplete artifact"
 reset_state
 valid_prd_3="$WORKTREE/.ralph/valid_prd_3.json"
 write_valid_prd "$valid_prd_3" "S1-002"
+before_blocked_incomplete="$(count_blocked_incomplete)"
 before_blocked="$(count_blocked)"
 set +e
 test3_log="$WORKTREE/.ralph/test3.log"
@@ -510,6 +690,57 @@ latest_block="$(latest_blocked_incomplete)"
 reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
 if [[ "$reason" != "incomplete_completion" ]]; then
   echo "FAIL: expected incomplete_completion reason in blocked artifact" >&2
+  exit 1
+fi
+
+echo "Test 3b: COMPLETE mention does not trigger blocked_incomplete"
+reset_state
+valid_prd_3b="$WORKTREE/.ralph/valid_prd_3b.json"
+write_valid_prd "$valid_prd_3b" "S1-002"
+before_blocked="$(count_blocked)"
+before_blocked_incomplete="$(count_blocked_incomplete)"
+set +e
+test3b_log="$WORKTREE/.ralph/test3b.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_3b" \
+  PROGRESS_FILE="$WORKTREE/plans/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mentions_complete.sh" \
+  SELECTED_ID="S1-002" \
+  ACCEPTANCE_TOUCH_FILE="src/lib.rs" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test3b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for max iters when no completion" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for max iters" >&2
+  exit 1
+fi
+after_blocked_incomplete="$(count_blocked_incomplete)"
+if [[ "$after_blocked_incomplete" -gt "$before_blocked_incomplete" ]]; then
+  echo "FAIL: did not expect blocked_incomplete artifact for COMPLETE mention" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test3b_log" >&2 || true
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "max_iters_exceeded" || true)"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected max_iters_exceeded blocked artifact" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test3b_log" >&2 || true
   exit 1
 fi
 
@@ -589,6 +820,47 @@ if [[ "$reason" != "lock_held" ]]; then
   echo "FAIL: expected lock_held reason in blocked artifact" >&2
   exit 1
 fi
+
+echo "Test 5b: contract review sees iteration artifacts"
+reset_state
+valid_prd_5b="$WORKTREE/plans/prd_iter_artifacts.json"
+write_valid_prd "$valid_prd_5b" "S1-004"
+run_in_worktree git add "$valid_prd_5b" >/dev/null 2>&1
+run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: iter artifacts prd" >/dev/null 2>&1
+write_contract_check_stub_require_iter_artifacts
+set +e
+test5b_log="$WORKTREE/.ralph/test5b.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_5b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
+  SELECTED_ID="S1-004" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test5b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for iter artifacts contract review" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test5b_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+decision="$(run_in_worktree jq -r '.decision' "$iter_dir/contract_review.json")"
+if [[ "$decision" != "PASS" ]]; then
+  echo "FAIL: expected decision=PASS for iter artifacts check, got ${decision}" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
 
 echo "Test 6: missing contract_check.sh writes FAIL contract review"
 reset_state

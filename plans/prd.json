@@ -492,8 +492,7 @@
       ],
       "scope": {
         "touch": [
-          "docs/",
-          "plans/prd.json"
+          "docs/**"
         ],
         "avoid": []
       },
@@ -521,7 +520,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S1-009",
@@ -540,7 +539,7 @@
       ],
       "scope": {
         "touch": [
-          "docs/"
+          "docs/**"
         ],
         "avoid": [
           "crates/**",

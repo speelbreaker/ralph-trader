@@ -30,11 +30,30 @@
 - Verify: n/a.
 - Notes: append-only; no gate changes.
 - Next: populate docs/codebase/* as needed and use plans/ideas.md for deferred items.
-- 2026-01-13 15:46:26 UTC S1-008: documented current OrderSize implementation, call sites, and contract gaps with proposed tests/minimal diff in docs/order_size_discovery.md.
-- Commands: ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,200p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full.
+- 2026-01-13 15:46:26 UTC S1-008: documented current OrderSize implementation, call sites, and gaps vs contract in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,200p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,200p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,200p' crates/soldier_core/tests/test_dispatch_map.rs; rg -n "OrderSize::new|map_order_size_to_deribit_amount|OrderSize" crates/soldier_core/src; ./plans/verify.sh full.
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow.
-- Next: proceed to S1-009 discovery.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- S1-008: refined docs/order_size_discovery.md with contract-mismatch enforcement placement and minimal diff notes; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat plans/prd.json; cat plans/progress.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; cat docs/order_size_discovery.md; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,220p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- S1-008: updated docs/order_size_discovery.md with mismatch rejection notes and canonical-amount reject gap; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates/soldier_core/src/execution crates/soldier_core/tests; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,220p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full; test -f docs/order_size_discovery.md; rg -n "OrderSize" docs/order_size_discovery.md.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13T01:46:44Z S1-008: noted OrderSize mismatch epsilon detail in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; test -f plans/init.sh && echo "init exists"; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; cat docs/order_size_discovery.md; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,220p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,200p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,220p' crates/soldier_core/tests/test_dispatch_map.rs; rg -n "map_order_size_to_deribit_amount" crates; ./plans/verify.sh full.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 16:35:53 UTC S1-008: expanded docs/order_size_discovery.md with missing-canonical/multiplier rejection note and execution re-export call site; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; test -f plans/init.sh && echo "init exists"; ./plans/init.sh; ./plans/verify.sh full; ls -la docs; cat docs/order_size_discovery.md; sed -n '1,220p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; rg -n "OrderSize" crates; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 16:45:12 UTC S1-008: updated docs/order_size_discovery.md with mismatch tolerance gap and minimal diff note; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat docs/skills/workflow.md; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; cat docs/order_size_discovery.md; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full; test -f docs/order_size_discovery.md; rg -n "OrderSize" docs/order_size_discovery.md.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 dispatcher mapping discovery.
 - 2026-01-13: workflow maintenance — scoped WIP=1 to Ralph execution only; clarified PRD scope for workflow tasks in specs/WORKFLOW_CONTRACT.md and AGENTS.md.
 - Summary: Updated workflow contract and agent guide to state PRD/WIP rules apply to Ralph loop execution; workflow maintenance tasks are change-controlled but not PRD-scoped.
 - Commands: ./plans/verify.sh full.
@@ -55,3 +74,53 @@
 - Commands: ./plans/verify.sh full.
 - Evidence: plans/verify.sh output (VERIFY OK).
 - Next: use scripts/push_main.sh for direct-to-main updates.
+- 2026-01-13 18:20:49 UTC S1-008: added call-site note about mismatch counter assertion in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat AGENTS.md; cat .ralph/iter_1_20260113-121625/selected_item.json; cat .ralph/iter_1_20260113-121625/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; git status -s; ./plans/init.sh; INIT_FAIL_ON_DIRTY=0 ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,200p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,240p' crates/soldier_core/tests/test_dispatch_map.rs; cat docs/order_size_discovery.md; ./plans/verify.sh full; test -f docs/order_size_discovery.md; rg -n "OrderSize" docs/order_size_discovery.md.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow. Working tree still contains untracked artifacts/ from verify runs.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 18:28:26 UTC S1-008: clarified docs/order_size_discovery.md with dispatch_map both-qty rejection and OrderSize::new non-canonical drop note; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat .ralph/iter_1_20260113-122501/selected_item.json; cat .ralph/iter_1_20260113-122501/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; ./plans/init.sh; ./plans/verify.sh full; cat docs/order_size_discovery.md; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 19:15:55 UTC: workflow maintenance — fix contract_check SIGPIPE false-fails and add acceptance regression test for contract refs matching.
+- Summary: replaced echo|grep pipelines in plans/contract_check.sh with here-string helper to avoid SIGPIPE under pipefail; added Test 0 in plans/workflow_acceptance.sh to exercise contract_refs match and require decision=PASS.
+- Commands: ./plans/workflow_acceptance.sh (failed: missing plans/workflow_contract_gate.sh); VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: updated plans/contract_check.sh and plans/workflow_acceptance.sh.
+- Notes: workflow_acceptance currently fails due to missing plans/workflow_contract_gate.sh.
+- Next: decide whether to add plans/workflow_contract_gate.sh or adjust acceptance harness to handle its absence.
+- 2026-01-13 19:34:15 UTC: workflow maintenance — added workflow_contract_gate + generated workflow_contract_map; acceptance now passes.
+- Summary: added plans/workflow_contract_gate.sh and plans/workflow_contract_map.json, fixed workflow_acceptance to run with new gate, and verified contract traceability gate passes.
+- Commands: ./plans/workflow_contract_gate.sh; ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/workflow_contract_gate.sh; plans/workflow_contract_map.json.
+- Next: rerun ./ralph 1 for S1-008 contract review now that contract_check no longer false-fails.
+- 2026-01-13 19:51:50 UTC: workflow maintenance — enriched workflow_contract_map.json with concrete enforcement/tests for core WF-* rules.
+- Summary: regenerated plans/workflow_contract_map.json with rule titles + enforcement/artifacts/tests overrides; workflow_contract_gate OK; workflow_acceptance + verify green.
+- Commands: ./plans/workflow_contract_gate.sh; ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/workflow_contract_map.json.
+- Next: rerun ./ralph 1 for S1-008 contract review.
+- 2026-01-13 19:57:49 UTC S1-008: added OrderSize field type and DispatchRejectReason notes to docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-135407/selected_item.json; cat .ralph/iter_1_20260113-135407/progress_tail_before.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat docs/skills/workflow.md; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates/soldier_core/src/execution crates/soldier_core/tests; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,220p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,260p' crates/soldier_core/tests/test_dispatch_map.rs; cat docs/order_size_discovery.md; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 20:17:41 UTC: workflow maintenance — save iter artifacts before contract review to avoid BLOCKED on missing head_after/prd_after.
+- Summary: call save_iter_after prior to contract review in plans/ralph.sh and add workflow acceptance test to assert iter artifacts exist before contract_check.
+- Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+- Evidence: plans/ralph.sh; plans/workflow_acceptance.sh.
+- Next: rerun ./ralph 1 for S1-008 now that contract review has complete artifacts.
+- 2026-01-13 20:43:51 UTC S1-008: noted missing contract rounding rule for derived contracts in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-144026/selected_item.json; cat .ralph/iter_1_20260113-144026/progress_tail_before.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full; cat docs/order_size_discovery.md; sed -n '1,220p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; git status -s; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 20:59:28 UTC: workflow maintenance — tighten COMPLETE sentinel detection to exact-line match and add acceptance test for sentinel mention.
+- Summary: switch COMPLETE detection to grep -Fx in plans/ralph.sh and add Test 3b in plans/workflow_acceptance.sh to ensure mentions don't trigger blocked_incomplete.
+- Commands: ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/ralph.sh; plans/workflow_acceptance.sh.
+- Next: rerun ./ralph 1 for S1-009 or continue with next PRD item.
+- 2026-01-13 21:21:51 UTC: workflow maintenance — fix acceptance Test 3b stub to avoid dirty worktree and scope violations.
+- Summary: agent_mentions_complete now creates touch-file directories and Test 3b uses a scoped touch file plus tracked progress file; test now validates max_iters_exceeded instead of blocked_incomplete.
+- Commands: ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/workflow_acceptance.sh.
+- Next: rerun ./ralph 1 if needed; continue with next PRD item.
