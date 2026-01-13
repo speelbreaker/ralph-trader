@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+require_tools() {
+  local missing=0
+  for tool in "$@"; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      echo "FAIL: missing required command: $tool" >&2
+      missing=1
+    fi
+  done
+  if (( missing != 0 )); then
+    exit 1
+  fi
+}
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+require_tools git jq mktemp find wc tr sed awk stat sort head tail date
 mkdir -p "$ROOT/.ralph"
 WORKTREE="$(mktemp -d "${ROOT}/.ralph/workflow_acceptance_XXXXXX")"
 
@@ -17,15 +31,38 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
+require_file() {
+  local path="$1"
+  if [[ ! -f "$path" ]]; then
+    echo "FAIL: required file missing: $path" >&2
+    exit 1
+  fi
+}
+
+copy_worktree_file() {
+  local rel="$1"
+  local src="$ROOT/$rel"
+  local dest="$WORKTREE/$rel"
+  require_file "$src"
+  if ! cp "$src" "$dest"; then
+    echo "FAIL: failed to copy $src to $dest" >&2
+    exit 1
+  fi
+  if [[ ! -f "$dest" ]]; then
+    echo "FAIL: copy did not produce $dest" >&2
+    exit 1
+  fi
+}
+
 # Ensure tests run against the working tree versions while keeping the worktree clean.
 run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
-cp "$ROOT/plans/ralph.sh" "$WORKTREE/plans/ralph.sh"
-cp "$ROOT/plans/verify.sh" "$WORKTREE/plans/verify.sh"
-cp "$ROOT/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_schema_check.sh"
-cp "$ROOT/plans/contract_review_validate.sh" "$WORKTREE/plans/contract_review_validate.sh"
-cp "$ROOT/plans/workflow_contract_gate.sh" "$WORKTREE/plans/workflow_contract_gate.sh"
-cp "$ROOT/plans/workflow_contract_map.json" "$WORKTREE/plans/workflow_contract_map.json"
-cp "$ROOT/specs/WORKFLOW_CONTRACT.md" "$WORKTREE/specs/WORKFLOW_CONTRACT.md"
+copy_worktree_file "plans/ralph.sh"
+copy_worktree_file "plans/verify.sh"
+copy_worktree_file "plans/prd_schema_check.sh"
+copy_worktree_file "plans/contract_review_validate.sh"
+copy_worktree_file "plans/workflow_contract_gate.sh"
+copy_worktree_file "plans/workflow_contract_map.json"
+copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
 chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
 run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
@@ -43,26 +80,51 @@ count_blocked_incomplete() {
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_incomplete_*' | wc -l | tr -d ' '
 }
 
+stat_mtime() {
+  local path="$1"
+  if stat -f '%m' "$path" >/dev/null 2>&1; then
+    stat -f '%m' "$path"
+    return 0
+  fi
+  stat -c '%Y' "$path"
+}
+
+list_blocked_dirs() {
+  local pattern="${1:-blocked_*}"
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name "$pattern" -print0 2>/dev/null \
+    | while IFS= read -r -d '' dir; do
+        printf '%s\t%s\n' "$(stat_mtime "$dir")" "$dir"
+      done \
+    | sort -rn \
+    | awk -F '\t' '{print $2}'
+}
+
+latest_blocked_pattern() {
+  local pattern="$1"
+  list_blocked_dirs "$pattern" | head -n 1 || true
+}
+
 latest_blocked() {
-  ls -dt "$WORKTREE/.ralph"/blocked_* 2>/dev/null | head -n 1 || true
+  latest_blocked_pattern "blocked_*"
 }
 
 latest_blocked_with_reason() {
   local reason="$1"
   local dir
-  for dir in $(ls -dt "$WORKTREE/.ralph"/blocked_* 2>/dev/null); do
+  while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
     if [[ -f "$dir/blocked_item.json" ]]; then
       if [[ "$(run_in_worktree jq -r '.reason' "$dir/blocked_item.json")" == "$reason" ]]; then
         echo "$dir"
         return 0
       fi
     fi
-  done
+  done < <(list_blocked_dirs "blocked_*")
   return 1
 }
 
 latest_blocked_incomplete() {
-  ls -dt "$WORKTREE/.ralph"/blocked_incomplete_* 2>/dev/null | head -n 1 || true
+  latest_blocked_pattern "blocked_incomplete_*"
 }
 
 reset_state() {
@@ -280,6 +342,27 @@ chmod +x "$STUB_DIR/agent_delete_test_file_and_commit.sh"
 
 write_contract_check_stub() {
   local decision="${1:-PASS}"
+  local pass_flip="${2:-DENY}"
+  local prd_passes_after="${3:-false}"
+  local evidence_required="${4:-[]}"
+  local evidence_found="${5:-[]}"
+  local evidence_missing="${6:-[]}"
+  local prd_passes_after_json="false"
+  local evidence_required_json="[]"
+  local evidence_found_json="[]"
+  local evidence_missing_json="[]"
+  if jq -e . >/dev/null 2>&1 <<<"$prd_passes_after"; then
+    prd_passes_after_json="$prd_passes_after"
+  fi
+  if jq -e . >/dev/null 2>&1 <<<"$evidence_required"; then
+    evidence_required_json="$evidence_required"
+  fi
+  if jq -e . >/dev/null 2>&1 <<<"$evidence_found"; then
+    evidence_found_json="$evidence_found"
+  fi
+  if jq -e . >/dev/null 2>&1 <<<"$evidence_missing"; then
+    evidence_missing_json="$evidence_missing"
+  fi
   cat > "$WORKTREE/plans/contract_check.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -295,9 +378,15 @@ if [[ -f "\$iter_dir/selected.json" ]]; then
 fi
 jq -n \
   --arg selected_story_id "\$selected_id" \
+  --arg decision "$decision" \
+  --arg pass_flip "$pass_flip" \
+  --argjson prd_passes_after '$prd_passes_after_json' \
+  --argjson evidence_required '$evidence_required_json' \
+  --argjson evidence_found '$evidence_found_json' \
+  --argjson evidence_missing '$evidence_missing_json' \
   '{
     selected_story_id: \$selected_story_id,
-    decision: "'"$decision"'",
+    decision: \$decision,
     confidence: "high",
     contract_refs_checked: ["CONTRACT.md §1"],
     scope_check: { changed_files: [], out_of_scope_files: [], notes: ["acceptance stub"] },
@@ -305,11 +394,11 @@ jq -n \
     pass_flip_check: {
       requested_mark_pass_id: \$selected_story_id,
       prd_passes_before: false,
-      prd_passes_after: false,
-      evidence_required: [],
-      evidence_found: [],
-      evidence_missing: [],
-      decision_on_pass_flip: "DENY"
+      prd_passes_after: \$prd_passes_after,
+      evidence_required: \$evidence_required,
+      evidence_found: \$evidence_found,
+      evidence_missing: \$evidence_missing,
+      decision_on_pass_flip: \$pass_flip
     },
     violations: [],
     required_followups: [],
@@ -637,21 +726,63 @@ if [[ "$decision" != "BLOCKED" ]]; then
 fi
 write_contract_check_stub "PASS"
 
-echo "Test 9: decision=PASS allows completion"
+echo "Test 9: decision=FAIL stops iteration"
 reset_state
-valid_prd_9="$WORKTREE/plans/prd_acceptance.json"
+valid_prd_9="$WORKTREE/.ralph/valid_prd_9.json"
 write_valid_prd "$valid_prd_9" "S1-008"
-run_in_worktree git add "$valid_prd_9" >/dev/null 2>&1
-run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd" >/dev/null 2>&1
-write_contract_check_stub "PASS"
+write_contract_check_stub "FAIL"
 set +e
-test9_log="$WORKTREE/.ralph/test9.log"
 run_in_worktree env \
   PRD_FILE="$valid_prd_9" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
   SELECTED_ID="S1-008" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for decision=FAIL" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+decision="$(run_in_worktree jq -r '.decision' "$iter_dir/contract_review.json")"
+if [[ "$decision" != "FAIL" ]]; then
+  echo "FAIL: expected decision=FAIL in contract_review.json" >&2
+  exit 1
+fi
+pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_9")"
+if [[ "$pass_state" != "false" ]]; then
+  echo "FAIL: expected passes=false when decision=FAIL" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "contract_review_failed")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for contract_review_failed" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
+
+echo "Test 10: decision=PASS with ALLOW pass flip completes"
+reset_state
+valid_prd_10="$WORKTREE/plans/prd_acceptance.json"
+write_valid_prd "$valid_prd_10" "S1-009"
+run_in_worktree git add "$valid_prd_10" >/dev/null 2>&1
+run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd" >/dev/null 2>&1
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10_log="$WORKTREE/.ralph/test10.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_10" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
+  SELECTED_ID="S1-009" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_RATE_LIMIT_ENABLED=0 \
@@ -661,19 +792,40 @@ run_in_worktree env \
   GIT_AUTHOR_EMAIL="workflow@local" \
   GIT_COMMITTER_NAME="workflow-acceptance" \
   GIT_COMMITTER_EMAIL="workflow@local" \
-  ./plans/ralph.sh 1 >"$test9_log" 2>&1
+  ./plans/ralph.sh 1 >"$test10_log" 2>&1
 rc=$?
 set -e
 if [[ "$rc" -ne 0 ]]; then
   echo "FAIL: expected zero exit for decision=PASS" >&2
   echo "Ralph log tail:" >&2
-  tail -n 120 "$test9_log" >&2 || true
+  tail -n 120 "$test10_log" >&2 || true
+  exit 1
+fi
+pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_10")"
+if [[ "$pass_state" != "true" ]]; then
+  echo "FAIL: expected passes=true when decision=PASS and pass flip allowed" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+review_path="$iter_dir/contract_review.json"
+if ! run_in_worktree test -f "$review_path"; then
+  echo "FAIL: expected contract_review.json for pass flip allow test" >&2
+  exit 1
+fi
+allow_decision="$(run_in_worktree jq -r '.pass_flip_check.decision_on_pass_flip' "$review_path")"
+if [[ "$allow_decision" != "ALLOW" ]]; then
+  echo "FAIL: expected decision_on_pass_flip=ALLOW" >&2
+  exit 1
+fi
+required_count="$(run_in_worktree jq -r '.pass_flip_check.evidence_required | length' "$review_path")"
+missing_count="$(run_in_worktree jq -r '.pass_flip_check.evidence_missing | length' "$review_path")"
+if [[ "$required_count" -lt 1 || "$missing_count" -ne 0 ]]; then
+  echo "FAIL: expected evidence requirements satisfied for pass flip allow test" >&2
   exit 1
 fi
 
 
-
-echo "Test 10: contract_review_validate enforces schema file"
+echo "Test 11: contract_review_validate enforces schema file"
 valid_review="$WORKTREE/.ralph/contract_review_valid.json"
 cat > "$valid_review" <<'JSON'
 {
@@ -709,7 +861,7 @@ if [[ "$rc" -eq 0 ]]; then
 fi
 run_in_worktree ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2>&1
 
-echo "Test 11: workflow contract traceability gate"
+echo "Test 12: workflow contract traceability gate"
 run_in_worktree ./plans/workflow_contract_gate.sh >/dev/null 2>&1
 bad_map="$WORKTREE/.ralph/workflow_contract_map.bad.json"
 run_in_worktree jq 'del(.rules[0])' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_map"
@@ -722,7 +874,7 @@ if [[ "$rc" -eq 0 ]]; then
   exit 1
 fi
 
-echo "Test 12: missing PRD file stops preflight"
+echo "Test 13: missing PRD file stops preflight"
 reset_state
 missing_prd="$WORKTREE/.ralph/missing_prd.json"
 before_blocked="$(count_blocked)"
@@ -750,7 +902,7 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 
-echo "Test 13: verify_pre failure stops before implementation"
+echo "Test 14: verify_pre failure stops before implementation"
 reset_state
 valid_prd_13="$WORKTREE/.ralph/valid_prd_13.json"
 write_valid_prd "$valid_prd_13" "S1-010"
@@ -785,12 +937,12 @@ if [[ -n "$dirty_status" ]]; then
   exit 1
 fi
 
-# NOTE: Tests 10–18 are intentionally ordered by runtime workflow rather than
+# NOTE: Tests 11–21 are intentionally ordered by runtime workflow rather than
 # strictly following the WF-12.1–WF-12.7 order in WORKFLOW_CONTRACT.md.
-# In particular, Test 13 ("verify_pre failure stops before implementation")
+# In particular, Test 14 ("verify_pre failure stops before implementation")
 # is grouped here with other verify/preflight behaviour tests instead of
 # appearing immediately after the baseline integrity tests in WF-12.2.
-echo "Test 14: needs_human_decision=true blocks execution"
+echo "Test 15: needs_human_decision=true blocks execution"
 reset_state
 valid_prd_14="$WORKTREE/.ralph/valid_prd_14.json"
 write_valid_prd "$valid_prd_14" "S1-010"
@@ -817,7 +969,7 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 
-echo "Test 15: cheating detected (deleted test file)"
+echo "Test 16: cheating detected (deleted test file)"
 reset_state
 valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
 write_valid_prd "$valid_prd_15" "S1-011"
@@ -878,7 +1030,7 @@ if ! run_in_worktree test -f "tests/test_dummy.rs"; then
 fi
 write_contract_check_stub "PASS"
 
-echo "Test 16: active slice gating selects lowest slice"
+echo "Test 17: active slice gating selects lowest slice"
 reset_state
 valid_prd_16="$WORKTREE/.ralph/valid_prd_16.json"
 cat > "$valid_prd_16" <<'JSON'
@@ -956,15 +1108,139 @@ if [[ "$selected_id" != "S1-012" ]]; then
   exit 1
 fi
 
-echo "Test 17: max iterations exceeded"
+echo "Test 18: rate limit sleep updates state and cooldown"
 reset_state
-valid_prd_17="$WORKTREE/.ralph/valid_prd_17.json"
-write_valid_prd "$valid_prd_17" "S1-012"
-_tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["acceptance_tick.txt"]' "$valid_prd_17" > "$_tmp" && mv "$_tmp" "$valid_prd_17"
+rate_prd="$WORKTREE/plans/prd_rate_limit.json"
+write_valid_prd "$rate_prd" "S1-014"
+run_in_worktree git add "$rate_prd" >/dev/null 2>&1
+run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd rate limit" >/dev/null 2>&1
+cat > "$STUB_DIR/agent_select.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "<selected_id>${SELECTED_ID:-S1-014}</selected_id>"
+EOF
+chmod +x "$STUB_DIR/agent_select.sh"
+rate_limit_file="$WORKTREE/.ralph/rate_limit_test.json"
+now="$(date +%s)"
+window_start=$((now - 3590))
+jq -n \
+  --argjson window_start_epoch "$window_start" \
+  --argjson count 2 \
+  '{window_start_epoch: $window_start_epoch, count: $count}' \
+  > "$rate_limit_file"
+set +e
+test18_log="$WORKTREE/.ralph/test18.log"
+run_in_worktree env \
+  PRD_FILE="$rate_prd" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=1 \
+  RPH_RATE_LIMIT_PER_HOUR=2 \
+  RPH_RATE_LIMIT_FILE="$rate_limit_file" \
+  RPH_RATE_LIMIT_RESTART_ON_SLEEP=0 \
+  RPH_SELECTION_MODE=agent \
+  RPH_AGENT_CMD="$STUB_DIR/agent_select.sh" \
+  SELECTED_ID="S1-014" \
+  ./plans/ralph.sh 1 >"$test18_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for rate limit dry-run test" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test18_log" >&2 || true
+  exit 1
+fi
+if ! run_in_worktree grep -q "RateLimit: sleeping" "$test18_log"; then
+  echo "FAIL: expected rate limit sleep log" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 80 "$test18_log" >&2 || true
+  exit 1
+fi
+rate_limit_limit="$(run_in_worktree jq -r '.rate_limit.limit // -1' "$WORKTREE/.ralph/state.json")"
+rate_limit_count="$(run_in_worktree jq -r '.rate_limit.count // -1' "$WORKTREE/.ralph/state.json")"
+rate_limit_sleep="$(run_in_worktree jq -r '.rate_limit.last_sleep_seconds // 0' "$WORKTREE/.ralph/state.json")"
+if [[ "$rate_limit_limit" -ne 2 || "$rate_limit_count" -lt 1 || "$rate_limit_sleep" -le 0 ]]; then
+  echo "FAIL: expected rate_limit state to be recorded (limit=2 count>=1 sleep>0)" >&2
+  exit 1
+fi
+set +e
+test18b_log="$WORKTREE/.ralph/test18b.log"
+run_in_worktree env \
+  PRD_FILE="$rate_prd" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=1 \
+  RPH_RATE_LIMIT_PER_HOUR=2 \
+  RPH_RATE_LIMIT_FILE="$rate_limit_file" \
+  RPH_RATE_LIMIT_RESTART_ON_SLEEP=0 \
+  RPH_SELECTION_MODE=agent \
+  RPH_AGENT_CMD="$STUB_DIR/agent_select.sh" \
+  SELECTED_ID="S1-014" \
+  ./plans/ralph.sh 1 >"$test18b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for rate limit cooldown test" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test18b_log" >&2 || true
+  exit 1
+fi
+if run_in_worktree grep -q "RateLimit: sleeping" "$test18b_log"; then
+  echo "FAIL: expected cooldown run to avoid rate limit sleep" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 80 "$test18b_log" >&2 || true
+  exit 1
+fi
+
+echo "Test 19: circuit breaker blocks after repeated verify_post failure"
+reset_state
+valid_prd_19="$WORKTREE/.ralph/valid_prd_19.json"
+write_valid_prd "$valid_prd_19" "S1-015"
 set +e
 run_in_worktree env \
-  PRD_FILE="$valid_prd_17" \
+  PRD_FILE="$valid_prd_19" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
+  VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test19" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  SELECTED_ID="S1-015" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_CIRCUIT_BREAKER_ENABLED=1 \
+  RPH_MAX_SAME_FAILURE=1 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for circuit breaker" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "circuit_breaker")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for circuit_breaker" >&2
+  exit 1
+fi
+reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
+if [[ "$reason" != "circuit_breaker" ]]; then
+  echo "FAIL: expected reason=circuit_breaker, got ${reason}" >&2
+  exit 1
+fi
+pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_19")"
+if [[ "$pass_state" != "false" ]]; then
+  echo "FAIL: expected passes=false after circuit breaker" >&2
+  exit 1
+fi
+
+echo "Test 20: max iterations exceeded"
+reset_state
+valid_prd_20="$WORKTREE/.ralph/valid_prd_20.json"
+write_valid_prd "$valid_prd_20" "S1-012"
+_tmp=$(mktemp)
+run_in_worktree jq '.items[0].scope.touch += ["acceptance_tick.txt"]' "$valid_prd_20" > "$_tmp" && mv "$_tmp" "$valid_prd_20"
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_20" \
   PROGRESS_FILE="plans/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_commit_progress_no_mark_pass.sh" \
@@ -979,7 +1255,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for max iters exceeded" >&2
   exit 1
 fi
-latest_block="$(ls -dt "$WORKTREE/.ralph"/blocked_max_iters_* 2>/dev/null | head -n 1 || true)"
+latest_block="$(latest_blocked_pattern "blocked_max_iters_*")"
 if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for max_iters_exceeded" >&2
   exit 1
@@ -990,13 +1266,13 @@ if [[ "$reason" != "max_iters_exceeded" ]]; then
   exit 1
 fi
 
-echo "Test 18: self-heal reverts bad changes"
+echo "Test 21: self-heal reverts bad changes"
 reset_state
-valid_prd_18="$WORKTREE/.ralph/valid_prd_18.json"
-write_valid_prd "$valid_prd_18" "S1-013"
+valid_prd_21="$WORKTREE/.ralph/valid_prd_21.json"
+write_valid_prd "$valid_prd_21" "S1-013"
 # Allow the self-heal agent to touch the file it creates.
 tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_18" > "$tmp" && mv "$tmp" "$valid_prd_18"
+run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_21" > "$tmp" && mv "$tmp" "$valid_prd_21"
 # Start with clean slate
 run_in_worktree git add . >/dev/null 2>&1 || true
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "pre-self-heal" >/dev/null 2>&1 || true
@@ -1014,10 +1290,10 @@ chmod +x "$STUB_DIR/agent_break.sh"
 
 set +e
 run_in_worktree env \
-  PRD_FILE="$valid_prd_18" \
+  PRD_FILE="$valid_prd_21" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
-  VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test18" \
+  VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test21" \
   RPH_AGENT_CMD="$STUB_DIR/agent_break.sh" \
   RPH_SELF_HEAL=1 \
   RPH_SELECTION_MODE=harness \
