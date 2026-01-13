@@ -23,8 +23,8 @@ cp "$ROOT/plans/ralph.sh" "$WORKTREE/plans/ralph.sh"
 cp "$ROOT/plans/verify.sh" "$WORKTREE/plans/verify.sh"
 cp "$ROOT/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_schema_check.sh"
 cp "$ROOT/plans/contract_review_validate.sh" "$WORKTREE/plans/contract_review_validate.sh"
-cp "$ROOT/plans/workflow_contract_gate.sh" "$WORKTREE/plans/workflow_contract_gate.sh"
-cp "$ROOT/plans/workflow_contract_map.json" "$WORKTREE/plans/workflow_contract_map.json"
+[[ -f "$ROOT/plans/workflow_contract_gate.sh" ]] && cp "$ROOT/plans/workflow_contract_gate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" || true
+[[ -f "$ROOT/plans/workflow_contract_map.json" ]] && cp "$ROOT/plans/workflow_contract_map.json" "$WORKTREE/plans/workflow_contract_map.json" || true
 cp "$ROOT/specs/WORKFLOW_CONTRACT.md" "$WORKTREE/specs/WORKFLOW_CONTRACT.md"
 chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
 run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
