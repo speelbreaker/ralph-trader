@@ -30,3 +30,8 @@
 - Verify: n/a.
 - Notes: append-only; no gate changes.
 - Next: populate docs/codebase/* as needed and use plans/ideas.md for deferred items.
+- 2026-01-13 15:46:26 UTC S1-008: documented current OrderSize implementation, call sites, and contract gaps with proposed tests/minimal diff in docs/order_size_discovery.md.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,200p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 discovery.
