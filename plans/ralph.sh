@@ -25,12 +25,21 @@ RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
-RPH_AGENT_CMD="${RPH_AGENT_CMD:-claude}"       # claude|codex|opencode|etc
+RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"       # claude|codex|opencode|etc
+RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-gpt-5.2-codex}"
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
-  RPH_AGENT_ARGS="--permission-mode acceptEdits"
+  if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
+    RPH_AGENT_ARGS="exec --model ${RPH_AGENT_MODEL} --cd ${REPO_ROOT} --ask-for-approval on-request --sandbox workspace-write"
+  else
+    RPH_AGENT_ARGS="--permission-mode acceptEdits"
+  fi
 fi
 if [[ -z "${RPH_PROMPT_FLAG+x}" ]]; then
-  RPH_PROMPT_FLAG="-p"
+  if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
+    RPH_PROMPT_FLAG=""
+  else
+    RPH_PROMPT_FLAG="-p"
+  fi
 fi
 RPH_COMPLETE_SENTINEL="${RPH_COMPLETE_SENTINEL:-<promise>COMPLETE</promise>}"
 
