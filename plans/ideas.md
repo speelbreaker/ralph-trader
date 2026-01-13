@@ -7,3 +7,4 @@
 ## Entries
 
 - [YYYY-MM-DD] TBD
+- Consider documenting Codex sandbox + worktree gotcha: Ralph/Codex cannot commit if .git lives outside the workspace; prefer a full clone inside the workspace.
