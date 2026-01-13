@@ -248,6 +248,8 @@ chmod +x "$STUB_DIR/agent_commit_with_progress.sh"
 cat > "$STUB_DIR/agent_commit_progress_no_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+# NOTE: This stub is kept for compatibility. It delegates to agent_commit_with_progress.sh,
+# and neither script emits a mark_pass sentinel.
 exec "$(dirname "$0")/agent_commit_with_progress.sh"
 EOF
 chmod +x "$STUB_DIR/agent_commit_progress_no_mark_pass.sh"
