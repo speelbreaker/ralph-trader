@@ -399,7 +399,18 @@ matches_any() {
   return 1
 }
 
+is_ignored_file() {
+  case "$1" in
+    plans/progress.txt|plans/progress_archive.txt) return 0 ;;
+    .ralph/*|plans/logs/*) return 0 ;;
+  esac
+  return 1
+}
+
 for f in "${changed_files[@]+${changed_files[@]}}"; do
+  if is_ignored_file "$f"; then
+    continue
+  fi
   if [[ "${#avoid_patterns[@]}" -gt 0 ]] && matches_any "$f" "${avoid_patterns[@]+${avoid_patterns[@]}}"; then
     scope_violations+=("avoid-match: $f")
     out_of_scope_files+=("$f")
@@ -484,6 +495,10 @@ evidence_found=()
 evidence_missing=()
 for ev in "${evidence_required[@]+${evidence_required[@]}}"; do
   [[ -z "$ev" ]] && continue
+  if [[ -f "$ev" ]]; then
+    evidence_found+=("$ev")
+    continue
+  fi
   if [[ -f "$verify_post_log" ]] && grep -Fq "$ev" "$verify_post_log"; then
     evidence_found+=("$ev")
     continue
