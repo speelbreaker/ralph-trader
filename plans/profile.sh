@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Save caller's shell options to restore later
+_profile_old_opts="$(set +o)"
+
 set -euo pipefail
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
@@ -40,6 +44,10 @@ case "$profile" in
     ;;
   *)
     echo "Unknown profile: ${profile:-<empty>} (expected fast|thorough|audit|max)" >&2
+    eval "$_profile_old_opts"
     return 2
     ;;
 esac
+
+# Restore caller's shell options
+eval "$_profile_old_opts"
