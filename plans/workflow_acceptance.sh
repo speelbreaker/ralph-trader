@@ -988,8 +988,8 @@ reset_state
 valid_prd_18="$WORKTREE/.ralph/valid_prd_18.json"
 write_valid_prd "$valid_prd_18" "S1-013"
 # Allow the self-heal agent to touch the file it creates.
-_tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_18" > "$_tmp" && mv "$_tmp" "$valid_prd_18"
+tmp=$(mktemp)
+run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_18" > "$tmp" && mv "$tmp" "$valid_prd_18"
 # Start with clean slate
 run_in_worktree git add . >/dev/null 2>&1 || true
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "pre-self-heal" >/dev/null 2>&1 || true
