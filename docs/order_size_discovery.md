@@ -6,6 +6,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 ## Current implementation
 - `crates/soldier_core/src/execution/order_size.rs`
   - `OrderSize { contracts, qty_coin, qty_usd, notional_usd }`.
+  - Field types: `contracts: Option<i64>`, `qty_coin: Option<f64>`, `qty_usd: Option<f64>`, `notional_usd: f64`.
   - `OrderSize::new(...)` chooses canonical unit by `InstrumentKind`:
     - Option/LinearFuture: requires `qty_coin`, sets `qty_usd=None`, computes `notional_usd = qty_coin * index_price`.
     - Perpetual/InverseFuture: requires `qty_usd`, sets `qty_coin=None`, computes `notional_usd = qty_usd`.
@@ -15,6 +16,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
   - Consumes `OrderSize` to map to `DeribitOrderAmount`.
   - Rejects when `OrderSize` has both `qty_coin` and `qty_usd` set (reason `both_qty`).
   - Rejects unit mismatches and sets `RiskState::Degraded` (increments `order_intent_reject_unit_mismatch_total`).
+  - `DispatchRejectReason` currently only includes `UnitMismatch` and is always paired with `RiskState::Degraded`.
   - Uses `UNIT_MISMATCH_EPSILON = 1e-9` when comparing contracts * multiplier to canonical amount.
   - For USD-sized instruments, derives `qty_coin = qty_usd / index_price` in the outbound mapping.
   - Rejects non-positive `index_price` for USD-sized instruments.

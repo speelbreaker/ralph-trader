@@ -100,3 +100,8 @@
 - Commands: ./plans/workflow_contract_gate.sh; ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
 - Evidence: plans/workflow_contract_map.json.
 - Next: rerun ./ralph 1 for S1-008 contract review.
+- 2026-01-13 19:57:49 UTC S1-008: added OrderSize field type and DispatchRejectReason notes to docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-135407/selected_item.json; cat .ralph/iter_1_20260113-135407/progress_tail_before.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat plans/prd.json; cat plans/progress.txt; cat docs/skills/workflow.md; ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates/soldier_core/src/execution crates/soldier_core/tests; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,220p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,260p' crates/soldier_core/tests/test_dispatch_map.rs; cat docs/order_size_discovery.md; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 dispatcher mapping discovery.
