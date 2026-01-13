@@ -485,7 +485,7 @@
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "1.0 Instrument Units & Notional Invariants"
+        "1.0 Instrument Units"
       ],
       "plan_refs": [
         "S1.2 — OrderSize canonical sizing \\+ notional invariant"
