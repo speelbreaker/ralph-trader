@@ -1729,6 +1729,7 @@ PROMPT
 
   CONTRACT_REVIEW_OK=0
   if (( POST_VERIFY_FAILED == 0 )); then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
     if ensure_contract_review "$ITER_DIR"; then
       CONTRACT_REVIEW_OK=1
     else

@@ -408,6 +408,63 @@ EOF
   chmod +x "$WORKTREE/plans/contract_check.sh"
 }
 
+write_contract_check_stub_require_iter_artifacts() {
+  cat > "$WORKTREE/plans/contract_check.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+out="${CONTRACT_REVIEW_OUT:-${1:-}}"
+if [[ -z "$out" ]]; then
+  echo "missing contract review output path" >&2
+  exit 1
+fi
+iter_dir="$(cd "$(dirname "$out")" && pwd -P)"
+selected_id="unknown"
+if [[ -f "$iter_dir/selected.json" ]]; then
+  selected_id="$(jq -r '.selected_id // "unknown"' "$iter_dir/selected.json" 2>/dev/null || echo "unknown")"
+fi
+missing=()
+for f in head_before.txt head_after.txt prd_before.json prd_after.json diff.patch; do
+  if [[ ! -f "$iter_dir/$f" ]]; then
+    missing+=("$f")
+  fi
+done
+decision="PASS"
+confidence="high"
+required_followups_json="[]"
+if (( ${#missing[@]} > 0 )); then
+  decision="BLOCKED"
+  confidence="med"
+  required_followups_json="$(printf '%s\n' "${missing[@]}" | jq -R . | jq -s .)"
+fi
+jq -n \
+  --arg selected_story_id "$selected_id" \
+  --arg decision "$decision" \
+  --arg confidence "$confidence" \
+  --argjson required_followups "$required_followups_json" \
+  '{
+    selected_story_id: $selected_story_id,
+    decision: $decision,
+    confidence: $confidence,
+    contract_refs_checked: ["CONTRACT.md §1"],
+    scope_check: { changed_files: [], out_of_scope_files: [], notes: ["acceptance stub"] },
+    verify_check: { verify_post_present: true, verify_post_green: true, notes: ["acceptance stub"] },
+    pass_flip_check: {
+      requested_mark_pass_id: $selected_story_id,
+      prd_passes_before: false,
+      prd_passes_after: false,
+      evidence_required: [],
+      evidence_found: [],
+      evidence_missing: [],
+      decision_on_pass_flip: "DENY"
+    },
+    violations: [],
+    required_followups: $required_followups,
+    rationale: ["acceptance stub"]
+  }' > "$out"
+EOF
+  chmod +x "$WORKTREE/plans/contract_check.sh"
+}
+
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
 
@@ -685,6 +742,47 @@ if [[ "$reason" != "lock_held" ]]; then
   echo "FAIL: expected lock_held reason in blocked artifact" >&2
   exit 1
 fi
+
+echo "Test 5b: contract review sees iteration artifacts"
+reset_state
+valid_prd_5b="$WORKTREE/plans/prd_iter_artifacts.json"
+write_valid_prd "$valid_prd_5b" "S1-004"
+run_in_worktree git add "$valid_prd_5b" >/dev/null 2>&1
+run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: iter artifacts prd" >/dev/null 2>&1
+write_contract_check_stub_require_iter_artifacts
+set +e
+test5b_log="$WORKTREE/.ralph/test5b.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_5b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
+  SELECTED_ID="S1-004" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test5b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for iter artifacts contract review" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test5b_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+decision="$(run_in_worktree jq -r '.decision' "$iter_dir/contract_review.json")"
+if [[ "$decision" != "PASS" ]]; then
+  echo "FAIL: expected decision=PASS for iter artifacts check, got ${decision}" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
 
 echo "Test 6: missing contract_check.sh writes FAIL contract review"
 reset_state

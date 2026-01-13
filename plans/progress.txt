@@ -105,3 +105,8 @@
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow.
 - Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 20:17:41 UTC: workflow maintenance — save iter artifacts before contract review to avoid BLOCKED on missing head_after/prd_after.
+- Summary: call save_iter_after prior to contract review in plans/ralph.sh and add workflow acceptance test to assert iter artifacts exist before contract_check.
+- Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+- Evidence: plans/ralph.sh; plans/workflow_acceptance.sh.
+- Next: rerun ./ralph 1 for S1-008 now that contract review has complete artifacts.
