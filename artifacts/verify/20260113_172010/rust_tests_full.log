@@ -1,0 +1,62 @@
+   Compiling soldier_infra v0.1.0 (/Users/admin/conductor/workspaces/ralph/belgrade/crates/soldier_infra)
+   Compiling soldier_core v0.1.0 (/Users/admin/conductor/workspaces/ralph/belgrade/crates/soldier_core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.35s
+     Running unittests src/lib.rs (target/debug/deps/soldier_core-72a3f3ad2c7b64d6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_dispatch_map.rs (target/debug/deps/test_dispatch_map-c07b24f6e26139e5)
+
+running 4 tests
+test acceptance_option_and_perp_mapping ... ok
+test maps_usd_amount_for_perp_and_inverse_future ... ok
+test maps_coin_amount_for_option_and_linear_future ... ok
+test rejects_contract_mismatch_and_increments_counter ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_instrument_cache_ttl.rs (target/debug/deps/test_instrument_cache_ttl-150610b83823610a)
+
+running 3 tests
+test test_fresh_instrument_cache_is_healthy ... ok
+test test_instrument_cache_ttl_blocks_opens_allows_closes ... ok
+test test_stale_instrument_cache_sets_degraded ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_instrument_kind_mapping.rs (target/debug/deps/test_instrument_kind_mapping-5b3ee837dde39cf9)
+
+running 2 tests
+test derives_linear_future_from_usdc_perpetual ... ok
+test maps_option_and_futures_kinds ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_order_size.rs (target/debug/deps/test_order_size-356c66ada6526b90)
+
+running 2 tests
+test test_order_size_option_perp_canonical_amount ... ok
+test rejects_contract_mismatch_in_dispatch_map ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/soldier_infra-40b5cd6b071d5082)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests soldier_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests soldier_infra
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
