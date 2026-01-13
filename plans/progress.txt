@@ -40,3 +40,8 @@
 - Commands: ./plans/verify.sh full.
 - Evidence: plans/verify.sh output (VERIFY OK).
 - Next: proceed with verify.sh quick/full adjustments or other workflow maintenance as separate tasks.
+- 2026-01-13: verify.sh improvements — quick/full split, log capture, timeouts, local CI gate fallback, per-run artifacts, yarn script check.
+- Summary: Added per-run verify logs/timeouts, made quick mode lighter for Rust/Python, defaulted CI_GATES_SOURCE=verify locally, fixed yarn script handling, and scoped E2E artifacts per run.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: consider endpoint pattern tuning or node log capture if needed.
