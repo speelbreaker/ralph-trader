@@ -574,6 +574,29 @@ sha256_file() {
   fi
 }
 
+hash_ralph_json_files() {
+  if [[ ! -d ".ralph" ]]; then
+    echo ""
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp)"
+  find .ralph -type f -name '*.json' 2>/dev/null | LC_ALL=C sort | while IFS= read -r file; do
+    printf '%s %s\n' "$(sha256_file "$file")" "$file"
+  done > "$tmp"
+  sha256_file "$tmp"
+  rm -f "$tmp"
+}
+
+capture_agent_guard_hashes() {
+  HARNESS_SHA_BEFORE=""
+  RALPH_JSON_SHA_BEFORE=""
+  if [[ "$RPH_ALLOW_HARNESS_EDIT" != "1" ]]; then
+    HARNESS_SHA_BEFORE="$(sha256_file "plans/ralph.sh")"
+  fi
+  RALPH_JSON_SHA_BEFORE="$(hash_ralph_json_files)"
+}
+
 sha256_tail_200() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -1500,6 +1523,7 @@ PROMPT
       i=$((i-1))
       continue
     fi
+    capture_agent_guard_hashes
     if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
       timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$RPH_AGENT_CMD" "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT" 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     else
@@ -1512,6 +1536,7 @@ PROMPT
       i=$((i-1))
       continue
     fi
+    capture_agent_guard_hashes
     if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
       timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$RPH_AGENT_CMD" "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT" 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     else
@@ -1521,6 +1546,22 @@ PROMPT
   AGENT_RC=${PIPESTATUS[0]}
   set -e
   echo "Agent exit code: $AGENT_RC" | tee -a "$LOG_FILE"
+  if [[ "$RPH_ALLOW_HARNESS_EDIT" != "1" ]]; then
+    HARNESS_SHA_AFTER="$(sha256_file "plans/ralph.sh")"
+    if [[ -n "${HARNESS_SHA_BEFORE:-}" && "$HARNESS_SHA_AFTER" != "$HARNESS_SHA_BEFORE" ]]; then
+      BLOCK_DIR="$(write_blocked_with_state "harness_sha_mismatch" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+      echo "Blocked: plans/ralph.sh changed during agent run in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      printf 'before=%s\nafter=%s\n' "$HARNESS_SHA_BEFORE" "$HARNESS_SHA_AFTER" > "$BLOCK_DIR/harness_sha_mismatch.txt" || true
+      exit 1
+    fi
+  fi
+  RALPH_JSON_SHA_AFTER="$(hash_ralph_json_files)"
+  if [[ -n "${RALPH_JSON_SHA_BEFORE:-}" && "$RALPH_JSON_SHA_AFTER" != "$RALPH_JSON_SHA_BEFORE" ]]; then
+    BLOCK_DIR="$(write_blocked_with_state "ralph_dir_modified" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "Blocked: .ralph JSON files changed during agent run in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    printf 'before=%s\nafter=%s\n' "$RALPH_JSON_SHA_BEFORE" "$RALPH_JSON_SHA_AFTER" > "$BLOCK_DIR/ralph_dir_modified.txt" || true
+    exit 1
+  fi
   AGENT_TIMED_OUT=0
   if [[ "$RPH_ITER_TIMEOUT_SECS" =~ ^[0-9]+$ && "$RPH_ITER_TIMEOUT_SECS" -gt 0 ]]; then
     if is_timeout_rc "$AGENT_RC"; then

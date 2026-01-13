@@ -366,6 +366,23 @@ git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m 
 EOF
 chmod +x "$STUB_DIR/agent_delete_test_file_and_commit.sh"
 
+cat > "$STUB_DIR/agent_modify_harness.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "# harness tamper $(date +%s)" >> plans/ralph.sh
+EOF
+chmod +x "$STUB_DIR/agent_modify_harness.sh"
+
+cat > "$STUB_DIR/agent_modify_ralph_state.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p .ralph
+cat > .ralph/state.json <<'JSON'
+{"last_verify_post_rc":0,"tampered":true}
+JSON
+EOF
+chmod +x "$STUB_DIR/agent_modify_ralph_state.sh"
+
 write_contract_check_stub() {
   local decision="${1:-PASS}"
   local pass_flip="${2:-DENY}"
@@ -1301,6 +1318,81 @@ if ! run_in_worktree test -f "tests/test_dummy.rs"; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+
+echo "Test 16b: harness tamper blocks before processing"
+reset_state
+valid_prd_16b="$WORKTREE/.ralph/valid_prd_16b.json"
+write_valid_prd "$valid_prd_16b" "S1-011"
+before_blocked="$(count_blocked)"
+set +e
+test16b_log="$WORKTREE/.ralph/test16b.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_16b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_modify_harness.sh" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >"$test16b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for harness tamper" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for harness tamper" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "harness_sha_mismatch")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for harness_sha_mismatch" >&2
+  tail -n 120 "$test16b_log" >&2 || true
+  exit 1
+fi
+copy_worktree_file "plans/ralph.sh"
+chmod +x "$WORKTREE/plans/ralph.sh" >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh >/dev/null 2>&1 || true
+
+echo "Test 16c: .ralph tamper blocks before processing"
+reset_state
+valid_prd_16c="$WORKTREE/.ralph/valid_prd_16c.json"
+write_valid_prd "$valid_prd_16c" "S1-012"
+before_blocked="$(count_blocked)"
+set +e
+test16c_log="$WORKTREE/.ralph/test16c.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_16c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_modify_ralph_state.sh" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >"$test16c_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for .ralph tamper" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for .ralph tamper" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "ralph_dir_modified")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for ralph_dir_modified" >&2
+  tail -n 120 "$test16c_log" >&2 || true
+  exit 1
+fi
 
 echo "Test 17: active slice gating selects lowest slice"
 reset_state
