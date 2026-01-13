@@ -223,7 +223,7 @@ If conflict is detected → FAIL CLOSED → revert or block.
 
 - All agents MUST read `docs/skills/workflow.md` before starting a task.
 - Updates are manual-only and allowed only when a new repeated pattern is discovered (soft requirement; manual judgment).
-- No automation or new gates are allowed for this document.
+- No automation is allowed to update or validate the content of this document; automation for workflow contract traceability (for example, tracking WF-* rules, including WF-4.7) is allowed.
 
 ---
 

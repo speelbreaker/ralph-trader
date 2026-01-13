@@ -248,6 +248,8 @@ chmod +x "$STUB_DIR/agent_commit_with_progress.sh"
 cat > "$STUB_DIR/agent_commit_progress_no_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+# NOTE: This stub is kept for compatibility. It delegates to agent_commit_with_progress.sh,
+# and neither script emits a mark_pass sentinel.
 exec "$(dirname "$0")/agent_commit_with_progress.sh"
 EOF
 chmod +x "$STUB_DIR/agent_commit_progress_no_mark_pass.sh"
@@ -783,6 +785,11 @@ if [[ -n "$dirty_status" ]]; then
   exit 1
 fi
 
+# NOTE: Tests 10–18 are intentionally ordered by runtime workflow rather than
+# strictly following the WF-12.1–WF-12.7 order in WORKFLOW_CONTRACT.md.
+# In particular, Test 13 ("verify_pre failure stops before implementation")
+# is grouped here with other verify/preflight behaviour tests instead of
+# appearing immediately after the baseline integrity tests in WF-12.2.
 echo "Test 14: needs_human_decision=true blocks execution"
 reset_state
 valid_prd_14="$WORKTREE/.ralph/valid_prd_14.json"
@@ -988,8 +995,8 @@ reset_state
 valid_prd_18="$WORKTREE/.ralph/valid_prd_18.json"
 write_valid_prd "$valid_prd_18" "S1-013"
 # Allow the self-heal agent to touch the file it creates.
-_tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_18" > "$_tmp" && mv "$_tmp" "$valid_prd_18"
+tmp=$(mktemp)
+run_in_worktree jq '.items[0].scope.touch += ["broken_root.rs"]' "$valid_prd_18" > "$tmp" && mv "$tmp" "$valid_prd_18"
 # Start with clean slate
 run_in_worktree git add . >/dev/null 2>&1 || true
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "pre-self-heal" >/dev/null 2>&1 || true
