@@ -42,6 +42,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - No explicit validation to reject when both `qty_coin` and `qty_usd` are provided ("never mix" rule); non-canonical inputs are silently dropped.
 - `contracts` is passed through but not derived from canonical amounts; no rounding or contract_size_usd handling.
 - Contracts mismatch validation only occurs in `dispatch_map` when a multiplier is supplied; `OrderSize::new` does not enforce contract matching.
+- Mismatch tolerance is implicit: `dispatch_map` uses `UNIT_MISMATCH_EPSILON = 1e-9`, but the contract only says "within tolerance" (needs a defined threshold).
 - No validation for non-positive `index_price` when computing `notional_usd` for coin-sized instruments.
 - `OrderSize` is not wired into a production dispatch path yet (tests only).
 
@@ -58,4 +59,5 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - Validate exactly one canonical amount is provided and matches `InstrumentKind`.
 - Add optional multiplier/contract size inputs to derive `contracts` consistently.
 - Decide whether to enforce contract mismatch inside `OrderSize` or keep it in `dispatch_map`, but ensure it is always applied.
+- Define a shared mismatch tolerance (or rounding rule) aligned with the contract's "within tolerance" requirement.
 - Wire creation into the execution path once build_order_intent exists (future story).
