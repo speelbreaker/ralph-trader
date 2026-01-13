@@ -302,6 +302,7 @@ else
       changed_files="$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || true)"
 
       # Broad but practical patterns across stacks
+      # TODO: tighten ENDPOINT_PATTERNS to repo-specific paths once Python/HTTP layout is introduced.
       ENDPOINT_PATTERNS="${ENDPOINT_PATTERNS:-'(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/'}"
       TEST_PATTERNS="${TEST_PATTERNS:-'(^|/)(tests?|__tests__)/|(\\.spec\\.|\\.test\\.)|(^|/)integration_tests/'}"
       endpoint_changed="$(echo "$changed_files" | grep -E "$ENDPOINT_PATTERNS" || true)"

@@ -45,3 +45,8 @@
 - Commands: ./plans/verify.sh full.
 - Evidence: plans/verify.sh output (VERIFY OK).
 - Next: consider endpoint pattern tuning or node log capture if needed.
+- 2026-01-13: verify.sh note — added TODO to tighten endpoint patterns once Python/HTTP layout exists.
+- Summary: Documented future endpoint pattern tuning next to ENDPOINT_PATTERNS.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: adjust ENDPOINT_PATTERNS when HTTP routes land.
