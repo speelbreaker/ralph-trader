@@ -783,6 +783,11 @@ if [[ -n "$dirty_status" ]]; then
   exit 1
 fi
 
+# NOTE: Tests 10–18 are intentionally ordered by runtime workflow rather than
+# strictly following the WF-12.1–WF-12.7 order in WORKFLOW_CONTRACT.md.
+# In particular, Test 13 ("verify_pre failure stops before implementation")
+# is grouped here with other verify/preflight behaviour tests instead of
+# appearing immediately after the baseline integrity tests in WF-12.2.
 echo "Test 14: needs_human_decision=true blocks execution"
 reset_state
 valid_prd_14="$WORKTREE/.ralph/valid_prd_14.json"
