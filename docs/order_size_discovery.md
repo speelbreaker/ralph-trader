@@ -17,6 +17,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
   - Uses `UNIT_MISMATCH_EPSILON = 1e-9` when comparing contracts * multiplier to canonical amount.
   - For USD-sized instruments, derives `qty_coin = qty_usd / index_price` in the outbound mapping.
   - Rejects non-positive `index_price` for USD-sized instruments.
+  - Treats missing canonical amount or missing contract multiplier as a unit mismatch and logs the reason string.
 
 ## Call sites
 - `crates/soldier_core/tests/test_order_size.rs`
@@ -25,6 +26,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - `crates/soldier_core/tests/test_dispatch_map.rs`
   - Constructs `OrderSize::new` for option/linear/perp/inverse mapping tests.
 - No production call sites in `crates/soldier_core/src` beyond the `dispatch_map` helper.
+- `crates/soldier_core/src/execution/mod.rs` re-exports `OrderSize` (no additional usage).
 
 ## Contract requirements (brief)
 - `OrderSize` struct fields: `contracts`, `qty_coin`, `qty_usd`, `notional_usd`.
