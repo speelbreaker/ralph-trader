@@ -302,7 +302,11 @@ Evidence: acceptance stub
 Next: continue
 EOT
 echo "tick $(date +%s)" >> "$touch_file"
-git add "$touch_file" "$progress"
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file"
+else
+  git add "$touch_file" "$progress"
+fi
 git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: tick" >/dev/null 2>&1
 EOF
 chmod +x "$STUB_DIR/agent_commit_with_progress.sh"
@@ -322,6 +326,28 @@ set -euo pipefail
 echo "<promise>COMPLETE</promise>"
 EOF
 chmod +x "$STUB_DIR/agent_complete.sh"
+
+cat > "$STUB_DIR/agent_mentions_complete.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mention complete
+Commands: none
+Evidence: acceptance stub
+Next: continue
+EOT
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+git add "$touch_file" "$progress"
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: tick" >/dev/null 2>&1
+echo "If ALL items pass, output exactly: <promise>COMPLETE</promise>"
+EOF
+chmod +x "$STUB_DIR/agent_mentions_complete.sh"
 
 cat > "$STUB_DIR/agent_invalid_selection.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -625,6 +651,7 @@ echo "Test 3: COMPLETE printed early blocks with blocked_incomplete artifact"
 reset_state
 valid_prd_3="$WORKTREE/.ralph/valid_prd_3.json"
 write_valid_prd "$valid_prd_3" "S1-002"
+before_blocked_incomplete="$(count_blocked_incomplete)"
 before_blocked="$(count_blocked)"
 set +e
 test3_log="$WORKTREE/.ralph/test3.log"
@@ -663,6 +690,57 @@ latest_block="$(latest_blocked_incomplete)"
 reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
 if [[ "$reason" != "incomplete_completion" ]]; then
   echo "FAIL: expected incomplete_completion reason in blocked artifact" >&2
+  exit 1
+fi
+
+echo "Test 3b: COMPLETE mention does not trigger blocked_incomplete"
+reset_state
+valid_prd_3b="$WORKTREE/.ralph/valid_prd_3b.json"
+write_valid_prd "$valid_prd_3b" "S1-002"
+before_blocked="$(count_blocked)"
+before_blocked_incomplete="$(count_blocked_incomplete)"
+set +e
+test3b_log="$WORKTREE/.ralph/test3b.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_3b" \
+  PROGRESS_FILE="$WORKTREE/plans/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mentions_complete.sh" \
+  SELECTED_ID="S1-002" \
+  ACCEPTANCE_TOUCH_FILE="src/lib.rs" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test3b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for max iters when no completion" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for max iters" >&2
+  exit 1
+fi
+after_blocked_incomplete="$(count_blocked_incomplete)"
+if [[ "$after_blocked_incomplete" -gt "$before_blocked_incomplete" ]]; then
+  echo "FAIL: did not expect blocked_incomplete artifact for COMPLETE mention" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test3b_log" >&2 || true
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "max_iters_exceeded" || true)"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected max_iters_exceeded blocked artifact" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test3b_log" >&2 || true
   exit 1
 fi
 

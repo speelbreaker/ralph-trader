@@ -114,3 +114,13 @@
 - Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-144026/selected_item.json; cat .ralph/iter_1_20260113-144026/progress_tail_before.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full; cat docs/order_size_discovery.md; sed -n '1,220p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; git status -s; ./plans/verify.sh full.
 - Evidence: docs/order_size_discovery.md.
 - Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 20:59:28 UTC: workflow maintenance — tighten COMPLETE sentinel detection to exact-line match and add acceptance test for sentinel mention.
+- Summary: switch COMPLETE detection to grep -Fx in plans/ralph.sh and add Test 3b in plans/workflow_acceptance.sh to ensure mentions don't trigger blocked_incomplete.
+- Commands: ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/ralph.sh; plans/workflow_acceptance.sh.
+- Next: rerun ./ralph 1 for S1-009 or continue with next PRD item.
+- 2026-01-13 21:21:51 UTC: workflow maintenance — fix acceptance Test 3b stub to avoid dirty worktree and scope violations.
+- Summary: agent_mentions_complete now creates touch-file directories and Test 3b uses a scoped touch file plus tracked progress file; test now validates max_iters_exceeded instead of blocked_incomplete.
+- Commands: ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
+- Evidence: plans/workflow_acceptance.sh.
+- Next: rerun ./ralph 1 if needed; continue with next PRD item.

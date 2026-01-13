@@ -1801,7 +1801,7 @@ PROMPT
     fi
   fi
 
-  if grep -qF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
+  if grep -Fx "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
     if ! all_items_passed || [[ "$verify_post_rc" != "0" ]]; then
       save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
       BLOCK_DIR="$(write_blocked_artifacts "incomplete_completion" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "blocked_incomplete")"
@@ -1856,7 +1856,7 @@ PROMPT
   fi
 
   # 6) Completion detection: sentinel OR PRD all-pass
-  if grep -qF "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
+  if grep -Fx "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
       if ! run_final_verify; then
         exit 1
