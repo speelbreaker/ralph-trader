@@ -13,6 +13,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
   - `contracts` is stored but not validated or derived in `OrderSize::new`.
 - `crates/soldier_core/src/execution/dispatch_map.rs`
   - Consumes `OrderSize` to map to `DeribitOrderAmount`.
+  - Rejects when `OrderSize` has both `qty_coin` and `qty_usd` set (reason `both_qty`).
   - Rejects unit mismatches and sets `RiskState::Degraded` (increments `order_intent_reject_unit_mismatch_total`).
   - Uses `UNIT_MISMATCH_EPSILON = 1e-9` when comparing contracts * multiplier to canonical amount.
   - For USD-sized instruments, derives `qty_coin = qty_usd / index_price` in the outbound mapping.
@@ -40,7 +41,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 
 ## Gaps vs contract
 - `OrderSize::new` uses `expect(...)` for missing canonical fields (panic) instead of a reject path with `RiskState::Degraded`.
-- No explicit validation to reject when both `qty_coin` and `qty_usd` are provided ("never mix" rule); non-canonical inputs are silently dropped.
+- `OrderSize::new` drops non-canonical inputs (including passing both `qty_coin` and `qty_usd`) instead of rejecting the intent; only `dispatch_map` rejects when both fields are set on the `OrderSize`.
 - `contracts` is passed through but not derived from canonical amounts; no rounding or contract_size_usd handling.
 - Contracts mismatch validation only occurs in `dispatch_map` when a multiplier is supplied; `OrderSize::new` does not enforce contract matching.
 - Mismatch tolerance is implicit: `dispatch_map` uses `UNIT_MISMATCH_EPSILON = 1e-9`, but the contract only says "within tolerance" (needs a defined threshold).

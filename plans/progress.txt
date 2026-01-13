@@ -79,3 +79,8 @@
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow. Working tree still contains untracked artifacts/ from verify runs.
 - Next: proceed to S1-009 dispatcher mapping discovery.
+- 2026-01-13 18:28:26 UTC S1-008: clarified docs/order_size_discovery.md with dispatch_map both-qty rejection and OrderSize::new non-canonical drop note; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat .ralph/iter_1_20260113-122501/selected_item.json; cat .ralph/iter_1_20260113-122501/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; ./plans/init.sh; ./plans/verify.sh full; cat docs/order_size_discovery.md; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S1-009 dispatcher mapping discovery.
