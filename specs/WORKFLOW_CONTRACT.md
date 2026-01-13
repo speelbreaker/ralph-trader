@@ -363,6 +363,14 @@ Ralph MUST enforce scope.touch and scope.avoid: any changed file outside scope.t
 
 Ralph MUST enforce rate limiting on agent calls (RPH_RATE_LIMIT_*), and MUST stop with a blocked artifact when circuit breaker thresholds are exceeded (RPH_MAX_SAME_FAILURE, RPH_MAX_NO_PROGRESS).
 
+### 5.12 Iteration timeouts (optional) [WF-5.12]
+
+If RPH_ITER_TIMEOUT_SECS > 0, Ralph MUST apply a wall-clock timeout to agent execution and verify steps. A timeout MUST be treated as a failure and recorded in iteration logs/artifacts.
+
+### 5.13 Profiles (optional presets) [WF-5.13]
+
+RPH_PROFILE MAY set default values for verify mode, timeouts, and other harness knobs. Explicit env vars MUST take precedence over profile defaults.
+
 ---
 
 ## 6) Iteration Artifacts (Required for Debuggability)

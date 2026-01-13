@@ -40,3 +40,9 @@
 - Commands: ./plans/verify.sh full.
 - Evidence: plans/verify.sh output (VERIFY OK).
 - Next: proceed with verify.sh quick/full adjustments or other workflow maintenance as separate tasks.
+- 2026-01-13 Workflow maintenance: added iteration timeouts (RPH_ITER_TIMEOUT_SECS) with timeout wrapper for agent/verify, prompt trimming to selected_item.json + progress tail, and profile presets; logged unattended approval_mode=never as a deferred idea; updated workflow contract/README accordingly.
+- Commands: ./plans/init.sh; ./plans/verify.sh full.
+- Verify: ./plans/verify.sh full (warned dirty tree).
+- Notes: Updated specs/WORKFLOW_CONTRACT.md, plans/ralph.sh, plans/README.md, plans/ideas.md.
+- Ack: Read AGENTS.md and docs/skills/workflow.md.
+- Next: if desired, revisit unattended profile once policy decision is explicit.
