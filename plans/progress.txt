@@ -50,3 +50,8 @@
 - Commands: ./plans/verify.sh full.
 - Evidence: plans/verify.sh output (VERIFY OK).
 - Next: adjust ENDPOINT_PATTERNS when HTTP routes land.
+- 2026-01-13: add helper script scripts/push_main.sh for safe rebase+push to main.
+- Summary: Added push_main helper that checks clean tree, avoids other main worktrees, rebases on origin/main, and fast-forward pushes to origin/main.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: use scripts/push_main.sh for direct-to-main updates.
