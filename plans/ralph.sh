@@ -29,7 +29,7 @@ RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"       # claude|codex|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-gpt-5.2-codex}"
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
   if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
-    RPH_AGENT_ARGS="exec --model ${RPH_AGENT_MODEL} --cd ${REPO_ROOT} --ask-for-approval on-request --sandbox workspace-write"
+    RPH_AGENT_ARGS="exec --model ${RPH_AGENT_MODEL} --cd ${REPO_ROOT}"
   else
     RPH_AGENT_ARGS="--permission-mode acceptEdits"
   fi
