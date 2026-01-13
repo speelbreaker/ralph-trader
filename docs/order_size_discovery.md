@@ -47,6 +47,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - `contracts` is passed through but not derived from canonical amounts; no rounding or contract_size_usd handling.
 - Contracts mismatch validation only occurs in `dispatch_map` when a multiplier is supplied; `OrderSize::new` does not enforce contract matching.
 - Mismatch tolerance is implicit: `dispatch_map` uses `UNIT_MISMATCH_EPSILON = 1e-9`, but the contract only says "within tolerance" (needs a defined threshold).
+- Contract rounding rules for derived `contracts` are not implemented; current code only checks approximate equality when `contracts` is provided.
 - No validation for non-positive `index_price` when computing `notional_usd` for coin-sized instruments.
 - `OrderSize` is not wired into a production dispatch path yet (tests only).
 

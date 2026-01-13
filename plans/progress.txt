@@ -110,3 +110,7 @@
 - Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 - Evidence: plans/ralph.sh; plans/workflow_acceptance.sh.
 - Next: rerun ./ralph 1 for S1-008 now that contract review has complete artifacts.
+- 2026-01-13 20:43:51 UTC S1-008: noted missing contract rounding rule for derived contracts in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-144026/selected_item.json; cat .ralph/iter_1_20260113-144026/progress_tail_before.txt; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full; cat docs/order_size_discovery.md; sed -n '1,220p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; git status -s; ./plans/verify.sh full.
+- Evidence: docs/order_size_discovery.md.
+- Next: proceed to S1-009 dispatcher mapping discovery.
