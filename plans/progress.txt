@@ -35,3 +35,8 @@
 - Evidence: docs/order_size_discovery.md.
 - Notes: Read AGENTS.md and plans/progress.txt per workflow.
 - Next: proceed to S1-009 discovery.
+- 2026-01-13: workflow maintenance — scoped WIP=1 to Ralph execution only; clarified PRD scope for workflow tasks in specs/WORKFLOW_CONTRACT.md and AGENTS.md.
+- Summary: Updated workflow contract and agent guide to state PRD/WIP rules apply to Ralph loop execution; workflow maintenance tasks are change-controlled but not PRD-scoped.
+- Commands: ./plans/verify.sh full.
+- Evidence: plans/verify.sh output (VERIFY OK).
+- Next: proceed with verify.sh quick/full adjustments or other workflow maintenance as separate tasks.
