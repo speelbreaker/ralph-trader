@@ -43,6 +43,12 @@ case "$RPH_PROFILE" in
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_SELF_HEAL="0"
     ;;
+  max)
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_ITER_TIMEOUT_SECS="7200"
+    RPH_PROFILE_AGENT_MODEL="gpt-5.2-codex"
+    RPH_PROFILE_RATE_LIMIT_PER_HOUR="40"
+    ;;
   *)
     RPH_PROFILE_WARNING="unknown_profile"
     ;;

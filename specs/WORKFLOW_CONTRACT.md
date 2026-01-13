@@ -51,6 +51,7 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 - `plans/init.sh` — idempotent “get runnable baseline” script
 - `plans/rotate_progress.py` — portability-safe progress rotation
 - `plans/update_task.sh` — safe PRD mutation helper (avoid manual JSON edits)
+- `plans/profile.sh` — optional profile helper to export Ralph env presets
 - `.ralph/` — iteration artifacts directory created by Ralph
 - `docs/codebase/*` — lightweight codebase map (stack/architecture/structure/testing/integrations/conventions/concerns)
 - `plans/ideas.md` — append-only deferred ideas log (non-PRD)
@@ -369,7 +370,7 @@ If RPH_ITER_TIMEOUT_SECS > 0, Ralph MUST apply a wall-clock timeout to agent exe
 
 ### 5.13 Profiles (optional presets) [WF-5.13]
 
-RPH_PROFILE MAY set default values for verify mode, timeouts, and other harness knobs. Explicit env vars MUST take precedence over profile defaults.
+RPH_PROFILE MAY set default values for verify mode, timeouts, and other harness knobs. Explicit env vars MUST take precedence over profile defaults. Optional helper: source plans/profile.sh to export a profile's env vars.
 
 ---
 

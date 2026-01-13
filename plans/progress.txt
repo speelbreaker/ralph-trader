@@ -46,3 +46,9 @@
 - Notes: Updated specs/WORKFLOW_CONTRACT.md, plans/ralph.sh, plans/README.md, plans/ideas.md.
 - Ack: Read AGENTS.md and docs/skills/workflow.md.
 - Next: if desired, revisit unattended profile once policy decision is explicit.
+- 2026-01-13 Workflow maintenance: added max profile defaults in plans/ralph.sh, added plans/profile.sh helper, and documented profile usage in specs/WORKFLOW_CONTRACT.md + plans/README.md.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; bash -n plans/ralph.sh; bash -n plans/profile.sh.
+- Verify: ./plans/verify.sh full (warned dirty tree).
+- Notes: Added profile helper that unsets prior profile env before exporting selected profile.
+- Ack: Read AGENTS.md and docs/skills/workflow.md.
+- Next: none.
