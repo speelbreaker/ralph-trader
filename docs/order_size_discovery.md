@@ -25,6 +25,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
   - Exercises contract mismatch rejection via `map_order_size_to_deribit_amount`.
 - `crates/soldier_core/tests/test_dispatch_map.rs`
   - Constructs `OrderSize::new` for option/linear/perp/inverse mapping tests.
+  - Asserts `order_intent_reject_unit_mismatch_total()` increments on mismatch.
 - No production call sites in `crates/soldier_core/src` beyond the `dispatch_map` helper.
 - `crates/soldier_core/src/execution/mod.rs` re-exports `OrderSize` (no additional usage).
 

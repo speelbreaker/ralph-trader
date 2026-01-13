@@ -74,3 +74,8 @@
 - Commands: ./plans/verify.sh full.
 - Evidence: plans/verify.sh output (VERIFY OK).
 - Next: use scripts/push_main.sh for direct-to-main updates.
+- 2026-01-13 18:20:49 UTC S1-008: added call-site note about mismatch counter assertion in docs/order_size_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat .ralph/iter_1_20260112-192119/verify_post.log; cat .ralph/iter_1_20260112-192119/agent.out; cat AGENTS.md; cat .ralph/iter_1_20260113-121625/selected_item.json; cat .ralph/iter_1_20260113-121625/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; git status -s; ./plans/init.sh; INIT_FAIL_ON_DIRTY=0 ./plans/init.sh; ./plans/verify.sh full; rg -n "OrderSize" crates docs; sed -n '1,200p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,200p' crates/soldier_core/tests/test_order_size.rs; sed -n '1,240p' crates/soldier_core/tests/test_dispatch_map.rs; cat docs/order_size_discovery.md; ./plans/verify.sh full; test -f docs/order_size_discovery.md; rg -n "OrderSize" docs/order_size_discovery.md.
+- Evidence: docs/order_size_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow. Working tree still contains untracked artifacts/ from verify runs.
+- Next: proceed to S1-009 dispatcher mapping discovery.
