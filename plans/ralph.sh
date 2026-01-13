@@ -20,13 +20,48 @@ VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
 ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 PRD_SCHEMA_CHECK_SH="${PRD_SCHEMA_CHECK_SH:-./plans/prd_schema_check.sh}"
 
-RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-full}"     # quick|full|promotion (your choice)
-RPH_SELF_HEAL="${RPH_SELF_HEAL:-0}"            # 0|1
+RPH_PROFILE="${RPH_PROFILE:-}"
+RPH_PROFILE_VERIFY_MODE=""
+RPH_PROFILE_AGENT_MODEL=""
+RPH_PROFILE_ITER_TIMEOUT_SECS=""
+RPH_PROFILE_SELF_HEAL=""
+RPH_PROFILE_RATE_LIMIT_PER_HOUR=""
+RPH_PROFILE_WARNING=""
+
+case "$RPH_PROFILE" in
+  "")
+    ;;
+  fast)
+    RPH_PROFILE_VERIFY_MODE="quick"
+    RPH_PROFILE_ITER_TIMEOUT_SECS="1200"
+    ;;
+  thorough)
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_ITER_TIMEOUT_SECS="3600"
+    ;;
+  audit)
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_SELF_HEAL="0"
+    ;;
+  max)
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_ITER_TIMEOUT_SECS="7200"
+    RPH_PROFILE_AGENT_MODEL="gpt-5.2-codex"
+    RPH_PROFILE_RATE_LIMIT_PER_HOUR="40"
+    ;;
+  *)
+    RPH_PROFILE_WARNING="unknown_profile"
+    ;;
+esac
+
+RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-${RPH_PROFILE_VERIFY_MODE:-full}}"     # quick|full|promotion (your choice)
+RPH_SELF_HEAL="${RPH_SELF_HEAL:-${RPH_PROFILE_SELF_HEAL:-0}}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"       # claude|codex|opencode|etc
-RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-gpt-5.2-codex}"
+RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
+RPH_ITER_TIMEOUT_SECS="${RPH_ITER_TIMEOUT_SECS:-${RPH_PROFILE_ITER_TIMEOUT_SECS:-0}}"
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
   if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
     RPH_AGENT_ARGS="exec --model ${RPH_AGENT_MODEL} --cd ${REPO_ROOT}"
@@ -71,7 +106,7 @@ if [[ -n "${RPH_AGENT_ARGS:-}" ]]; then
   read -r -a RPH_AGENT_ARGS_ARR <<<"$RPH_AGENT_ARGS"
   IFS="$_old_ifs"
 fi
-RPH_RATE_LIMIT_PER_HOUR="${RPH_RATE_LIMIT_PER_HOUR:-100}"
+RPH_RATE_LIMIT_PER_HOUR="${RPH_RATE_LIMIT_PER_HOUR:-${RPH_PROFILE_RATE_LIMIT_PER_HOUR:-100}}"
 RPH_RATE_LIMIT_FILE="${RPH_RATE_LIMIT_FILE:-.ralph/rate_limit.json}"
 RPH_RATE_LIMIT_ENABLED="${RPH_RATE_LIMIT_ENABLED:-1}"
 RPH_RATE_LIMIT_RESTART_ON_SLEEP="${RPH_RATE_LIMIT_RESTART_ON_SLEEP:-1}"  # 0|1
@@ -94,6 +129,10 @@ LOCK_DIR="$RPH_LOCK_DIR"
 LOCK_INFO_FILE="${LOCK_DIR}/lock.json"
 LOCK_ACQUIRED=0
 
+if [[ -n "$RPH_PROFILE_WARNING" ]]; then
+  echo "WARN: unknown RPH_PROFILE=$RPH_PROFILE (ignoring profile presets)" | tee -a "$LOG_FILE"
+fi
+
 if [[ "$RPH_CHEAT_DETECTION" != "block" ]]; then
   echo "WARN: RPH_CHEAT_DETECTION=$RPH_CHEAT_DETECTION; cheat detection will not block changes." | tee -a "$LOG_FILE"
 fi
@@ -104,6 +143,97 @@ json_escape() {
   s="${s//\"/\\\"}"
   s="${s//$'\n'/\\n}"
   printf '%s' "$s"
+}
+
+is_timeout_rc() {
+  local rc="$1"
+  [[ "$rc" == "124" || "$rc" == "137" ]]
+}
+
+timeout_cmd() {
+  local timeout_s="$1"
+  shift
+
+  if [[ -z "$timeout_s" || "$timeout_s" == "0" ]]; then
+    "$@"
+    return $?
+  fi
+  if ! [[ "$timeout_s" =~ ^[0-9]+$ ]] || [[ "$timeout_s" -le 0 ]]; then
+    "$@"
+    return $?
+  fi
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_s" "$@"
+    return $?
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$timeout_s" "$@"
+    return $?
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$timeout_s" "$@" <<'PY'
+import subprocess
+import sys
+
+timeout_s = int(sys.argv[1])
+cmd = sys.argv[2:]
+if not cmd:
+    sys.exit(1)
+proc = subprocess.Popen(cmd)
+try:
+    proc.wait(timeout=timeout_s)
+    sys.exit(proc.returncode)
+except subprocess.TimeoutExpired:
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    sys.exit(124)
+PY
+    return $?
+  fi
+  if command -v python >/dev/null 2>&1; then
+    python - "$timeout_s" "$@" <<'PY'
+import subprocess
+import sys
+
+timeout_s = int(sys.argv[1])
+cmd = sys.argv[2:]
+if not cmd:
+    sys.exit(1)
+proc = subprocess.Popen(cmd)
+try:
+    proc.wait(timeout=timeout_s)
+    sys.exit(proc.returncode)
+except subprocess.TimeoutExpired:
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    sys.exit(124)
+PY
+    return $?
+  fi
+
+  echo "WARN: RPH_ITER_TIMEOUT_SECS=$timeout_s but no timeout/python available; running without timeout" >&2
+  "$@"
+  return $?
 }
 
 write_lock_info() {
@@ -160,7 +290,7 @@ run_verify() {
   local out="$1"
   shift
   set +e
-  "$VERIFY_SH" "$RPH_VERIFY_MODE" "$@" 2>&1 | tee "$out"
+  timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$VERIFY_SH" "$RPH_VERIFY_MODE" "$@" 2>&1 | tee "$out"
   local rc=${PIPESTATUS[0]}
   set -e
   return $rc
@@ -266,7 +396,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   block_preflight "dirty_worktree" "working tree dirty. Commit/stash first." 2
 fi
 
-echo "Ralph starting max_iters=$MAX_ITERS mode=$RPH_VERIFY_MODE self_heal=$RPH_SELF_HEAL" | tee -a "$LOG_FILE"
+echo "Ralph starting max_iters=$MAX_ITERS mode=$RPH_VERIFY_MODE self_heal=$RPH_SELF_HEAL iter_timeout_s=$RPH_ITER_TIMEOUT_SECS profile=${RPH_PROFILE:-none}" | tee -a "$LOG_FILE"
 
 # Initialize last_good_ref if missing
 if [[ ! -f "$LAST_GOOD_FILE" ]]; then
@@ -613,7 +743,7 @@ completion_requirements_met() {
     return 1
   fi
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
+  for f in selected.json selected_item.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing=1
     fi
@@ -638,7 +768,7 @@ verify_iteration_artifacts() {
   local missing=()
   local f
 
-  for f in selected.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
+  for f in selected.json selected_item.json prd_before.json prd_after.json progress_tail_before.txt progress_tail_after.txt head_before.txt head_after.txt diff.patch prompt.txt agent.out verify_pre.log verify_post.log story_verify.log contract_review.json; do
     if [[ ! -f "$iter_dir/$f" ]]; then
       missing+=("$f")
     fi
@@ -1161,6 +1291,7 @@ PROMPT
     --argjson needs_human_decision "$NEXT_NEEDS_HUMAN" \
     '{active_slice: $active_slice, selection_mode: $selection_mode, selected_id: $selected_id, selected_description: $selected_description, needs_human_decision: $needs_human_decision}' \
     > "${ITER_DIR}/selected.json"
+  printf '%s\n' "$NEXT_ITEM_JSON" > "${ITER_DIR}/selected_item.json"
 
   NEEDS_HUMAN_JSON="$NEXT_NEEDS_HUMAN"
   if [[ "$NEEDS_HUMAN_JSON" != "true" && "$NEEDS_HUMAN_JSON" != "false" ]]; then
@@ -1242,6 +1373,9 @@ PROMPT
   fi
 
   if (( verify_pre_rc != 0 )); then
+    if is_timeout_rc "$verify_pre_rc"; then
+      echo "verify_pre timed out after ${RPH_ITER_TIMEOUT_SECS}s" | tee -a "$LOG_FILE"
+    fi
     echo "Baseline verify failed." | tee -a "$LOG_FILE"
 
     if [[ "$RPH_SELF_HEAL" == "1" ]]; then
@@ -1288,7 +1422,9 @@ PROMPT
   fi
 
   IFS= read -r -d '' PROMPT <<PROMPT || true
-@${PRD_FILE} @${PROGRESS_FILE} @AGENTS.md
+@AGENTS.md
+@${ITER_DIR}/selected_item.json
+@${ITER_DIR}/progress_tail_before.txt
 
 You are running inside the Ralph harness.
 
@@ -1305,7 +1441,7 @@ You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
 Do not choose a different item even if it looks easier.
 
 PROCEDURE:
-0) Get bearings: pwd; git log --oneline -10; read AGENTS.md + prd.json + progress.txt.
+0) Get bearings: pwd; git log --oneline -10; read AGENTS.md + selected_item.json + progress_tail_before.txt (full PRD/progress available if needed).
 0.1) Acknowledge AGENTS.md and progress.txt by noting it in your progress entry.
 0.5) Handoff hygiene (when relevant):
     - Update docs/codebase/* with verified facts if you touched new areas.
@@ -1337,9 +1473,9 @@ PROMPT
       continue
     fi
     if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
-      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+      timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$RPH_AGENT_CMD" "${RPH_AGENT_ARGS_ARR[@]}" "$RPH_PROMPT_FLAG" "$PROMPT" 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     else
-      ($RPH_AGENT_CMD "$RPH_PROMPT_FLAG" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+      timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$RPH_AGENT_CMD" "$RPH_PROMPT_FLAG" "$PROMPT" 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     fi
   else
     rate_limit_before_call
@@ -1349,14 +1485,21 @@ PROMPT
       continue
     fi
     if (( ${#RPH_AGENT_ARGS_ARR[@]} > 0 )); then
-      ($RPH_AGENT_CMD "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+      timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$RPH_AGENT_CMD" "${RPH_AGENT_ARGS_ARR[@]}" "$PROMPT" 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     else
-      ($RPH_AGENT_CMD "$PROMPT") 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
+      timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$RPH_AGENT_CMD" "$PROMPT" 2>&1 | tee "${ITER_DIR}/agent.out" | tee -a "$LOG_FILE"
     fi
   fi
   AGENT_RC=${PIPESTATUS[0]}
   set -e
   echo "Agent exit code: $AGENT_RC" | tee -a "$LOG_FILE"
+  AGENT_TIMED_OUT=0
+  if [[ "$RPH_ITER_TIMEOUT_SECS" =~ ^[0-9]+$ && "$RPH_ITER_TIMEOUT_SECS" -gt 0 ]]; then
+    if is_timeout_rc "$AGENT_RC"; then
+      AGENT_TIMED_OUT=1
+      echo "ERROR: agent timed out after ${RPH_ITER_TIMEOUT_SECS}s" | tee -a "$LOG_FILE"
+    fi
+  fi
 
   HEAD_AFTER="$(git rev-parse HEAD)"
   PRD_HASH_AFTER="$(sha256_file "$PRD_FILE")"
@@ -1364,6 +1507,13 @@ PROMPT
   MARK_PASS_ID=""
   if [[ -f "${ITER_DIR}/agent.out" ]]; then
     MARK_PASS_ID="$(extract_mark_pass_id "${ITER_DIR}/agent.out" || true)"
+  fi
+  if (( AGENT_TIMED_OUT == 1 )); then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "agent_timeout" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_AGENT_TIMEOUT</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: agent timeout in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
   fi
   if [[ -n "$MARK_PASS_ID" && "$MARK_PASS_ID" != "$NEXT_ID" ]]; then
     echo "ERROR: mark_pass id mismatch (got=$MARK_PASS_ID expected=$NEXT_ID)." | tee -a "$LOG_FILE"
@@ -1483,6 +1633,9 @@ PROMPT
   POST_VERIFY_EXIT=0
   POST_VERIFY_CONTINUE=0
   if (( verify_post_rc != 0 )); then
+    if is_timeout_rc "$verify_post_rc"; then
+      echo "verify_post timed out after ${RPH_ITER_TIMEOUT_SECS}s" | tee -a "$LOG_FILE"
+    fi
     POST_VERIFY_FAILED=1
     echo "Post-iteration verify failed." | tee -a "$LOG_FILE"
     save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"

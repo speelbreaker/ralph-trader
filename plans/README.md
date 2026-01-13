@@ -13,6 +13,9 @@
 - `plans/progress.txt` is append-only shift handoff log.
 - `plans/ideas.md` is append-only deferred ideas log (non-PRD).
 - Keep `docs/codebase/*` updated when starting a new story or after major refactors.
+- Optional presets: set `RPH_PROFILE=fast|thorough|audit|max` to apply default knobs (env overrides win).
+- Optional helper: source `plans/profile.sh <profile>` to export the preset env vars in your shell.
+- Optional timeout: set `RPH_ITER_TIMEOUT_SECS` to cap agent/verify runtime.
 
 ## Workflow discipline
 
