@@ -265,3 +265,8 @@ Next: continue with S2-003 or use RPH_PROFILE=verify for verification-only runs.
 - Summary: build_markdown_digest now recognizes pseudo-headings (Phase/Slice/S* entries) to avoid empty plan digests; reran verify and workflow acceptance.
 - Commands: ./plans/verify.sh quick; ./plans/workflow_acceptance.sh.
 - Evidence: plans/build_markdown_digest.sh; VERIFY OK (mode=quick); workflow acceptance tests passed.
+- 2026-01-14 23:46:08 UTC: workflow maintenance — acceptance harness snapshots dirty worktree before running Ralph.
+- Summary: added snapshot commit step in workflow_acceptance to keep temp worktree clean during Ralph tests; wired run_ralph wrapper and adjusted refs/digest resolution coverage.
+- Commands: ./plans/verify.sh quick; ./plans/workflow_acceptance.sh.
+- Evidence: plans/workflow_acceptance.sh; VERIFY OK (mode=quick); workflow acceptance tests passed.
+- Next: commit and push harness changes; run PRD pipeline slice4/auditor when desired.

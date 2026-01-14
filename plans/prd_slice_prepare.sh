@@ -38,7 +38,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 prd_path, slice_str, contract_digest_path, plan_digest_path, out_prd_slice, out_contract_slice, out_plan_slice, out_meta = sys.argv[1:]
 
@@ -147,6 +147,9 @@ def normalize(value: str) -> str:
     s = value.strip()
     s = bullet_re.sub('', s)
     s = number_re.sub('', s)
+    if s.startswith('§'):
+        s = s[1:].lstrip()
+    s = s.replace('§', '')
     s = s.replace('\\', '')
     s = s.replace('`', '')
     s = s.replace('*', '')
@@ -156,75 +159,133 @@ def normalize(value: str) -> str:
 
 def section_keys(section, source_prefix):
     keys = []
+
+    def add_key(value: str):
+        value = normalize(value)
+        if not value:
+            return
+        keys.append(value)
+        if source_prefix:
+            keys.append(f"{source_prefix} {value}")
+            prefix_norm = normalize(source_prefix)
+            if prefix_norm and prefix_norm != source_prefix:
+                keys.append(f"{prefix_norm} {value}")
+
+    def add_variants(value: str):
+        base = normalize(value)
+        if not base:
+            return
+        variants = {base}
+        if base.endswith(':'):
+            variants.add(base[:-1].rstrip())
+        variants.add(re.sub(r'\s+[—-]\s+MUST implement:?', '', base, flags=re.IGNORECASE).rstrip())
+        variants.add(re.sub(r'\s+MUST implement:?', '', base, flags=re.IGNORECASE).rstrip())
+        variants.add(re.sub(r'\s*\([^)]*\)\s*(?:[\.:])?\s*$', '', base).rstrip())
+        if ' & ' in base:
+            variants.add(base.split(' & ', 1)[0].rstrip())
+        for variant in list(variants):
+            if variant:
+                add_key(variant)
+
     section_id = normalize(str(section.get('id', '')))
     title = normalize(str(section.get('title', '')))
     if section_id:
-        keys.append(section_id)
+        add_key(section_id)
     if title:
-        keys.append(title)
+        add_key(title)
     if section_id and title:
-        keys.append(f"{section_id} {title}")
-    if source_prefix:
-        if section_id:
-            keys.append(f"{source_prefix} {section_id}")
-        if title:
-            keys.append(f"{source_prefix} {title}")
-        if section_id and title:
-            keys.append(f"{source_prefix} {section_id} {title}")
+        add_key(f"{section_id} {title}")
+        add_variants(f"{section_id} {title}")
+    if title:
+        add_variants(title)
     text = section.get('text', '') or ''
     for line in text.splitlines():
         raw = line.strip()
         if not raw:
             continue
-        if raw.count('|') >= 2:
+        if raw.startswith('|') or raw.endswith('|'):
             continue
         if set(raw) <= set('-| '):
             continue
         line_norm = normalize(raw)
         if not line_norm:
             continue
-        keys.append(line_norm)
-        if source_prefix:
-            keys.append(f"{source_prefix} {line_norm}")
+        add_variants(line_norm)
+        if ':' in line_norm:
+            prefix = line_norm.split(':', 1)[0].rstrip()
+            add_variants(prefix)
     return keys
 
 def build_key_map(digest):
     key_map = {}
+    key_sig = {}
     ambiguous = set()
     source_prefix = os.path.basename(digest.get('source_path', '') or '')
     for idx, section in enumerate(digest['sections']):
+        sig = (
+            normalize(str(section.get('id', ''))),
+            normalize(str(section.get('title', '')))
+        )
         for key in section_keys(section, source_prefix):
             if not key:
                 continue
             if key in ambiguous:
                 continue
             if key in key_map and key_map[key] != idx:
+                if key_sig.get(key) == sig:
+                    continue
                 ambiguous.add(key)
                 key_map[key] = None
             else:
                 key_map[key] = idx
+                key_sig[key] = sig
     return key_map, ambiguous
 
 def resolve_refs(refs, key_map, ambiguous_keys):
     missing = []
     ambiguous = []
     resolved = set()
+
+    def resolve_single(ref):
+        norm = normalize(ref)
+        if norm in ambiguous_keys:
+            return None, 'ambiguous'
+        idx = key_map.get(norm)
+        if idx is None:
+            if norm in key_map:
+                return None, 'ambiguous'
+            return None, 'missing'
+        return idx, None
+
     for ref in refs:
         if not isinstance(ref, str):
             missing.append(str(ref))
             continue
-        norm = normalize(ref)
-        if norm in ambiguous_keys:
-            ambiguous.append(ref)
-            continue
-        idx = key_map.get(norm)
-        if idx is None:
-            if norm in key_map:
-                ambiguous.append(ref)
-            else:
+        parts = [p.strip() for p in re.split(r'\s+/\s+', ref) if p.strip()]
+        if len(parts) <= 1:
+            idx, err = resolve_single(ref)
+            if err == 'missing':
                 missing.append(ref)
+            elif err == 'ambiguous':
+                ambiguous.append(ref)
+            elif idx is not None:
+                resolved.add(idx)
             continue
-        resolved.add(idx)
+        failed = False
+        for part in parts:
+            idx, err = resolve_single(part)
+            if err == 'missing':
+                missing.append(ref)
+                failed = True
+                break
+            if err == 'ambiguous':
+                ambiguous.append(ref)
+                failed = True
+                break
+            if idx is not None:
+                resolved.add(idx)
+        if failed:
+            continue
     return resolved, missing, ambiguous
 
 contract_key_map, contract_ambiguous = build_key_map(contract_digest)
@@ -266,7 +327,7 @@ with open(out_prd_slice, 'w', encoding='utf-8') as f:
     }, f, ensure_ascii=True, indent=2)
     f.write('\n')
 
-now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 with open(out_contract_slice, 'w', encoding='utf-8') as f:
     json.dump({

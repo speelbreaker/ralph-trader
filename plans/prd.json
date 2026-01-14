@@ -970,7 +970,7 @@
       "description": "Persist intents to a durable WAL and replay without resending after crash.",
       "contract_refs": [
         "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
-        "CONTRACT.md 2.4 Durable Intent Ledger — RecordedBeforeDispatch"
+        "CONTRACT.md RecordedBeforeDispatch"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.1 — WAL append \\+ replay no-resend"
@@ -1084,7 +1084,7 @@
       "category": "durability",
       "description": "Persist processed trade IDs to prevent duplicate processing.",
       "contract_refs": [
-        "CONTRACT.md 2.4 Trade-ID Idempotency Registry (Ghost-Race Hardening)"
+        "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.3 — Trade‑ID registry dedupe"
@@ -1136,7 +1136,7 @@
       "category": "durability",
       "description": "Block dispatch until WAL durability marker when configured.",
       "contract_refs": [
-        "CONTRACT.md 2.4 Durable Intent Ledger — RecordedBeforeDispatch"
+        "CONTRACT.md RecordedBeforeDispatch"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.4 — Dispatch requires durable WAL barrier (when configured)"

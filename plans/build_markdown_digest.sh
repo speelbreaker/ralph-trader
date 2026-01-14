@@ -24,7 +24,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 source_path = sys.argv[1]
 out_path = sys.argv[2]
@@ -32,6 +32,16 @@ out_path = sys.argv[2]
 with open(source_path, 'rb') as f:
     data = f.read()
 source_sha = hashlib.sha256(data).hexdigest()
+
+if os.path.exists(out_path):
+    try:
+        with open(out_path, 'r', encoding='utf-8') as f:
+            existing = json.load(f)
+        if existing.get('source_sha256') == source_sha and isinstance(existing.get('sections'), list) and len(existing.get('sections')) > 0:
+            raise SystemExit(0)
+    except json.JSONDecodeError:
+        pass
+
 text = data.decode('utf-8', errors='replace')
 
 heading_re = re.compile(r'^(#{1,6})\s+(.*)$')
@@ -95,7 +105,7 @@ if current is not None:
 payload = {
     "source_path": source_path,
     "source_sha256": source_sha,
-    "generated_at": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    "generated_at": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
     "sections": sections
 }
 

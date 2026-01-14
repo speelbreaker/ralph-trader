@@ -144,6 +144,8 @@ if [[ "$pass" != "1" ]]; then
   exit 5
 fi
 
+./plans/prd_ref_check.sh "$PRD_FILE"
+
 export AUDIT_SCOPE
 export AUDIT_SLICE
 
