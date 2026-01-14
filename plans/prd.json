@@ -570,7 +570,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2-000",

@@ -144,3 +144,8 @@
 - 2026-01-14 00:35:15 UTC S1-009: attempted git add/commit but sandbox blocked writes to external gitdir.
 - Commands: git add -A (failed: cannot create /Users/admin/Desktop/ralph/.git/worktrees/honolulu/index.lock).
 - Notes: commit still required once git operations are permitted.
+- 2026-01-14 00:41:38 UTC S1-009 summary: finalize dispatch map discovery and mark pass (no additional doc changes).
+- Summary: discovery report already updated; this iteration records story completion.
+- Commands: test -f docs/dispatch_map_discovery.md; rg -n "dispatch" docs/dispatch_map_discovery.md.
+- Evidence: docs/dispatch_map_discovery.md.
+- Next: proceed to S2-000.
