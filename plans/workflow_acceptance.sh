@@ -55,16 +55,17 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh plans/prd.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 copy_worktree_file "plans/ralph.sh"
 copy_worktree_file "plans/verify.sh"
 copy_worktree_file "plans/prd_schema_check.sh"
 copy_worktree_file "plans/contract_review_validate.sh"
+copy_worktree_file "plans/prd.json"
 copy_worktree_file "plans/workflow_contract_gate.sh"
 copy_worktree_file "plans/workflow_contract_map.json"
 copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
 chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh plans/prd.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
 if ! grep -q "Summary:" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must require Summary in progress entries" >&2
@@ -116,6 +117,12 @@ if ! grep -q -- "--sandbox danger-full-access" "$WORKTREE/plans/ralph.sh"; then
 fi
 if ! grep -Eq "VERIFY_ARTIFACTS_DIR=.*\\.ralph/verify" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must default VERIFY_ARTIFACTS_DIR under .ralph/verify" >&2
+  exit 1
+fi
+bad_scope_patterns="$(run_in_worktree jq -r '.items[].scope.touch[]?, .items[].scope.create[]? | select(endswith("/")) | select(contains("*") | not)' "$WORKTREE/plans/prd.json")"
+if [[ -n "$bad_scope_patterns" ]]; then
+  echo "FAIL: scope patterns ending in / must include a glob (e.g., **):" >&2
+  echo "$bad_scope_patterns" >&2
   exit 1
 fi
 

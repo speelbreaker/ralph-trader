@@ -695,7 +695,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/"
+          "crates/soldier_core/src/execution/**",
+          "crates/soldier_core/tests/test_label.rs"
         ],
         "avoid": [
           "crates/soldier_core/recovery/**"

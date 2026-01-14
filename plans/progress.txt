@@ -190,3 +190,15 @@
 - Commands: ./plans/init.sh; ./plans/verify.sh full; cargo fmt; ./plans/verify.sh full.
 - Evidence: ./plans/verify.sh full (green; includes test_idempotency).
 - Next: If scope allows, update docs/codebase/structure.md to mention the idempotency module.
+- Story: S2-002
+- Date: 2026-01-14
+- Summary: Blocked on scope mismatch for S2-002 (scope.touch is "crates/soldier_core/src/execution/" without a glob), so any execution or test changes would be out-of-scope; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; rg -n "scope" plans/ralph.sh; sed -n '830,910p' plans/ralph.sh; cat plans/prd.json.
+- Evidence: ./plans/verify.sh full (baseline VERIFY OK).
+- Next: Update S2-002 scope.touch to include "crates/soldier_core/src/execution/**" and "crates/soldier_core/tests/test_label.rs" (or set RPH_ALLOW_AGENT_PRD_EDIT=1) before implementation.
+- Story: S2-002
+- Date: 2026-01-14
+- Summary: Updated S2-002 scope.touch to include execution glob and test_label.rs, and added workflow acceptance check to fail on bare directory scope patterns (plus copying plans/prd.json into acceptance worktree).
+- Commands: apply_patch (plans/prd.json, plans/workflow_acceptance.sh); ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+- Evidence: plans/prd.json; plans/workflow_acceptance.sh; workflow acceptance + verify outputs.
+- Next: re-run Ralph for S2-002 implementation.
