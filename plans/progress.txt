@@ -184,3 +184,9 @@
 - Commands: rg -n "\"id\": \"S2-001\"" -C 6 plans/prd.json; sed -n '628,700p' plans/prd.json; apply_patch.
 - Evidence: plans/prd.json updated.
 - Next: re-run Ralph to implement S2-001.
+- Story: S2-001
+- Date: 2026-01-14
+- Summary: Implemented intent_hash using quantized fields only (xxhash64), added idempotency module wiring and tests, and acknowledged AGENTS.md and plans/progress.txt.
+- Commands: ./plans/init.sh; ./plans/verify.sh full; cargo fmt; ./plans/verify.sh full.
+- Evidence: ./plans/verify.sh full (green; includes test_idempotency).
+- Next: If scope allows, update docs/codebase/structure.md to mention the idempotency module.
