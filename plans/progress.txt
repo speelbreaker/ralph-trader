@@ -157,3 +157,24 @@
 - Commands: rg -n "\"id\": \"S2-000\"" plans/prd.json; sed -n '560,660p' plans/prd.json; apply_patch (scope.touch update); date -u "+%Y-%m-%d %H:%M:%S UTC".
 - Evidence: plans/prd.json.
 - Next: rerun ./ralph 5 for S2-000.
+- 2026-01-14 01:35:18 UTC S2-000: implemented quantization helpers with directional rounding, too-small rejection, and metrics; added quantize tests.
+- Commands: pwd; git log --oneline -10; ls; cat AGENTS.md; cat .ralph/iter_1_20260113-192834/selected_item.json; cat .ralph/iter_1_20260113-192834/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full; rg -n "quant" crates/soldier_core/src/execution; ls -la crates/soldier_core/src/execution; cat crates/soldier_core/src/execution/mod.rs; cat crates/soldier_core/src/execution/order_size.rs; cat crates/soldier_core/src/execution/dispatch_map.rs; apply_patch; cargo fmt; ./plans/verify.sh full; date -u "+%Y-%m-%d %H:%M:%S UTC".
+- Evidence: ./plans/verify.sh full (includes cargo test -p soldier_core --test test_quantize).
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S2-001.
+- 2026-01-14 01:36:17 UTC S2-000: git add/commit blocked by sandbox external gitdir permissions.
+- Commands: git add -A (failed: cannot create /Users/admin/Desktop/ralph/.git/worktrees/honolulu/index.lock).
+- Notes: commit still required once git operations are permitted.
+- 2026-01-14 01:43:05 UTC S2-000: verified existing quantization implementation and tests are green; no code changes needed.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; cat .ralph/iter_1_20260113-194009/selected_item.json; cat .ralph/iter_1_20260113-194009/progress_tail_before.txt; git status -s; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full.
+- Evidence: ./plans/verify.sh full (green, includes test_quantize).
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S2-001.
+- 2026-01-14 01:43:38 UTC S2-000: git add/commit blocked by sandbox external gitdir permissions.
+- Commands: git add -A (failed: cannot create /Users/admin/Desktop/ralph/.git/worktrees/honolulu/index.lock).
+- Notes: commit still required once git operations are permitted.
+- 2026-01-14 17:03:26 UTC S2-000: verified quantization implementation is present and tests are green; no code changes; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260114-110034/selected_item.json; cat .ralph/iter_1_20260114-110034/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; ./plans/init.sh; ./plans/verify.sh full; rg -n "quantize|quantization|qty_q|limit_price_q" crates/soldier_core/src/execution crates/soldier_core/tests; sed -n '1,200p' crates/soldier_core/src/execution/quantize.rs; sed -n '1,200p' crates/soldier_core/tests/test_quantize.rs; sed -n '1,160p' crates/soldier_core/src/execution/mod.rs; rg -n "scope\\.touch|scope touch|scope_check|scope check" plans/ralph.sh; sed -n '820,910p' plans/ralph.sh; git status -s.
+- Evidence: ./plans/verify.sh full (green).
+- Notes: Read AGENTS.md and plans/progress.txt per workflow.
+- Next: proceed to S2-001.
