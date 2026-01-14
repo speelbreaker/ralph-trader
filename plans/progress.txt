@@ -133,3 +133,14 @@
 - Commands: test -f docs/dispatch_map_discovery.md; rg -n "dispatch" docs/dispatch_map_discovery.md.
 - Evidence: docs/dispatch_map_discovery.md.
 - Next: proceed to S2-000.
+- 2026-01-14 00:31:45 UTC S1-009: expanded dispatcher discovery report with concrete test names for canonical amount selection; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-182745/selected_item.json; cat .ralph/iter_1_20260113-182745/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; ls -la docs; cat docs/dispatch_map_discovery.md; rg -n "dispatch" crates/soldier_core/src crates/soldier_core/tests; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,240p' crates/soldier_core/tests/test_dispatch_map.rs; git status -s; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full; ./plans/verify.sh full; date -u "+%Y-%m-%d %H:%M:%S UTC".
+- Evidence: docs/dispatch_map_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow. verify.sh full green (dirty tree warning due to doc edit).
+- Next: proceed to S2-000.
+- 2026-01-14 00:34:04 UTC S1-009: ran story verify checks for dispatch discovery report.
+- Commands: test -f docs/dispatch_map_discovery.md; rg -n "dispatch" docs/dispatch_map_discovery.md.
+- Evidence: docs/dispatch_map_discovery.md.
+- 2026-01-14 00:35:15 UTC S1-009: attempted git add/commit but sandbox blocked writes to external gitdir.
+- Commands: git add -A (failed: cannot create /Users/admin/Desktop/ralph/.git/worktrees/honolulu/index.lock).
+- Notes: commit still required once git operations are permitted.

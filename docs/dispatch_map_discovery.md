@@ -37,12 +37,12 @@ Dispatcher amount mapping for Deribit requests (canonical amount selection + mis
 - `OrderSize` for USD-sized instruments does not persist the derived `qty_coin` (only returned in `DeribitOrderAmount`).
 
 ## Proposed tests to add (canonical amount selection)
-- Rejects when both `qty_coin` and `qty_usd` are set on `OrderSize`.
-- Rejects when the canonical amount is missing for the instrument kind.
-- Rejects when `index_price <= 0` for USD-sized instruments.
-- Rejects when `contracts` is present but `contract_multiplier` is missing.
-- Accepts when `contracts * contract_multiplier` matches the canonical amount within the defined tolerance.
-- Asserts `derived_qty_coin` is set for USD-sized instruments and matches `qty_usd / index_price`.
+- `test_dispatch_map_rejects_both_qty_fields`: rejects when both `qty_coin` and `qty_usd` are set on `OrderSize`.
+- `test_dispatch_map_rejects_missing_canonical_amount`: rejects when the canonical amount is missing for the instrument kind.
+- `test_dispatch_map_rejects_invalid_index_price`: rejects when `index_price <= 0` for USD-sized instruments.
+- `test_dispatch_map_rejects_missing_multiplier`: rejects when `contracts` is present but `contract_multiplier` is missing.
+- `test_dispatch_map_accepts_contracts_match_with_tolerance`: accepts when `contracts * contract_multiplier` matches the canonical amount within the defined tolerance.
+- `test_dispatch_map_sets_derived_qty_coin_for_usd`: asserts `derived_qty_coin` is set for USD-sized instruments and matches `qty_usd / index_price`.
 
 ## Minimal diff to align with contract
 - Wire `map_order_size_to_deribit_amount` into the real Deribit request build path so exactly one `amount` field is sent.
