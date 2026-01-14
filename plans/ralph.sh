@@ -30,6 +30,7 @@ RPH_PROFILE_AGENT_MODEL=""
 RPH_PROFILE_ITER_TIMEOUT_SECS=""
 RPH_PROFILE_SELF_HEAL=""
 RPH_PROFILE_RATE_LIMIT_PER_HOUR=""
+RPH_PROFILE_VERIFY_ONLY=""
 RPH_PROFILE_WARNING=""
 
 case "$RPH_PROFILE" in
@@ -46,6 +47,10 @@ case "$RPH_PROFILE" in
   audit)
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_SELF_HEAL="0"
+    ;;
+  verify)
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_VERIFY_ONLY="1"
     ;;
   max)
     RPH_PROFILE_VERIFY_MODE="full"
@@ -65,7 +70,7 @@ RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
-RPH_VERIFY_ONLY="${RPH_VERIFY_ONLY:-0}"       # 0|1 (use cheaper model for verification-only iterations)
+RPH_VERIFY_ONLY="${RPH_VERIFY_ONLY:-${RPH_PROFILE_VERIFY_ONLY:-0}}"       # 0|1 (use cheaper model for verification-only iterations)
 RPH_VERIFY_ONLY_MODEL="${RPH_VERIFY_ONLY_MODEL:-gpt-5-mini}"
 if [[ "$RPH_VERIFY_ONLY" == "1" ]]; then
   RPH_AGENT_MODEL="$RPH_VERIFY_ONLY_MODEL"
@@ -1188,6 +1193,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   echo "Artifacts: $ITER_DIR" | tee -a "$LOG_FILE"
 
   save_iter_artifacts "$ITER_DIR"
+  printf '%s\n' "$RPH_AGENT_MODEL" > "${ITER_DIR}/agent_model.txt"
   HEAD_BEFORE="$(git rev-parse HEAD)"
   PRD_HASH_BEFORE="$(sha256_file "$PRD_FILE")"
   PRD_PASSES_BEFORE="$(jq -c '.items | map({id, passes})' "$PRD_FILE")"
@@ -1236,6 +1242,11 @@ for ((i=1; i<=MAX_ITERS; i++)); do
     --arg iter_dir "$ITER_DIR" \
     --arg last_good_ref "$LAST_GOOD_REF" \
     '.iteration=$iteration | .active_slice=$active_slice | .selection_mode=$selection_mode | .last_iter_dir=$iter_dir | .last_good_ref=$last_good_ref'
+  state_merge \
+    --arg agent_model "$RPH_AGENT_MODEL" \
+    --arg agent_cmd "$RPH_AGENT_CMD" \
+    --arg verify_only "$RPH_VERIFY_ONLY" \
+    '.agent_model=$agent_model | .agent_cmd=$agent_cmd | .verify_only=$verify_only'
   state_merge \
     --arg head_before "$HEAD_BEFORE" \
     --arg prd_hash_before "$PRD_HASH_BEFORE" \

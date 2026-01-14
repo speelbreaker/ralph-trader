@@ -208,3 +208,9 @@ Summary: Implemented compact label encode/decode with truncation metric and test
 Commands: git stash pop stash@{0}; cargo fmt; ./plans/verify.sh full.
 Evidence: ./plans/verify.sh full (includes test_label).
 Next: proceed to S2-003.
+Story: workflow-maintenance
+Date: 2026-01-14
+Summary: Added verify profile support in ralph.sh and recorded agent model per iteration (state + iter artifact), plus acceptance checks for both.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; verify + acceptance outputs.
+Next: continue with S2-003 or use RPH_PROFILE=verify for verification-only runs.

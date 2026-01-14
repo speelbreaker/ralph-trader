@@ -107,6 +107,14 @@ if ! grep -q "RPH_VERIFY_ONLY_MODEL" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must define RPH_VERIFY_ONLY_MODEL" >&2
   exit 1
 fi
+if ! grep -q "RPH_PROFILE_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_PROFILE_VERIFY_ONLY for verify profile" >&2
+  exit 1
+fi
+if ! grep -q "verify)" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must include verify profile case" >&2
+  exit 1
+fi
 if ! grep -q "gpt-5-mini" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must mention gpt-5-mini default for verification-only model" >&2
   exit 1
@@ -704,6 +712,25 @@ fi
 pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_2")"
 if [[ "$pass_state" != "false" ]]; then
   echo "FAIL: passes flipped without verify_post green" >&2
+  exit 1
+fi
+agent_model="$(run_in_worktree jq -r '.agent_model // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$agent_model" ]]; then
+  echo "FAIL: expected agent_model recorded in state.json" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir in state.json" >&2
+  exit 1
+fi
+if ! run_in_worktree test -f "$iter_dir/agent_model.txt"; then
+  echo "FAIL: expected agent_model.txt in iteration artifacts" >&2
+  exit 1
+fi
+iter_model="$(run_in_worktree cat "$iter_dir/agent_model.txt" 2>/dev/null || true)"
+if [[ -z "$iter_model" ]]; then
+  echo "FAIL: agent_model.txt is empty" >&2
   exit 1
 fi
 
