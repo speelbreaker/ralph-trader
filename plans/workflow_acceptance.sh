@@ -66,6 +66,39 @@ copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
 chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
 run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
+if ! grep -q "Summary:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Summary in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Commands:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Commands in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Evidence:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Evidence in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Next:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Next in progress entries" >&2
+  exit 1
+fi
+if ! grep -qi "command logs short" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must remind to keep command logs short" >&2
+  exit 1
+fi
+if ! grep -q "Operator tip: For verification-only iterations" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include model-split operator tip" >&2
+  exit 1
+fi
+if ! grep -q -- "--sandbox danger-full-access" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph default agent args must include danger-full-access sandbox" >&2
+  exit 1
+fi
+if ! grep -Eq "VERIFY_ARTIFACTS_DIR=.*\\.ralph/verify" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must default VERIFY_ARTIFACTS_DIR under .ralph/verify" >&2
+  exit 1
+fi
+
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 echo "plans/contract_check.sh" >> "$exclude_file"
 echo "plans/contract_review_validate.sh" >> "$exclude_file"
