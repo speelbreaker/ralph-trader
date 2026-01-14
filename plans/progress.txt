@@ -202,3 +202,9 @@
 - Commands: apply_patch (plans/prd.json, plans/workflow_acceptance.sh); ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 - Evidence: plans/prd.json; plans/workflow_acceptance.sh; workflow acceptance + verify outputs.
 - Next: re-run Ralph for S2-002 implementation.
+Story: S2-002
+Date: 2026-01-14
+Summary: Implemented compact label encode/decode with truncation metric and tests; acknowledged AGENTS.md and plans/progress.txt.
+Commands: git stash pop stash@{0}; cargo fmt; ./plans/verify.sh full.
+Evidence: ./plans/verify.sh full (includes test_label).
+Next: proceed to S2-003.
