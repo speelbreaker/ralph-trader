@@ -15,7 +15,7 @@ require_tools() {
 }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-require_tools git jq mktemp find wc tr sed awk stat sort head tail date
+require_tools git jq mktemp find wc tr sed awk stat sort head tail date grep
 mkdir -p "$ROOT/.ralph"
 WORKTREE="$(mktemp -d "${ROOT}/.ralph/workflow_acceptance_XXXXXX")"
 
@@ -55,22 +55,88 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/prd_lint.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 copy_worktree_file "plans/ralph.sh"
 copy_worktree_file "plans/verify.sh"
 copy_worktree_file "plans/prd_schema_check.sh"
+copy_worktree_file "plans/prd_lint.sh"
+copy_worktree_file "plans/run_prd_auditor.sh"
+copy_worktree_file "plans/build_markdown_digest.sh"
+copy_worktree_file "plans/build_contract_digest.sh"
+copy_worktree_file "plans/build_plan_digest.sh"
+copy_worktree_file "plans/prd_slice_prepare.sh"
 copy_worktree_file "plans/contract_review_validate.sh"
 copy_worktree_file "plans/workflow_contract_gate.sh"
 copy_worktree_file "plans/workflow_contract_map.json"
 copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
-chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_lint.sh" "$WORKTREE/plans/run_prd_auditor.sh" "$WORKTREE/plans/build_markdown_digest.sh" "$WORKTREE/plans/build_contract_digest.sh" "$WORKTREE/plans/build_plan_digest.sh" "$WORKTREE/plans/prd_slice_prepare.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/prd_lint.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+
+run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
+run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
+run_in_worktree mkdir -p ".ralph"
+cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
+export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
+if ! run_in_worktree bash -c '
+  allowlist="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
+  if [[ ! -f "$allowlist" ]]; then
+    echo "FAIL: story verify allowlist missing: $allowlist" >&2
+    exit 1
+  fi
+  missing=0
+  while IFS= read -r cmd; do
+    [[ -z "$cmd" ]] && continue
+    if ! grep -Fxq "$cmd" "$allowlist"; then
+      echo "FAIL: story verify command not allowlisted: $cmd" >&2
+      missing=1
+    fi
+  done < <(jq -r ".items[].verify[] | select(. != \"./plans/verify.sh\")" plans/prd.json)
+  if [[ "$missing" -ne 0 ]]; then
+    exit 1
+  fi
+'; then
+  exit 1
+fi
+
+if ! run_in_worktree bash -c '
+  last=-1
+  while IFS= read -r slice; do
+    if [[ "$slice" -lt "$last" ]]; then
+      echo "FAIL: PRD slices out of order (found $slice after $last)" >&2
+      exit 1
+    fi
+    last="$slice"
+  done < <(jq -r ".items[].slice" plans/prd.json)
+'; then
+  exit 1
+fi
+
+if ! run_in_worktree test -x "plans/run_prd_auditor.sh"; then
+  echo "FAIL: plans/run_prd_auditor.sh not executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk 'index($0, "prompts/auditor.md") { found=1 } END { exit found?0:1 }' "plans/run_prd_auditor.sh"; then
+  echo "FAIL: plans/run_prd_auditor.sh must reference prompts/auditor.md" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk 'index($0, "prd_sha256") { found=1 } END { exit found?0:1 }' "plans/run_prd_auditor.sh"; then
+  echo "FAIL: plans/run_prd_auditor.sh must validate prd_sha256" >&2
+  exit 1
+fi
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
+echo ".context/" >> "$exclude_file"
 echo "plans/contract_check.sh" >> "$exclude_file"
 echo "plans/contract_review_validate.sh" >> "$exclude_file"
 echo "plans/workflow_contract_gate.sh" >> "$exclude_file"
 echo "plans/workflow_contract_map.json" >> "$exclude_file"
+echo "plans/run_prd_auditor.sh" >> "$exclude_file"
+echo "plans/build_markdown_digest.sh" >> "$exclude_file"
+echo "plans/build_contract_digest.sh" >> "$exclude_file"
+echo "plans/build_plan_digest.sh" >> "$exclude_file"
+echo "plans/prd_slice_prepare.sh" >> "$exclude_file"
 
 count_blocked() {
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' | wc -l | tr -d ' '
@@ -493,6 +559,208 @@ EOF
 
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
+
+echo "Test 0a: auditor cache skip avoids agent call"
+run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/audit_cache_skip"
+  mkdir -p "$tmpdir"
+  prd="$tmpdir/prd.json"
+  audit="$tmpdir/prd_audit.json"
+  cache="$tmpdir/prd_audit_cache.json"
+  prompt="prompts/auditor.md"
+  if [[ -f "specs/CONTRACT.md" ]]; then
+    contract="specs/CONTRACT.md"
+  else
+    contract="CONTRACT.md"
+  fi
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then
+    plan="specs/IMPLEMENTATION_PLAN.md"
+  else
+    plan="IMPLEMENTATION_PLAN.md"
+  fi
+  if [[ -f "specs/WORKFLOW_CONTRACT.md" ]]; then
+    workflow="specs/WORKFLOW_CONTRACT.md"
+  else
+    workflow="WORKFLOW_CONTRACT.md"
+  fi
+  hash_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum "$1" | awk "{print \$1}"
+    else
+      shasum -a 256 "$1" | awk "{print \$1}"
+    fi
+  }
+  cat > "$prd" <<JSON
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-000",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "Audit cache skip test",
+      "contract_refs": ["CONTRACT.md §1"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": {
+        "touch": ["docs/**"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["docs/order_size_discovery.md"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+  prd_sha="$(hash_file "$prd")"
+  contract_sha="$(hash_file "$contract")"
+  plan_sha="$(hash_file "$plan")"
+  workflow_sha="$(hash_file "$workflow")"
+  prompt_sha="$(hash_file "$prompt")"
+  cat > "$audit" <<JSON
+{
+  "project": "StoicTrader",
+  "prd_sha256": "$prd_sha",
+  "inputs": {
+    "prd": "$prd",
+    "contract": "$contract",
+    "plan": "$plan",
+    "workflow_contract": "$workflow"
+  },
+  "summary": {
+    "items_total": 1,
+    "items_pass": 1,
+    "items_fail": 0,
+    "items_blocked": 0,
+    "must_fix_count": 0
+  },
+  "global_findings": {
+    "must_fix": [],
+    "risk": [],
+    "improvements": []
+  },
+  "items": [
+    {
+      "id": "S1-000",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": { "missing_fields": [], "notes": [] },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "contract_refs_resolved": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": []
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": []
+      },
+      "scope_check": { "too_broad": false, "est_size_too_large": false, "notes": [] },
+      "dependency_check": { "invalid": false, "forward_dep": false, "cycle": false, "notes": [] },
+      "patch_suggestions": ["n/a"]
+    }
+  ]
+}
+JSON
+  cat > "$cache" <<JSON
+{
+  "prd_sha256": "$prd_sha",
+  "contract_sha256": "$contract_sha",
+  "impl_plan_sha256": "$plan_sha",
+  "workflow_contract_sha256": "$workflow_sha",
+  "auditor_prompt_sha256": "$prompt_sha",
+  "audited_scope": "full",
+  "decision": "PASS"
+}
+JSON
+  AUDIT_PRD_FILE="$prd" AUDIT_OUTPUT_JSON="$audit" AUDIT_CACHE_FILE="$cache" AUDITOR_AGENT_CMD="/usr/bin/false" ./plans/run_prd_auditor.sh >/dev/null 2>&1
+'
+
+echo "Test 0b: slice preflight blocks unresolved refs"
+run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/audit_slice_preflight"
+  mkdir -p "$tmpdir"
+  prd="$tmpdir/prd.json"
+  cat > "$prd" <<JSON
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-009",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "Slice preflight unresolved refs test",
+      "contract_refs": ["CONTRACT.md DOES_NOT_EXIST"],
+      "plan_refs": ["Rust workspace exists with crates/soldier_core, crates/soldier_infra."],
+      "scope": {
+        "touch": ["docs/**"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["docs/order_size_discovery.md"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+  CONTRACT_SOURCE_FILE="" CONTRACT_DIGEST_FILE="$tmpdir/contract_digest.json" ./plans/build_contract_digest.sh >/dev/null 2>&1
+  PLAN_SOURCE_FILE="" PLAN_DIGEST_FILE="$tmpdir/plan_digest.json" ./plans/build_plan_digest.sh >/dev/null 2>&1
+  set +e
+  PRD_FILE="$prd" PRD_SLICE=1 CONTRACT_DIGEST="$tmpdir/contract_digest.json" PLAN_DIGEST="$tmpdir/plan_digest.json" OUT_PRD_SLICE="$tmpdir/prd_slice.json" OUT_CONTRACT_DIGEST="$tmpdir/contract_slice.json" OUT_PLAN_DIGEST="$tmpdir/plan_slice.json" OUT_META="$tmpdir/meta.json" ./plans/prd_slice_prepare.sh >/dev/null 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected prd_slice_prepare to fail on unresolved refs" >&2
+    exit 1
+  fi
+'
 
 echo "Test 0: contract_check resolves contract refs without SIGPIPE"
 reset_state

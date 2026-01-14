@@ -124,3 +124,54 @@
 - Commands: ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
 - Evidence: plans/workflow_acceptance.sh.
 - Next: rerun ./ralph 1 if needed; continue with next PRD item.
+- 2026-01-13 23:27:02 UTC: PRD slice 3 pipeline — add preflight/post-only/capabilities stories and baseline PRD lint check.
+- Summary: appended S3-000..S3-002 to plans/prd.json; workflow_acceptance now copies prd_lint.sh and runs prd_schema_check/prd_lint on plans/prd.json.
+- Commands: ./plans/prd_schema_check.sh plans/prd.json; ./plans/prd_lint.sh plans/prd.json; PRD_CUTTER_CMD=/usr/bin/true ./plans/prd_pipeline.sh; ./plans/verify.sh.
+- Evidence: plans/prd.json; plans/workflow_acceptance.sh; PRD_LINT: errors=0 warnings=0; VERIFY OK (mode=quick).
+- Next: proceed with Ralph slice 3 execution when ready.
+- 2026-01-13 23:37:01 UTC: workflow maintenance — add PRD auditor automation to pipeline.
+- Summary: added plans/run_prd_auditor.sh, defaulted prd_pipeline auditor to it when enabled, and asserted auditor script presence in workflow_acceptance.
+- Commands: chmod +x plans/run_prd_auditor.sh; ./plans/verify.sh.
+- Evidence: plans/run_prd_auditor.sh; plans/prd_pipeline.sh; plans/workflow_acceptance.sh; VERIFY OK (mode=quick).
+- Next: run PRD pipeline with auditor via ./plans/prd_pipeline.sh (uses run_prd_auditor by default).
+- 2026-01-14 00:25:25 UTC: workflow maintenance — harden PRD auditor output to verify prd_sha256 and catch stale audits.
+- Summary: run_prd_auditor now validates prd_sha256 against plans/prd.json; workflow_acceptance asserts the check; verify.sh quick pass.
+- Commands: ./plans/verify.sh; PRD_CUTTER_CMD=/usr/bin/true ./plans/prd_pipeline.sh slice3 (failed; auditor did not refresh prd_audit.json).
+- Evidence: plans/run_prd_auditor.sh; plans/workflow_acceptance.sh; VERIFY OK (mode=quick).
+- Next: rerun PRD pipeline after ensuring the auditor can regenerate plans/prd_audit.json (may need to delete stale audit or adjust auditor command).
+- 2026-01-14 01:13:31 UTC: PRD slice 3 tightening — narrow scope avoid lists and allowlist new verify commands.
+- Summary: added slice-3 verify commands to plans/story_verify_allowlist.txt, narrowed S3 scope.avoid entries, and added workflow_acceptance allowlist enforcement gate.
+- Commands: ./plans/prd_schema_check.sh plans/prd.json; ./plans/prd_lint.sh plans/prd.json; ./plans/verify.sh.
+- Evidence: plans/prd.json; plans/story_verify_allowlist.txt; plans/workflow_acceptance.sh; PRD_LINT: errors=0 warnings=0; VERIFY OK (mode=quick).
+- Next: rerun ./plans/workflow_acceptance.sh to exercise the new allowlist gate, then regenerate prd_audit via ./plans/prd_pipeline.sh if desired.
+- 2026-01-14 01:31:00 UTC: PRD slice 4 stories — add WAL/TLSM/trade-id registry/durability items with allowlisted verify.
+- Summary: appended S4-000..S4-003 to plans/prd.json, added verify commands to plans/story_verify_allowlist.txt, and added slice-order check to plans/workflow_acceptance.sh.
+- Commands: ./plans/prd_schema_check.sh plans/prd.json; ./plans/prd_lint.sh plans/prd.json; ./plans/verify.sh.
+- Evidence: plans/prd.json; plans/story_verify_allowlist.txt; plans/workflow_acceptance.sh; PRD_LINT: errors=0 warnings=0; VERIFY OK (mode=quick).
+- Next: run ./plans/workflow_acceptance.sh to exercise new slice-order check, then run ./plans/prd_pipeline.sh if you want an updated audit.
+- 2026-01-14 01:59:06 UTC: workflow maintenance — reran init/verify/acceptance; PRD pipeline slice4 blocked by auditor usage limit.
+- Summary: ran init (dirty override), verify quick, workflow_acceptance; PRD pipeline Stage B failed because codex exec hit usage limits. Used PRD_CUTTER_CMD=/usr/bin/true since no cutter script is present.
+- Commands: ./plans/init.sh; INIT_FAIL_ON_DIRTY=0 ./plans/init.sh; ./plans/verify.sh quick; ./plans/workflow_acceptance.sh; PRD_CUTTER_CMD=/usr/bin/true ./plans/prd_pipeline.sh slice4; git status -s.
+- Evidence: VERIFY OK (mode=quick); workflow_acceptance tests passed; auditor failed with HTTP 429 usage_limit_reached.
+- Notes: PRD pipeline did not regenerate plans/prd_audit.json due to auditor failure.
+- Next: rerun PRD pipeline once auditor has available usage or use an alternate auditor command.
+- 2026-01-14 01:59:06 UTC: workflow maintenance — reran init/verify/acceptance; PRD pipeline slice4 blocked by auditor usage limit.
+- Summary: ran init (dirty override), verify quick, workflow_acceptance; PRD pipeline Stage B failed because codex exec hit usage limits. Used PRD_CUTTER_CMD=/usr/bin/true since no cutter script is present.
+- Commands: ./plans/init.sh; INIT_FAIL_ON_DIRTY=0 ./plans/init.sh; ./plans/verify.sh quick; ./plans/workflow_acceptance.sh; PRD_CUTTER_CMD=/usr/bin/true ./plans/prd_pipeline.sh slice4; git status -s.
+- Evidence: VERIFY OK (mode=quick); workflow_acceptance tests passed; auditor failed with HTTP 429 usage_limit_reached.
+- Notes: PRD pipeline did not regenerate plans/prd_audit.json due to auditor failure.
+- Next: rerun PRD pipeline once auditor has available usage or use an alternate auditor command.
+- 2026-01-14 17:40:45 UTC: workflow maintenance — add hash-based auditor cache skip and acceptance coverage.
+- Summary: run_prd_auditor now skips when cache hashes match and last audit PASS; writes cache metadata for future runs. Added workflow acceptance test to confirm cache skip avoids agent invocation.
+- Commands: ./plans/verify.sh quick; ./plans/workflow_acceptance.sh.
+- Evidence: plans/run_prd_auditor.sh; plans/workflow_acceptance.sh; VERIFY OK (mode=quick); workflow acceptance tests passed.
+- Next: rerun ./plans/prd_pipeline.sh once auditor usage is available or with a valid cache to exercise skip.
+- 2026-01-14 18:45:55 UTC: workflow maintenance — add slice-scoped audit prep + contract/plan digests.
+- Summary: added markdown digest builder plus contract/plan digest wrappers; added prd_slice_prepare with strict ref resolution, slice extraction, and dependency/order validation; updated run_prd_auditor + prd_pipeline to support slice-scoped audits and meta file; refreshed auditor prompt for digest + slice inputs; workflow_acceptance covers cache skip and unresolved-ref preflight and ignores .context.
+- Commands: ./plans/verify.sh quick; ./plans/workflow_acceptance.sh.
+- Evidence: plans/build_markdown_digest.sh; plans/build_contract_digest.sh; plans/build_plan_digest.sh; plans/prd_slice_prepare.sh; plans/run_prd_auditor.sh; plans/prd_pipeline.sh; prompts/auditor.md; plans/workflow_acceptance.sh; VERIFY OK (mode=quick); workflow acceptance tests passed.
+- Next: run PRD pipeline with explicit slice (e.g., PRD_CUTTER_CMD=/usr/bin/true ./plans/prd_pipeline.sh slice3) once auditor usage is available.
+- 2026-01-14 18:57:57 UTC: workflow maintenance — expand digest heading detection and rerun gates.
+- Summary: build_markdown_digest now recognizes pseudo-headings (Phase/Slice/S* entries) to avoid empty plan digests; reran verify and workflow acceptance.
+- Commands: ./plans/verify.sh quick; ./plans/workflow_acceptance.sh.
+- Evidence: plans/build_markdown_digest.sh; VERIFY OK (mode=quick); workflow acceptance tests passed.

@@ -7,17 +7,21 @@ HARD RULE
 Any story with category=workflow MUST NOT touch crates/; any story with category=execution/risk MUST NOT touch plans/.
 
 INPUTS (READ IN THIS ORDER)
-1) Contract (source of truth):
-   - Prefer: specs/CONTRACT.md
-   - Else: CONTRACT.md
-2) Implementation plan (slice map):
-   - Prefer: specs/IMPLEMENTATION_PLAN.md
-   - Else: IMPLEMENTATION_PLAN.md
+0) Audit meta (source of truth for scope + hashes):
+   - .context/prd_audit_meta.json
+   - Use prd_sha256 from this file. Do NOT recompute hashes.
+1) Contract digest (do NOT read full contract markdown):
+   - If audit_scope == "slice": .context/contract_digest_slice.json
+   - Else: .context/contract_digest.json
+2) Implementation plan digest (do NOT read full plan markdown):
+   - If audit_scope == "slice": .context/plan_digest_slice.json
+   - Else: .context/plan_digest.json
 3) Workflow contract (Ralph loop rules):
    - Prefer: specs/WORKFLOW_CONTRACT.md
    - Else: WORKFLOW_CONTRACT.md
-4) PRD:
-   - plans/prd.json
+4) PRD input:
+   - If audit_scope == "slice": .context/prd_slice.json
+   - Else: plans/prd.json
 
 OUTPUTS (WRITE)
 A) plans/prd_audit.json (REQUIRED; valid JSON; exact schema below)
@@ -25,8 +29,7 @@ B) Optional: plans/prd_audit.md (human-readable summary)
 
 SCOPE / NON-GOALS
 DO:
-- Validate PRD schema and determinism rules
-- Validate slice ordering and dependency correctness
+- Validate PRD schema and determinism rules for the provided PRD input
 - Validate contract mapping per story (contract_refs non-empty + acceptance reflects invariants)
 - Validate Ralph readiness (verify.sh inclusion, evidence quality, bite-sized scope)
 
@@ -34,16 +37,21 @@ DO NOT:
 - Do NOT edit any code files
 - Do NOT edit CONTRACT.md, IMPLEMENTATION_PLAN.md, or WORKFLOW_CONTRACT.md
 - Do NOT rewrite plans/prd.json (only propose minimal patches in suggestions)
+- Do NOT audit the full PRD when audit_scope == "slice"; only audit the provided slice items
 
 AUDIT MODE
 You must perform BOTH:
 1) Strict schema validation (mechanical)
 2) Semantic checks (contract alignment + enforceability)
 
+NOTES ON SCOPE
+- Deterministic scripts already validated full-PRD ordering and dependencies.
+- For audit_scope == "slice", only evaluate the provided slice items; treat dependencies outside the slice as external (do not mark missing just because they are not in the slice input).
+
 ========================
 A) REQUIRED PRD SHAPE (CANONICAL)
 ========================
-plans/prd.json MUST have top-level keys exactly:
+The PRD input file (plans/prd.json for full audits, .context/prd_slice.json for slice audits) MUST have top-level keys exactly:
 - project
 - source { implementation_plan_path, contract_path }
 - rules { one_story_per_iteration, one_commit_per_story, no_prd_rewrite, passes_only_flips_after_verify_green }
@@ -85,7 +93,7 @@ Mark FAIL if any item:
 - acceptance contains TODO/TBD/??? while needs_human_decision=false
 - scope.touch is overly broad (e.g., "crates/**") without justification (treat as FAIL and require splitting)
 - est_size == "M" without split recommendation (treat as FAIL)
-- dependencies reference non-existent IDs, point forward to future slices, or create cycles
+- dependencies are invalid within the provided input (if clearly contradictory)
 
 Mark BLOCKED (not PASS) if:
 - contract_refs exist but are too vague to validate (e.g., “contract section about risk” without a specific section label)
@@ -117,13 +125,12 @@ If any contradiction exists → FAIL with:
 - a minimal patch suggestion
 
 C2) Slice ordering correctness
-- Items must be grouped by slice ascending.
-- If slices are interleaved (S1, S2, back to S1) → FAIL.
+- If audit_scope == "full": Items must be grouped by slice ascending.
+- If audit_scope == "slice": All items should share the same slice number.
 
 C3) Dependency correctness
-- No forward deps (Slice 2 story cannot depend on Slice 3).
-- No cycles.
-- Prefer minimal deps; flag unnecessary deps as IMPROVEMENT.
+- If audit_scope == "full": No forward deps, no cycles, no missing IDs.
+- If audit_scope == "slice": Do not mark missing when dependencies are outside the slice input.
 
 C4) Ralph readiness
 For each story:
@@ -219,11 +226,11 @@ If you write it, use this exact structure:
 ========================
 PROCEDURE (DO THIS EXACTLY)
 ========================
-1) Parse plans/prd.json and validate schema strictly.
-2) Validate slice grouping and ID formatting.
-3) Validate dependencies (existence, forward, cycles).
-4) For each item:
-   - Evaluate contract_refs specificity and applicability.
+1) Read .context/prd_audit_meta.json and determine audit_scope.
+2) Parse the PRD input file for the given scope and validate schema strictly.
+3) Validate slice grouping and ID formatting (per audit_scope).
+4) For each item in scope:
+   - Evaluate contract_refs specificity and applicability using the digests.
    - Verify acceptance reflects contract invariants.
    - Evaluate verify[] and evidence[] sufficiency.
    - Evaluate bite-sized scope and est_size.
