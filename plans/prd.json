@@ -642,7 +642,9 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/idempotency/*"
+          "crates/soldier_core/src/idempotency/**",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/test_idempotency.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/label.rs",
