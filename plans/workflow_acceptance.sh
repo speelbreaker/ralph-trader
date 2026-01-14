@@ -31,6 +31,23 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
+snapshot_worktree_if_dirty() {
+  run_in_worktree bash -c '
+    if [[ -n "$(git status --porcelain)" ]]; then
+      git add -A
+      if ! git diff --cached --quiet; then
+        git -c user.name="workflow-acceptance" -c user.email="workflow@local" \
+          commit -m "workflow_acceptance snapshot" >/dev/null 2>&1
+      fi
+    fi
+  '
+}
+
+run_ralph() {
+  snapshot_worktree_if_dirty
+  run_in_worktree "$@"
+}
+
 require_file() {
   local path="$1"
   if [[ ! -f "$path" ]]; then
@@ -55,11 +72,14 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/prd_lint.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 copy_worktree_file "plans/ralph.sh"
 copy_worktree_file "plans/verify.sh"
+copy_worktree_file "plans/prd.json"
 copy_worktree_file "plans/prd_schema_check.sh"
 copy_worktree_file "plans/prd_lint.sh"
+copy_worktree_file "plans/prd_ref_check.sh"
+copy_worktree_file "plans/prd_ref_index.sh"
 copy_worktree_file "plans/run_prd_auditor.sh"
 copy_worktree_file "plans/build_markdown_digest.sh"
 copy_worktree_file "plans/build_contract_digest.sh"
@@ -69,11 +89,12 @@ copy_worktree_file "plans/contract_review_validate.sh"
 copy_worktree_file "plans/workflow_contract_gate.sh"
 copy_worktree_file "plans/workflow_contract_map.json"
 copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
-chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_lint.sh" "$WORKTREE/plans/run_prd_auditor.sh" "$WORKTREE/plans/build_markdown_digest.sh" "$WORKTREE/plans/build_contract_digest.sh" "$WORKTREE/plans/build_plan_digest.sh" "$WORKTREE/plans/prd_slice_prepare.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd_schema_check.sh plans/prd_lint.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_lint.sh" "$WORKTREE/plans/prd_ref_check.sh" "$WORKTREE/plans/prd_ref_index.sh" "$WORKTREE/plans/run_prd_auditor.sh" "$WORKTREE/plans/build_markdown_digest.sh" "$WORKTREE/plans/build_contract_digest.sh" "$WORKTREE/plans/build_plan_digest.sh" "$WORKTREE/plans/prd_slice_prepare.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
+run_in_worktree ./plans/prd_ref_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree mkdir -p ".ralph"
 cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
 export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
@@ -133,6 +154,8 @@ echo "plans/contract_review_validate.sh" >> "$exclude_file"
 echo "plans/workflow_contract_gate.sh" >> "$exclude_file"
 echo "plans/workflow_contract_map.json" >> "$exclude_file"
 echo "plans/run_prd_auditor.sh" >> "$exclude_file"
+echo "plans/prd_ref_check.sh" >> "$exclude_file"
+echo "plans/prd_ref_index.sh" >> "$exclude_file"
 echo "plans/build_markdown_digest.sh" >> "$exclude_file"
 echo "plans/build_contract_digest.sh" >> "$exclude_file"
 echo "plans/build_plan_digest.sh" >> "$exclude_file"
@@ -708,7 +731,7 @@ run_in_worktree bash -c '
   tmpdir=".ralph/audit_slice_preflight"
   mkdir -p "$tmpdir"
   prd="$tmpdir/prd.json"
-  cat > "$prd" <<JSON
+  cat > "$prd" <<'JSON'
 {
   "project": "WorkflowAcceptance",
   "source": {
@@ -760,6 +783,121 @@ JSON
     echo "FAIL: expected prd_slice_prepare to fail on unresolved refs" >&2
     exit 1
   fi
+'
+
+echo "Test 0c: ref check blocks unresolved refs"
+run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/ref_check_bad"
+  mkdir -p "$tmpdir"
+  prd="$tmpdir/prd.json"
+  cat > "$prd" <<JSON
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-010",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "Ref check unresolved refs test",
+      "contract_refs": ["CONTRACT.md DOES_NOT_EXIST"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md DOES_NOT_EXIST"],
+      "scope": {
+        "touch": ["docs/**"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["docs/order_size_discovery.md"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+  set +e
+  PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected prd_ref_check to fail on unresolved refs" >&2
+    exit 1
+  fi
+'
+
+echo "Test 0d: ref check resolves slash + parenthetical variants"
+run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/ref_check_good"
+  mkdir -p "$tmpdir"
+  prd="$tmpdir/prd.json"
+  cat > "$prd" <<'JSON'
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-011",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "Ref check resolved refs test",
+      "contract_refs": [
+        "CONTRACT.md RiskState (health/cause layer): Healthy | Degraded | Maintenance | Kill",
+        "CONTRACT.md If a mismatch is detected: **reject the intent** and set RiskState::Degraded"
+      ],
+      "plan_refs": [
+        "Rust workspace exists with crates/soldier_core, crates/soldier_infra.",
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units + Dispatcher Invariants / S1.1 — InstrumentKind derivation + instrument cache TTL (fail‑closed)"
+      ],
+      "scope": {
+        "touch": ["docs/**"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["docs/order_size_discovery.md"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+  PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
 '
 
 echo "Test 0: contract_check resolves contract refs without SIGPIPE"
@@ -866,7 +1004,7 @@ write_invalid_prd "$invalid_prd"
 before_blocked="$(count_blocked)"
 before_blocked_incomplete="$(count_blocked_incomplete)"
 set +e
-run_in_worktree env PRD_FILE="$invalid_prd" PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" RPH_DRY_RUN=1 RPH_RATE_LIMIT_ENABLED=0 RPH_SELECTION_MODE=harness ./plans/ralph.sh 1 >/dev/null 2>&1
+run_ralph env PRD_FILE="$invalid_prd" PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" RPH_DRY_RUN=1 RPH_RATE_LIMIT_ENABLED=0 RPH_SELECTION_MODE=harness ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
@@ -885,7 +1023,7 @@ valid_prd_2="$WORKTREE/.ralph/valid_prd_2.json"
 write_valid_prd "$valid_prd_2" "S1-001"
 before_blocked="$(count_blocked)"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_2" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
@@ -923,7 +1061,7 @@ before_blocked_incomplete="$(count_blocked_incomplete)"
 before_blocked="$(count_blocked)"
 set +e
 test3_log="$WORKTREE/.ralph/test3.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_3" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -969,7 +1107,7 @@ before_blocked="$(count_blocked)"
 before_blocked_incomplete="$(count_blocked_incomplete)"
 set +e
 test3b_log="$WORKTREE/.ralph/test3b.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_3b" \
   PROGRESS_FILE="$WORKTREE/plans/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1018,7 +1156,7 @@ valid_prd_4="$WORKTREE/.ralph/valid_prd_4.json"
 write_valid_prd "$valid_prd_4" "S1-003"
 before_blocked="$(count_blocked)"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_4" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1061,7 +1199,7 @@ write_valid_prd "$valid_prd_5" "S1-004"
 mkdir -p "$WORKTREE/.ralph/lock"
 before_blocked="$(count_blocked)"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_5" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   RPH_DRY_RUN=1 \
@@ -1098,7 +1236,7 @@ run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@l
 write_contract_check_stub_require_iter_artifacts
 set +e
 test5b_log="$WORKTREE/.ralph/test5b.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_5b" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1148,7 +1286,7 @@ if [[ -n "$dirty_status" ]]; then
 fi
 set +e
 test6_log="$WORKTREE/.ralph/test6.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_6" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1208,7 +1346,7 @@ echo "{}" > "$out"
 EOF
 chmod +x "$WORKTREE/plans/contract_check.sh"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_7" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1240,7 +1378,7 @@ valid_prd_8="$WORKTREE/.ralph/valid_prd_8.json"
 write_valid_prd "$valid_prd_8" "S1-007"
 write_contract_check_stub "BLOCKED"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_8" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1272,7 +1410,7 @@ valid_prd_9="$WORKTREE/.ralph/valid_prd_9.json"
 write_valid_prd "$valid_prd_9" "S1-008"
 write_contract_check_stub "FAIL"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_9" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1317,7 +1455,7 @@ run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@l
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
 set +e
 test10_log="$WORKTREE/.ralph/test10.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_10" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1419,7 +1557,7 @@ reset_state
 missing_prd="$WORKTREE/.ralph/missing_prd.json"
 before_blocked="$(count_blocked)"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$missing_prd" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   RPH_DRY_RUN=1 \
@@ -1447,7 +1585,7 @@ reset_state
 valid_prd_13="$WORKTREE/.ralph/valid_prd_13.json"
 write_valid_prd "$valid_prd_13" "S1-010"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_13" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_fail.sh" \
@@ -1490,7 +1628,7 @@ write_valid_prd "$valid_prd_14" "S1-010"
 _tmp=$(mktemp)
 run_in_worktree jq '.items[0].needs_human_decision = true | .items[0].human_blocker = {"why":"test","question":"?","options":["A"],"recommended":"A","unblock_steps":["fix"]}' "$valid_prd_14" > "$_tmp" && mv "$_tmp" "$valid_prd_14"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_14" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1525,7 +1663,7 @@ run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "ad
 start_sha="$(run_in_worktree git rev-parse HEAD)"
 
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_15" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1634,7 +1772,7 @@ cat > "$valid_prd_16" <<'JSON'
   ]
 }
 JSON
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_16" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   RPH_DRY_RUN=1 \
@@ -1670,7 +1808,7 @@ jq -n \
   > "$rate_limit_file"
 set +e
 test18_log="$WORKTREE/.ralph/test18.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$rate_prd" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   RPH_DRY_RUN=1 \
@@ -1705,7 +1843,7 @@ if [[ "$rate_limit_limit" -ne 2 || "$rate_limit_count" -lt 1 || "$rate_limit_sle
 fi
 set +e
 test18b_log="$WORKTREE/.ralph/test18b.log"
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$rate_prd" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   RPH_DRY_RUN=1 \
@@ -1737,7 +1875,7 @@ reset_state
 valid_prd_19="$WORKTREE/.ralph/valid_prd_19.json"
 write_valid_prd "$valid_prd_19" "S1-015"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_19" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
@@ -1779,7 +1917,7 @@ write_valid_prd "$valid_prd_20" "S1-012"
 _tmp=$(mktemp)
 run_in_worktree jq '.items[0].scope.touch += ["acceptance_tick.txt"]' "$valid_prd_20" > "$_tmp" && mv "$_tmp" "$valid_prd_20"
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_20" \
   PROGRESS_FILE="plans/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
@@ -1829,7 +1967,7 @@ SH
 chmod +x "$STUB_DIR/agent_break.sh"
 
 set +e
-run_in_worktree env \
+run_ralph env \
   PRD_FILE="$valid_prd_21" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
