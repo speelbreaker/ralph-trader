@@ -1,0 +1,15 @@
+   Compiling soldier_core v0.1.0 (/Users/admin/conductor/workspaces/ralph/lahore/crates/soldier_core)
+   Compiling soldier_infra v0.1.0 (/Users/admin/conductor/workspaces/ralph/lahore/crates/soldier_infra)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.47s
+     Running unittests src/lib.rs (target/debug/deps/soldier_core-72a3f3ad2c7b64d6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/soldier_infra-40b5cd6b071d5082)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
