@@ -149,3 +149,11 @@
 - Commands: test -f docs/dispatch_map_discovery.md; rg -n "dispatch" docs/dispatch_map_discovery.md.
 - Evidence: docs/dispatch_map_discovery.md.
 - Next: proceed to S2-000.
+- 2026-01-14 01:21:18 UTC S2-000: blocked on PRD scope ambiguity; scope.touch uses literal directory pattern that matches no files and excludes required integration tests.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; ./plans/init.sh; ./plans/verify.sh full; rg -n "quant" crates/soldier_core/src/execution; ls -la crates/soldier_core/src/execution; sed -n '1,200p' crates/soldier_core/src/execution/mod.rs; sed -n '1,220p' crates/soldier_core/src/execution/order_size.rs; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; rg -n "Reject" crates/soldier_core/src; ls -la crates/soldier_core/tests; rg -n "scope" plans/ralph.sh; sed -n '780,900p' plans/ralph.sh; date -u "+%Y-%m-%d %H:%M:%S UTC".
+- Notes: Read AGENTS.md and plans/progress.txt per workflow. PRD scope.touch for S2-000 is "crates/soldier_core/src/execution/" (no glob), so any file change is out-of-scope; required integration test crates/soldier_core/tests/test_quantize.rs is also out-of-scope. Needs human decision/PRD scope update.
+- Next: update S2-000 scope.touch to include "crates/soldier_core/src/execution/**" and "crates/soldier_core/tests/test_quantize.rs" (or allow PRD edit), then re-run.
+- 2026-01-14 01:27:32 UTC S2-000 summary: updated PRD scope.touch to include execution glob and test_quantize.rs so implementation/tests are in-scope.
+- Commands: rg -n "\"id\": \"S2-000\"" plans/prd.json; sed -n '560,660p' plans/prd.json; apply_patch (scope.touch update); date -u "+%Y-%m-%d %H:%M:%S UTC".
+- Evidence: plans/prd.json.
+- Next: rerun ./ralph 5 for S2-000.

@@ -589,7 +589,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/"
+          "crates/soldier_core/src/execution/**",
+          "crates/soldier_core/tests/test_quantize.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/label.rs",
