@@ -98,6 +98,18 @@ if ! grep -q "Operator tip: For verification-only iterations" "$WORKTREE/plans/r
   echo "FAIL: ralph prompt must include model-split operator tip" >&2
   exit 1
 fi
+if ! grep -q "RPH_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_VERIFY_ONLY" >&2
+  exit 1
+fi
+if ! grep -q "RPH_VERIFY_ONLY_MODEL" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_VERIFY_ONLY_MODEL" >&2
+  exit 1
+fi
+if ! grep -q "gpt-5-mini" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must mention gpt-5-mini default for verification-only model" >&2
+  exit 1
+fi
 if ! grep -q -- "--sandbox danger-full-access" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph default agent args must include danger-full-access sandbox" >&2
   exit 1

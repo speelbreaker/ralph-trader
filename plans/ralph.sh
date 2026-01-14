@@ -65,6 +65,11 @@ RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
+RPH_VERIFY_ONLY="${RPH_VERIFY_ONLY:-0}"       # 0|1 (use cheaper model for verification-only iterations)
+RPH_VERIFY_ONLY_MODEL="${RPH_VERIFY_ONLY_MODEL:-gpt-5-mini}"
+if [[ "$RPH_VERIFY_ONLY" == "1" ]]; then
+  RPH_AGENT_MODEL="$RPH_VERIFY_ONLY_MODEL"
+fi
 RPH_ITER_TIMEOUT_SECS="${RPH_ITER_TIMEOUT_SECS:-${RPH_PROFILE_ITER_TIMEOUT_SECS:-0}}"
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
   if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
@@ -1482,7 +1487,7 @@ PROCEDURE:
     - Append deferred ideas to plans/ideas.md.
     - If pausing mid-story, fill plans/pause.md.
     - Append to plans/progress.txt; include Assumptions/Open questions when applicable.
-Operator tip: For verification-only iterations, consider setting RPH_AGENT_MODEL to a cheaper model; tests/CI run in shell.
+Operator tip: For verification-only iterations, set RPH_VERIFY_ONLY=1 (uses RPH_VERIFY_ONLY_MODEL, default gpt-5-mini); tests/CI run in shell.
 ${LAST_FAIL_NOTE}
 1) If plans/init.sh exists, run it.
 2) Run: ${VERIFY_SH} ${RPH_VERIFY_MODE}  (baseline must be green; if not, fix baseline first).
