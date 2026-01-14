@@ -124,3 +124,12 @@
 - Commands: ./plans/workflow_acceptance.sh; VERIFY_ARTIFACTS_DIR=.ralph/verify/<ts> E2E_ARTIFACTS_DIR=.ralph/e2e/<ts> ./plans/verify.sh full.
 - Evidence: plans/workflow_acceptance.sh.
 - Next: rerun ./ralph 1 if needed; continue with next PRD item.
+- 2026-01-14 00:16:49 UTC S1-009: documented current dispatcher mapping logic, call sites, and gaps vs contract in docs/dispatch_map_discovery.md; acknowledged AGENTS.md and plans/progress.txt.
+- Commands: pwd; git log --oneline -10; cat AGENTS.md; cat .ralph/iter_1_20260113-181242/selected_item.json; cat .ralph/iter_1_20260113-181242/progress_tail_before.txt; cat CONTRACT.md; cat IMPLEMENTATION_PLAN.md; cat specs/WORKFLOW_CONTRACT.md; cat docs/skills/workflow.md; cat plans/prd.json; cat plans/progress.txt; test -f plans/init.sh && ./plans/init.sh; ./plans/verify.sh full; rg -n "dispatch" crates/soldier_core/src crates/soldier_core/tests; sed -n '1,260p' crates/soldier_core/src/execution/dispatch_map.rs; sed -n '1,120p' crates/soldier_core/src/execution/mod.rs; sed -n '1,240p' crates/soldier_core/tests/test_dispatch_map.rs; sed -n '1,220p' crates/soldier_core/src/execution/order_size.rs; rg -n "map_order_size_to_deribit_amount|DeribitOrderAmount" crates/soldier_core/src crates/soldier_core/tests; sed -n '1,160p' crates/soldier_core/tests/test_order_size.rs; rg -n "order" crates/soldier_infra/src crates/soldier_core/src | head -n 200; cat docs/order_size_discovery.md; cat <<'EOF' > docs/dispatch_map_discovery.md; ./plans/verify.sh full; date -u "+%Y-%m-%d %H:%M:%S UTC".
+- Evidence: docs/dispatch_map_discovery.md.
+- Notes: Read AGENTS.md and plans/progress.txt per workflow. plans/init.sh failed due to dirty working tree (untracked artifacts/); verify ran with dirty tree warnings.
+- Next: proceed to S2-000.
+- 2026-01-14 00:17:22 UTC S1-009: ran story verify checks for docs/dispatch_map_discovery.md.
+- Commands: test -f docs/dispatch_map_discovery.md; rg -n "dispatch" docs/dispatch_map_discovery.md.
+- Evidence: docs/dispatch_map_discovery.md.
+- Next: proceed to S2-000.
