@@ -1490,7 +1490,14 @@ ${LAST_FAIL_NOTE}
 4) Implement with minimal diff + add/adjust tests as needed.
 5) Verify until green: ${VERIFY_SH} ${RPH_VERIFY_MODE}
 6) Mark pass by printing: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
-7) Append to progress.txt with required labels: Summary:, Commands:, Evidence:, Next:. Keep command logs short (key commands only). Include story ID and a YYYY-MM-DD date.
+7) Append to progress.txt with required labels: Summary:, Commands:, Evidence:, Next:. Keep command logs short (key commands only). Include story ID and a YYYY-MM-DD date. Append-only.
+   Copy/paste template:
+   Story: ${NEXT_ID}
+   Date: YYYY-MM-DD
+   Summary: ...
+   Commands: ...
+   Evidence: ...
+   Next: ...
 8) Commit: git add -A && git commit -m "PRD: ${NEXT_ID} - <short description>"
 
 If ALL items pass, output exactly: ${RPH_COMPLETE_SENTINEL}

@@ -70,6 +70,14 @@ if ! grep -q "Summary:" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must require Summary in progress entries" >&2
   exit 1
 fi
+if ! grep -q "Story:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include Story label in progress template" >&2
+  exit 1
+fi
+if ! grep -q "Date: YYYY-MM-DD" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include Date template with YYYY-MM-DD" >&2
+  exit 1
+fi
 if ! grep -q "Commands:" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must require Commands in progress entries" >&2
   exit 1
