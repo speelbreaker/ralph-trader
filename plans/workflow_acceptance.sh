@@ -71,6 +71,17 @@ copy_worktree_file() {
   fi
 }
 
+add_optional_overlays() {
+  local overlay
+  for overlay in "$@"; do
+    if [[ -f "$ROOT/$overlay" ]]; then
+      OVERLAY_FILES+=("$overlay")
+    else
+      MISSING_OVERLAY_FILES+=("$overlay")
+    fi
+  done
+}
+
 # Ensure tests run against the working tree versions while keeping the worktree clean.
 OVERLAY_FILES=(
   "plans/ralph.sh"
@@ -89,23 +100,19 @@ OVERLAY_FILES=(
   "plans/contract_check.sh"
   "plans/contract_coverage_matrix.py"
   "plans/contract_coverage_promote.sh"
+  "plans/artifacts_validate.sh"
   "plans/contract_review_validate.sh"
   "plans/workflow_contract_gate.sh"
   "plans/workflow_contract_map.json"
   "specs/WORKFLOW_CONTRACT.md"
+  "docs/schemas/artifacts.schema.json"
 )
 OPTIONAL_OVERLAY_FILES=(
   "plans/prd_ref_check.sh"
   "plans/prd_ref_index.sh"
 )
 MISSING_OVERLAY_FILES=()
-for overlay in "${OPTIONAL_OVERLAY_FILES[@]}"; do
-  if [[ -f "$ROOT/$overlay" ]]; then
-    OVERLAY_FILES+=("$overlay")
-  else
-    MISSING_OVERLAY_FILES+=("$overlay")
-  fi
-done
+add_optional_overlays "${OPTIONAL_OVERLAY_FILES[@]}"
 
 echo "Test 0e: optional overlay files are skipped when missing"
 if (( ${#MISSING_OVERLAY_FILES[@]} > 0 )); then
@@ -123,7 +130,6 @@ for overlay in "${OVERLAY_FILES[@]}"; do
 done
 scripts_to_chmod=(
   "ralph.sh"
-  "update_task.sh"
   "verify.sh"
   "update_task.sh"
   "prd_schema_check.sh"
@@ -138,6 +144,7 @@ scripts_to_chmod=(
   "contract_check.sh"
   "contract_coverage_matrix.py"
   "contract_coverage_promote.sh"
+  "artifacts_validate.sh"
   "contract_review_validate.sh"
   "workflow_contract_gate.sh"
   "prd_ref_check.sh"
