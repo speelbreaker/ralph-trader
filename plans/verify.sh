@@ -290,6 +290,12 @@ fi
 export CONTRACT_COVERAGE_STRICT
 
 # -----------------------------------------------------------------------------
+# 0a) Harness script syntax
+# -----------------------------------------------------------------------------
+log "0a) Harness script syntax"
+run_logged "bash_syntax_workflow_acceptance" "1m" bash -n plans/workflow_acceptance.sh
+
+# -----------------------------------------------------------------------------
 # 0b) Contract coverage matrix
 # -----------------------------------------------------------------------------
 log "0b) Contract coverage matrix"

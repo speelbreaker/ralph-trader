@@ -250,7 +250,7 @@ run_in_worktree bash -c '
     echo "FAIL: expected run_id in manifest" >&2
     exit 1
   fi
-  if ! jq -e '.skipped_checks[]? | select(.name=="final_verify" and .reason=="preflight_blocked")' "$manifest" >/dev/null 2>&1; then
+  if ! jq -e ".skipped_checks[]? | select(.name==\"final_verify\" and .reason==\"preflight_blocked\")" "$manifest" >/dev/null 2>&1; then
     echo "FAIL: expected final_verify preflight_blocked in skipped_checks" >&2
     exit 1
   fi
@@ -371,6 +371,11 @@ fi
 contract_norm_pattern=$'sed \'s/[*`_]/'
 if ! run_in_worktree grep -Fq "$contract_norm_pattern" "plans/contract_check.sh"; then
   echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "bash -n plans/workflow_acceptance.sh" "plans/verify.sh"; then
+  echo "FAIL: verify must syntax-check workflow_acceptance.sh" >&2
   exit 1
 fi
 

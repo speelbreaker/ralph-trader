@@ -408,3 +408,9 @@ Summary: Hardened artifact manifest with schema/version/run_id, atomic writes, b
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; plans/artifacts_validate.sh; docs/schemas/artifacts.schema.json; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
 Next: Optionally record blocked_dir details for additional blocked paths (e.g., circuit breaker) if you want tighter diagnostics.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Fixed workflow_acceptance backtick parse issue and added verify.sh bash -n gate for workflow_acceptance; acceptance asserts the new gate.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/workflow_acceptance.sh; plans/verify.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: None.
