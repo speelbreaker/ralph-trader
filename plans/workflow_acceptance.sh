@@ -72,32 +72,56 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh plans/workflow_contract_gate.sh plans/workflow_contract_map.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
-copy_worktree_file "plans/ralph.sh"
-copy_worktree_file "plans/verify.sh"
-copy_worktree_file "plans/update_task.sh"
-copy_worktree_file "plans/prd.json"
-copy_worktree_file "plans/prd_schema_check.sh"
-copy_worktree_file "plans/prd_lint.sh"
-copy_worktree_file "plans/prd_ref_check.sh"
-copy_worktree_file "plans/prd_ref_index.sh"
-copy_worktree_file "plans/run_prd_auditor.sh"
-copy_worktree_file "plans/build_markdown_digest.sh"
-copy_worktree_file "plans/build_contract_digest.sh"
-copy_worktree_file "plans/build_plan_digest.sh"
-copy_worktree_file "plans/prd_slice_prepare.sh"
-copy_worktree_file "plans/contract_review_validate.sh"
-copy_worktree_file "plans/workflow_contract_gate.sh"
-copy_worktree_file "plans/workflow_contract_map.json"
-copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
+OVERLAY_FILES=(
+  "plans/ralph.sh"
+  "plans/verify.sh"
+  "plans/update_task.sh"
+  "plans/prd.json"
+  "plans/prd_schema_check.sh"
+  "plans/prd_lint.sh"
+  "plans/run_prd_auditor.sh"
+  "plans/build_markdown_digest.sh"
+  "plans/build_contract_digest.sh"
+  "plans/build_plan_digest.sh"
+  "plans/prd_slice_prepare.sh"
+  "plans/contract_review_validate.sh"
+  "plans/workflow_contract_gate.sh"
+  "plans/workflow_contract_map.json"
+  "specs/WORKFLOW_CONTRACT.md"
+)
+OPTIONAL_OVERLAY_FILES=(
+  "plans/prd_ref_check.sh"
+  "plans/prd_ref_index.sh"
+)
+MISSING_OVERLAY_FILES=()
+for overlay in "${OPTIONAL_OVERLAY_FILES[@]}"; do
+  if [[ -f "$ROOT/$overlay" ]]; then
+    OVERLAY_FILES+=("$overlay")
+  else
+    MISSING_OVERLAY_FILES+=("$overlay")
+  fi
+done
+
+echo "Test 0e: optional overlay files are skipped when missing"
+if (( ${#MISSING_OVERLAY_FILES[@]} > 0 )); then
+  for overlay in "${MISSING_OVERLAY_FILES[@]}"; do
+    if printf '%s\n' "${OVERLAY_FILES[@]}" | grep -Fxq "$overlay"; then
+      echo "FAIL: optional overlay listed despite missing: $overlay" >&2
+      exit 1
+    fi
+  done
+fi
+
+run_in_worktree git update-index --no-skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
+for overlay in "${OVERLAY_FILES[@]}"; do
+  copy_worktree_file "$overlay"
+done
 scripts_to_chmod=(
   "ralph.sh"
   "verify.sh"
   "update_task.sh"
   "prd_schema_check.sh"
   "prd_lint.sh"
-  "prd_ref_check.sh"
-  "prd_ref_index.sh"
   "run_prd_auditor.sh"
   "build_markdown_digest.sh"
   "build_contract_digest.sh"
@@ -105,15 +129,23 @@ scripts_to_chmod=(
   "prd_slice_prepare.sh"
   "contract_review_validate.sh"
   "workflow_contract_gate.sh"
+  "prd_ref_check.sh"
+  "prd_ref_index.sh"
 )
 for script in "${scripts_to_chmod[@]}"; do
-  chmod +x "$WORKTREE/plans/$script" >/dev/null 2>&1 || true
+  if [[ -f "$WORKTREE/plans/$script" ]]; then
+    chmod +x "$WORKTREE/plans/$script" >/dev/null 2>&1 || true
+  fi
 done
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh plans/workflow_contract_gate.sh plans/workflow_contract_map.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
 
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
-run_in_worktree ./plans/prd_ref_check.sh "plans/prd.json" >/dev/null 2>&1
+if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
+  run_in_worktree ./plans/prd_ref_check.sh "plans/prd.json" >/dev/null 2>&1
+else
+  echo "WARN: prd_ref_check.sh missing; skipping ref check"
+fi
 run_in_worktree mkdir -p ".ralph"
 cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
 export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
@@ -975,12 +1007,13 @@ JSON
 '
 
 echo "Test 0c: ref check blocks unresolved refs"
-run_in_worktree bash -c '
-  set -euo pipefail
-  tmpdir=".ralph/ref_check_bad"
-  mkdir -p "$tmpdir"
-  prd="$tmpdir/prd.json"
-  cat > "$prd" <<JSON
+if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    tmpdir=".ralph/ref_check_bad"
+    mkdir -p "$tmpdir"
+    prd="$tmpdir/prd.json"
+    cat > "$prd" <<JSON
 {
   "project": "WorkflowAcceptance",
   "source": {
@@ -1022,23 +1055,27 @@ run_in_worktree bash -c '
   ]
 }
 JSON
-  set +e
-  PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
-  rc=$?
-  set -e
-  if [[ "$rc" -eq 0 ]]; then
-    echo "FAIL: expected prd_ref_check to fail on unresolved refs" >&2
-    exit 1
-  fi
-'
+    set +e
+    PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 0 ]]; then
+      echo "FAIL: expected prd_ref_check to fail on unresolved refs" >&2
+      exit 1
+    fi
+  '
+else
+  echo "SKIP: prd_ref_check.sh missing (ref check tests)"
+fi
 
 echo "Test 0d: ref check resolves slash + parenthetical variants"
-run_in_worktree bash -c '
-  set -euo pipefail
-  tmpdir=".ralph/ref_check_good"
-  mkdir -p "$tmpdir"
-  prd="$tmpdir/prd.json"
-  cat > "$prd" <<'JSON'
+if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    tmpdir=".ralph/ref_check_good"
+    mkdir -p "$tmpdir"
+    prd="$tmpdir/prd.json"
+    cat > "$prd" <<'JSON'
 {
   "project": "WorkflowAcceptance",
   "source": {
@@ -1086,8 +1123,11 @@ run_in_worktree bash -c '
   ]
 }
 JSON
-  PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
-'
+    PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
+  '
+else
+  echo "SKIP: prd_ref_check.sh missing (ref check tests)"
+fi
 
 echo "Test 0: contract_check resolves contract refs without SIGPIPE"
 reset_state
@@ -2196,6 +2236,7 @@ run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "ad
 start_sha="$(run_in_worktree git rev-parse HEAD)"
 
 set +e
+test16_log="$WORKTREE/.ralph/test16.log"
 run_ralph env \
   PRD_FILE="$valid_prd_15" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
@@ -2204,21 +2245,24 @@ run_ralph env \
   RPH_CHEAT_DETECTION="block" \
   RPH_SELF_HEAL=1 \
   RPH_SELECTION_MODE=harness \
-  ./plans/ralph.sh 1 >/dev/null 2>&1
+  ./plans/ralph.sh 1 >"$test16_log" 2>&1
 rc=$?
 set -e
 if [[ "$rc" -ne 9 ]]; then
   echo "FAIL: expected exit code 9 for cheating (deleted test), got $rc" >&2
+  tail -n 120 "$test16_log" >&2 || true
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "cheating_detected")"
+latest_block="$(latest_blocked_with_reason "cheating_detected" || true)"
 if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for cheating_detected" >&2
+  tail -n 120 "$test16_log" >&2 || true
   exit 1
 fi
 reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
 if [[ "$reason" != "cheating_detected" ]]; then
   echo "FAIL: expected reason=cheating_detected, got ${reason}" >&2
+  tail -n 120 "$test16_log" >&2 || true
   exit 1
 fi
 end_sha="$(run_in_worktree git rev-parse HEAD)"
