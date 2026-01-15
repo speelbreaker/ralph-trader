@@ -72,14 +72,12 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 copy_worktree_file "plans/ralph.sh"
 copy_worktree_file "plans/verify.sh"
 copy_worktree_file "plans/prd.json"
 copy_worktree_file "plans/prd_schema_check.sh"
 copy_worktree_file "plans/prd_lint.sh"
-copy_worktree_file "plans/prd_ref_check.sh"
-copy_worktree_file "plans/prd_ref_index.sh"
 copy_worktree_file "plans/run_prd_auditor.sh"
 copy_worktree_file "plans/build_markdown_digest.sh"
 copy_worktree_file "plans/build_contract_digest.sh"
