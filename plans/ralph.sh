@@ -1044,6 +1044,14 @@ add_skipped_check() {
   fi
   if command -v jq >/dev/null 2>&1; then
     SKIPPED_CHECKS_JSON="$(jq -c --arg name "$name" --arg reason "$reason" '. + [{name:$name, reason:$reason}]' <<<"$SKIPPED_CHECKS_JSON" 2>/dev/null || echo "$SKIPPED_CHECKS_JSON")"
+    return 0
+  fi
+  local entry
+  entry="{\"name\":\"$(json_escape "$name")\",\"reason\":\"$(json_escape "$reason")\"}"
+  if [[ "$SKIPPED_CHECKS_JSON" == "[]" || -z "$SKIPPED_CHECKS_JSON" ]]; then
+    SKIPPED_CHECKS_JSON="[$entry]"
+  else
+    SKIPPED_CHECKS_JSON="${SKIPPED_CHECKS_JSON%]},"$entry"]"
   fi
 }
 
@@ -1051,7 +1059,11 @@ write_artifact_manifest() {
   local iter_dir="${1:-}"
   local final_log="${2:-}"
   local final_status="${3:-}"
+  local blocked_dir="${4:-}"
+  local blocked_reason="${5:-}"
+  local blocked_details="${6:-}"
   local manifest="$ARTIFACT_MANIFEST"
+  local tmp="${manifest}.tmp"
   local head_before=""
   local head_after=""
   local commit_count="null"
@@ -1085,7 +1097,37 @@ write_artifact_manifest() {
     fi
   fi
 
+  mkdir -p "$(dirname "$manifest")" || true
+
+  if ! command -v jq >/dev/null 2>&1; then
+    cat > "$tmp" <<EOF
+{
+  "schema_version": 1,
+  "run_id": "$(json_escape "${RPH_RUN_ID:-}")",
+  "iter_dir": null,
+  "head_before": null,
+  "head_after": null,
+  "commit_count": null,
+  "verify_pre_log_path": null,
+  "verify_post_log_path": null,
+  "final_verify_log_path": null,
+  "final_verify_status": null,
+  "contract_review_path": null,
+  "contract_check_report_path": null,
+  "blocked_dir": null,
+  "blocked_reason": null,
+  "blocked_details": null,
+  "skipped_checks": ${SKIPPED_CHECKS_JSON},
+  "generated_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+    mv "$tmp" "$manifest"
+    return 0
+  fi
+
   jq -n \
+    --argjson schema_version 1 \
+    --arg run_id "${RPH_RUN_ID:-}" \
     --arg iter_dir "$iter_dir" \
     --arg head_before "$head_before" \
     --arg head_after "$head_after" \
@@ -1095,10 +1137,15 @@ write_artifact_manifest() {
     --arg contract_check_report_path "$contract_review_path" \
     --arg verify_pre_log_path "$verify_pre_log" \
     --arg verify_post_log_path "$verify_post_log" \
+    --arg blocked_dir "$blocked_dir" \
+    --arg blocked_reason "$blocked_reason" \
+    --arg blocked_details "$blocked_details" \
     --argjson commit_count "$commit_count" \
     --argjson skipped_checks "$SKIPPED_CHECKS_JSON" \
     --arg generated_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     '{
+      schema_version: $schema_version,
+      run_id: ($run_id | if length>0 then . else null end),
       iter_dir: ($iter_dir | if length>0 then . else null end),
       head_before: ($head_before | if length>0 then . else null end),
       head_after: ($head_after | if length>0 then . else null end),
@@ -1109,9 +1156,13 @@ write_artifact_manifest() {
       final_verify_status: ($final_verify_status | if length>0 then . else null end),
       contract_review_path: ($contract_review_path | if length>0 then . else null end),
       contract_check_report_path: ($contract_check_report_path | if length>0 then . else null end),
+      blocked_dir: ($blocked_dir | if length>0 then . else null end),
+      blocked_reason: ($blocked_reason | if length>0 then . else null end),
+      blocked_details: ($blocked_details | if length>0 then . else null end),
       skipped_checks: $skipped_checks,
       generated_at: $generated_at
-    }' > "$manifest"
+    }' > "$tmp"
+  mv "$tmp" "$manifest"
 }
 
 run_final_verify() {
