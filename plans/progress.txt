@@ -378,3 +378,41 @@ Summary: Fixed workflow acceptance final-verify log lookup and ensured final ver
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: .ralph/workflow_acceptance_run.log (EXIT:0); ./plans/verify.sh full output.
 Next: continue with workflow maintenance or return to PRD work.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Added final verify log copy into iter artifacts, added prd_pipeline skip logging to progress, and expanded workflow acceptance to cover prd_pipeline skip + final verify log location.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/prd_pipeline.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: If desired, add a small helper in workflow_acceptance to reuse PRD fixtures for prd_pipeline tests.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Added artifact manifest (.ralph/artifacts.json) with final verify log path, contract review path, head refs, and commit count; acceptance now asserts manifest fields.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Consider wiring skipped_checks into the manifest when optional checks are skipped in ralph.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Wired skipped_checks into artifact manifest (story_verify no-ops) and added contract_check_report_path alias; acceptance asserts both.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Consider recording skipped checks for other optional gates (e.g., final verify disabled).
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Added skipped_checks entry when verify_post fails (story_verify skipped) and asserted in acceptance.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Consider logging skipped checks when verify_pre fails or when final verify is disabled.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Hardened artifact manifest with schema/version/run_id, atomic writes, blocked metadata, and skip logging across failure paths; added manifest schema + validator and acceptance coverage for preflight, verify_pre, verify_post, final verify failure/disabled.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; plans/artifacts_validate.sh; docs/schemas/artifacts.schema.json; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Optionally record blocked_dir details for additional blocked paths (e.g., circuit breaker) if you want tighter diagnostics.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Fixed workflow_acceptance backtick parse issue and added verify.sh bash -n gate for workflow_acceptance; acceptance asserts the new gate.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/workflow_acceptance.sh; plans/verify.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: None.
+2026-01-15 - Workflow harness: preflight manifest now writes reliably; moved add_skipped_check/write_artifact_manifest earlier; prd_ref_check skip gate now honors PRD_REF_CHECK_ENABLED; acceptance coverage expanded for manifest failure paths and final verify failure; verify.sh full + workflow_acceptance.sh passed (with dirty tree warning in verify).
+2026-01-15 - Cleared artifacts manifest at Ralph startup and seeded acceptance to prove stale PASS is overwritten on preflight block; workflow_acceptance + verify full passed (verify warned dirty tree).

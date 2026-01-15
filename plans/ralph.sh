@@ -158,6 +158,8 @@ RPH_VERIFY_PASS_TAIL="${RPH_VERIFY_PASS_TAIL:-20}"
 RPH_VERIFY_FAIL_TAIL="${RPH_VERIFY_FAIL_TAIL:-200}"
 RPH_VERIFY_SUMMARY_MAX="${RPH_VERIFY_SUMMARY_MAX:-200}"
 RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nplans/logs/*\nartifacts/*\n.ralph/*'}"
+ARTIFACT_MANIFEST="${ARTIFACT_MANIFEST:-.ralph/artifacts.json}"
+SKIPPED_CHECKS_JSON="[]"
 
 # Parse RPH_AGENT_ARGS (space-delimited) into an array (global IFS excludes spaces).
 RPH_AGENT_ARGS_ARR=()
@@ -181,6 +183,8 @@ RPH_LOCK_TTL_SECS="${RPH_LOCK_TTL_SECS:-14400}"
 
 mkdir -p .ralph
 mkdir -p plans/logs
+# Ensure the artifact manifest always corresponds to the current run.
+rm -f "$ARTIFACT_MANIFEST" 2>/dev/null || true
 
 LOG_FILE="plans/logs/ralph.$(date +%Y%m%d-%H%M%S).log"
 LAST_GOOD_FILE=".ralph/last_good_ref"
@@ -204,6 +208,135 @@ json_escape() {
   s="${s//\"/\\\"}"
   s="${s//$'\n'/\\n}"
   printf '%s' "$s"
+}
+
+add_skipped_check() {
+  local name="${1:-}"
+  local reason="${2:-}"
+  if [[ -z "$name" ]]; then
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    SKIPPED_CHECKS_JSON="$(jq -c --arg name "$name" --arg reason "$reason" '. + [{name:$name, reason:$reason}]' <<<"$SKIPPED_CHECKS_JSON" 2>/dev/null || echo "$SKIPPED_CHECKS_JSON")"
+    return 0
+  fi
+  local entry
+  entry="{\"name\":\"$(json_escape "$name")\",\"reason\":\"$(json_escape "$reason")\"}"
+  if [[ "$SKIPPED_CHECKS_JSON" == "[]" || -z "$SKIPPED_CHECKS_JSON" ]]; then
+    SKIPPED_CHECKS_JSON="[$entry]"
+  else
+    SKIPPED_CHECKS_JSON="${SKIPPED_CHECKS_JSON%]},"$entry"]"
+  fi
+}
+
+write_artifact_manifest() {
+  local iter_dir="${1:-}"
+  local final_log="${2:-}"
+  local final_status="${3:-}"
+  local blocked_dir="${4:-}"
+  local blocked_reason="${5:-}"
+  local blocked_details="${6:-}"
+  local manifest="$ARTIFACT_MANIFEST"
+  local tmp="${manifest}.tmp"
+  local head_before=""
+  local head_after=""
+  local commit_count="null"
+  local contract_review_path=""
+  local verify_pre_log=""
+  local verify_post_log=""
+
+  if [[ -n "$iter_dir" && -d "$iter_dir" ]]; then
+    if [[ -f "$iter_dir/head_before.txt" ]]; then
+      head_before="$(cat "$iter_dir/head_before.txt" 2>/dev/null || true)"
+    fi
+    if [[ -f "$iter_dir/head_after.txt" ]]; then
+      head_after="$(cat "$iter_dir/head_after.txt" 2>/dev/null || true)"
+    fi
+    if [[ -f "$iter_dir/contract_review.json" ]]; then
+      contract_review_path="$iter_dir/contract_review.json"
+    fi
+    if [[ -f "$iter_dir/verify_pre.log" ]]; then
+      verify_pre_log="$iter_dir/verify_pre.log"
+    fi
+    if [[ -f "$iter_dir/verify_post.log" ]]; then
+      verify_post_log="$iter_dir/verify_post.log"
+    fi
+  fi
+
+  if [[ -n "$head_before" && -n "$head_after" ]]; then
+    local count_raw=""
+    count_raw="$(git rev-list --count "${head_before}..${head_after}" 2>/dev/null || true)"
+    if [[ "$count_raw" =~ ^[0-9]+$ ]]; then
+      commit_count="$count_raw"
+    fi
+  fi
+
+  mkdir -p "$(dirname "$manifest")" || true
+
+  if ! command -v jq >/dev/null 2>&1; then
+    cat > "$tmp" <<EOF
+{
+  "schema_version": 1,
+  "run_id": "$(json_escape "${RPH_RUN_ID:-}")",
+  "iter_dir": null,
+  "head_before": null,
+  "head_after": null,
+  "commit_count": null,
+  "verify_pre_log_path": null,
+  "verify_post_log_path": null,
+  "final_verify_log_path": null,
+  "final_verify_status": null,
+  "contract_review_path": null,
+  "contract_check_report_path": null,
+  "blocked_dir": null,
+  "blocked_reason": null,
+  "blocked_details": null,
+  "skipped_checks": ${SKIPPED_CHECKS_JSON},
+  "generated_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+    mv "$tmp" "$manifest"
+    return 0
+  fi
+
+  jq -n \
+    --argjson schema_version 1 \
+    --arg run_id "${RPH_RUN_ID:-}" \
+    --arg iter_dir "$iter_dir" \
+    --arg head_before "$head_before" \
+    --arg head_after "$head_after" \
+    --arg final_verify_log_path "$final_log" \
+    --arg final_verify_status "$final_status" \
+    --arg contract_review_path "$contract_review_path" \
+    --arg contract_check_report_path "$contract_review_path" \
+    --arg verify_pre_log_path "$verify_pre_log" \
+    --arg verify_post_log_path "$verify_post_log" \
+    --arg blocked_dir "$blocked_dir" \
+    --arg blocked_reason "$blocked_reason" \
+    --arg blocked_details "$blocked_details" \
+    --argjson commit_count "$commit_count" \
+    --argjson skipped_checks "$SKIPPED_CHECKS_JSON" \
+    --arg generated_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    '{
+      schema_version: $schema_version,
+      run_id: ($run_id | if length>0 then . else null end),
+      iter_dir: ($iter_dir | if length>0 then . else null end),
+      head_before: ($head_before | if length>0 then . else null end),
+      head_after: ($head_after | if length>0 then . else null end),
+      commit_count: $commit_count,
+      verify_pre_log_path: ($verify_pre_log_path | if length>0 then . else null end),
+      verify_post_log_path: ($verify_post_log_path | if length>0 then . else null end),
+      final_verify_log_path: ($final_verify_log_path | if length>0 then . else null end),
+      final_verify_status: ($final_verify_status | if length>0 then . else null end),
+      contract_review_path: ($contract_review_path | if length>0 then . else null end),
+      contract_check_report_path: ($contract_check_report_path | if length>0 then . else null end),
+      blocked_dir: ($blocked_dir | if length>0 then . else null end),
+      blocked_reason: ($blocked_reason | if length>0 then . else null end),
+      blocked_details: ($blocked_details | if length>0 then . else null end),
+      skipped_checks: $skipped_checks,
+      generated_at: $generated_at
+    }' > "$tmp"
+  mv "$tmp" "$manifest"
 }
 
 is_timeout_rc() {
@@ -514,6 +647,11 @@ block_preflight() {
   local block_dir
   block_dir="$(write_blocked_basic "$reason" "$details")"
   attempt_blocked_verify_pre "$block_dir" || true
+  add_skipped_check "verify_pre" "preflight_blocked"
+  add_skipped_check "verify_post" "preflight_blocked"
+  add_skipped_check "story_verify" "preflight_blocked"
+  add_skipped_check "final_verify" "preflight_blocked"
+  write_artifact_manifest "" "" "BLOCKED" "$block_dir" "$reason" "$details"
   echo "Blocked preflight: $reason ($details) in $block_dir" | tee -a "$LOG_FILE"
   exit "$code"
 }
@@ -657,11 +795,13 @@ run_story_verify() {
   local log="${iter_dir}/story_verify.log"
   local cmds=""
   local rc=0
+  local saw_extra=0
 
   : > "$log"
   cmds="$(jq -r '(.verify // [])[]' <<<"$item_json" 2>/dev/null || true)"
   if [[ -z "$cmds" ]]; then
     echo "No story-specific verify commands." | tee -a "$log"
+    add_skipped_check "story_verify" "no_story_verify_commands"
     return 0
   fi
 
@@ -670,6 +810,7 @@ run_story_verify() {
     if [[ "$cmd" == "./plans/verify.sh" ]]; then
       continue
     fi
+    saw_extra=1
     if ! story_verify_cmd_allowed "$cmd"; then
       rc=1
       echo "FAIL: story verify command not allowlisted: $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
@@ -685,6 +826,11 @@ run_story_verify() {
       echo "FAIL: story verify command failed (rc=$cmd_rc): $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
     fi
   done <<<"$cmds"
+
+  if (( saw_extra == 0 )); then
+    echo "No story-specific verify commands." | tee -a "$log"
+    add_skipped_check "story_verify" "no_story_verify_commands"
+  fi
 
   return $rc
 }
@@ -776,6 +922,7 @@ write_blocked_artifacts() {
     --argjson needs_human_decision "$needs_human" \
     '{reason: $reason, id: $id, priority: $priority, description: $description, needs_human_decision: $needs_human_decision}' \
     > "$block_dir/blocked_item.json"
+  write_artifact_manifest "${ITER_DIR:-}" "" "BLOCKED" "$block_dir" "$reason" "$desc"
   echo "$block_dir"
 }
 
@@ -890,7 +1037,15 @@ extract_verify_log_verify_mode() {
 }
 
 run_final_verify() {
+  local iter_dir="${1:-${ITER_DIR:-}}"
   if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
+    if [[ "$RPH_DRY_RUN" == "1" ]]; then
+      add_skipped_check "final_verify" "dry_run"
+      write_artifact_manifest "$iter_dir" "" "SKIPPED" "" "" ""
+    else
+      add_skipped_check "final_verify" "disabled"
+      write_artifact_manifest "$iter_dir" "" "SKIPPED" "" "" ""
+    fi
     return 0
   fi
   local mode="$RPH_FINAL_VERIFY_MODE"
@@ -901,6 +1056,7 @@ run_final_verify() {
   if ! run_verify "$log" "$mode"; then
     local block_dir
     block_dir="$(write_blocked_basic "final_verify_failed" "Final verify failed (see $log)" "blocked_final_verify")"
+    write_artifact_manifest "$iter_dir" "$log" "FAIL" "$block_dir" "final_verify_failed" "Final verify failed (see $log)"
     echo "<promise>BLOCKED_FINAL_VERIFY_FAILED</promise>" | tee -a "$LOG_FILE"
     echo "Blocked: final verify failed in $block_dir" | tee -a "$LOG_FILE"
     return 1
@@ -908,9 +1064,32 @@ run_final_verify() {
   if ! verify_log_has_sha "$log"; then
     local block_dir
     block_dir="$(write_blocked_basic "final_verify_missing_sha" "VERIFY_SH_SHA missing in $log" "blocked_final_verify")"
+    write_artifact_manifest "$iter_dir" "$log" "BLOCKED" "$block_dir" "final_verify_missing_sha" "VERIFY_SH_SHA missing in $log"
     echo "<promise>BLOCKED_FINAL_VERIFY_MISSING_SHA</promise>" | tee -a "$LOG_FILE"
     echo "Blocked: final verify missing SHA in $block_dir" | tee -a "$LOG_FILE"
     return 1
+  fi
+  if [[ -n "$iter_dir" ]]; then
+    if [[ ! -d "$iter_dir" ]]; then
+      local block_dir
+      block_dir="$(write_blocked_basic "final_verify_missing_iter_dir" "Final verify iter dir missing: $iter_dir" "blocked_final_verify")"
+      write_artifact_manifest "$iter_dir" "$log" "BLOCKED" "$block_dir" "final_verify_missing_iter_dir" "Final verify iter dir missing: $iter_dir"
+      echo "<promise>BLOCKED_FINAL_VERIFY_MISSING_ITER_DIR</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: final verify iter dir missing in $block_dir" | tee -a "$LOG_FILE"
+      return 1
+    fi
+    local dest="${iter_dir}/final_verify.log"
+    if ! cp "$log" "$dest"; then
+      local block_dir
+      block_dir="$(write_blocked_basic "final_verify_log_copy_failed" "Final verify log copy failed: $log -> $dest" "blocked_final_verify")"
+      write_artifact_manifest "$iter_dir" "$log" "BLOCKED" "$block_dir" "final_verify_log_copy_failed" "Final verify log copy failed: $log -> $dest"
+      echo "<promise>BLOCKED_FINAL_VERIFY_LOG_COPY</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: final verify log copy failed in $block_dir" | tee -a "$LOG_FILE"
+      return 1
+    fi
+    write_artifact_manifest "$iter_dir" "$dest" "PASS" "" "" ""
+  else
+    write_artifact_manifest "$iter_dir" "$log" "PASS" "" "" ""
   fi
   return 0
 }
@@ -1528,13 +1707,14 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   ' "$PRD_FILE")"
   if [[ -z "$ACTIVE_SLICE" ]]; then
     if completion_requirements_met "" ""; then
-      if ! run_final_verify; then
+      if ! run_final_verify "$ITER_DIR"; then
         exit 1
       fi
       echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
       exit 0
     fi
     BLOCK_DIR="$(write_blocked_basic "incomplete_completion" "completion requirements not met" "blocked_incomplete")"
+    write_artifact_manifest "$ITER_DIR" "" "BLOCKED" "$BLOCK_DIR" "incomplete_completion" "completion requirements not met"
     echo "<promise>BLOCKED_INCOMPLETE</promise>" | tee -a "$LOG_FILE"
     echo "Blocked incomplete completion: $BLOCK_DIR" | tee -a "$LOG_FILE"
     exit 1
@@ -1709,6 +1889,8 @@ PROMPT
 
   if [[ "$RPH_DRY_RUN" == "1" ]]; then
     echo "DRY RUN: would run $NEXT_ID - $NEXT_DESC" | tee -a "$LOG_FILE"
+    add_skipped_check "final_verify" "dry_run"
+    write_artifact_manifest "$ITER_DIR" "" "SKIPPED"
     exit 0
   fi
 
@@ -1769,12 +1951,20 @@ PROMPT
       if (( verify_pre_after_rc != 0 )); then
         echo "Baseline still failing after self-heal. Stop." | tee -a "$LOG_FILE"
         BLOCK_DIR="$(write_blocked_with_state "verify_pre_failed" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+        add_skipped_check "verify_post" "verify_pre_failed"
+        add_skipped_check "story_verify" "verify_pre_failed"
+        add_skipped_check "final_verify" "verify_pre_failed"
+        write_artifact_manifest "$ITER_DIR" "" "BLOCKED" "$BLOCK_DIR" "verify_pre_failed" "verify_pre failed after self-heal"
         echo "Blocked: verify_pre failed after self-heal in $BLOCK_DIR" | tee -a "$LOG_FILE"
         exit 1
       fi
     else
       BLOCK_DIR="$(write_blocked_with_state "verify_pre_failed" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
       echo "Fail-closed: fix baseline before continuing." | tee -a "$LOG_FILE"
+      add_skipped_check "verify_post" "verify_pre_failed"
+      add_skipped_check "story_verify" "verify_pre_failed"
+      add_skipped_check "final_verify" "verify_pre_failed"
+      write_artifact_manifest "$ITER_DIR" "" "BLOCKED" "$BLOCK_DIR" "verify_pre_failed" "verify_pre failed"
       echo "Blocked: verify_pre failed in $BLOCK_DIR" | tee -a "$LOG_FILE"
       exit 1
     fi
@@ -2055,6 +2245,7 @@ PROMPT
   else
     : > "${ITER_DIR}/story_verify.log"
     echo "Skipped story-specific verify commands because verify.sh failed." >> "${ITER_DIR}/story_verify.log"
+    add_skipped_check "story_verify" "verify_post_failed"
   fi
 
   VERIFY_POST_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
@@ -2314,7 +2505,7 @@ PROMPT
   # 6) Completion detection: sentinel OR PRD all-pass
   if grep -Fx "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
-      if ! run_final_verify; then
+      if ! run_final_verify "$ITER_DIR"; then
         exit 1
       fi
       echo "Agent signaled COMPLETE and PRD is fully passed. Exiting." | tee -a "$LOG_FILE"
@@ -2328,7 +2519,7 @@ PROMPT
 
   if all_items_passed; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
-      if ! run_final_verify; then
+      if ! run_final_verify "$ITER_DIR"; then
         exit 1
       fi
       echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
@@ -2342,6 +2533,7 @@ PROMPT
 done
 
 BLOCK_DIR="$(write_blocked_basic "max_iters_exceeded" "Reached max iterations ($MAX_ITERS) without completion." "blocked_max_iters")"
+write_artifact_manifest "$ITER_DIR" "" "BLOCKED" "$BLOCK_DIR" "max_iters_exceeded" "Reached max iterations ($MAX_ITERS) without completion."
 echo "Reached max iterations ($MAX_ITERS) without completion." | tee -a "$LOG_FILE"
 echo "Blocked: max iterations exceeded in $BLOCK_DIR" | tee -a "$LOG_FILE"
 exit 1

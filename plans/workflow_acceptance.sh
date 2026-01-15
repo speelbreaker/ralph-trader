@@ -31,6 +31,9 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
+STUB_DIR="$WORKTREE/.ralph/stubs"
+mkdir -p "$STUB_DIR"
+
 snapshot_worktree_if_dirty() {
   run_in_worktree bash -c '
     if [[ -n "$(git status --porcelain)" ]]; then
@@ -71,6 +74,17 @@ copy_worktree_file() {
   fi
 }
 
+add_optional_overlays() {
+  local overlay
+  for overlay in "$@"; do
+    if [[ -f "$ROOT/$overlay" ]]; then
+      OVERLAY_FILES+=("$overlay")
+    else
+      MISSING_OVERLAY_FILES+=("$overlay")
+    fi
+  done
+}
+
 # Ensure tests run against the working tree versions while keeping the worktree clean.
 OVERLAY_FILES=(
   "plans/ralph.sh"
@@ -89,23 +103,19 @@ OVERLAY_FILES=(
   "plans/contract_check.sh"
   "plans/contract_coverage_matrix.py"
   "plans/contract_coverage_promote.sh"
+  "plans/artifacts_validate.sh"
   "plans/contract_review_validate.sh"
   "plans/workflow_contract_gate.sh"
   "plans/workflow_contract_map.json"
   "specs/WORKFLOW_CONTRACT.md"
+  "docs/schemas/artifacts.schema.json"
 )
 OPTIONAL_OVERLAY_FILES=(
   "plans/prd_ref_check.sh"
   "plans/prd_ref_index.sh"
 )
 MISSING_OVERLAY_FILES=()
-for overlay in "${OPTIONAL_OVERLAY_FILES[@]}"; do
-  if [[ -f "$ROOT/$overlay" ]]; then
-    OVERLAY_FILES+=("$overlay")
-  else
-    MISSING_OVERLAY_FILES+=("$overlay")
-  fi
-done
+add_optional_overlays "${OPTIONAL_OVERLAY_FILES[@]}"
 
 echo "Test 0e: optional overlay files are skipped when missing"
 if (( ${#MISSING_OVERLAY_FILES[@]} > 0 )); then
@@ -123,7 +133,6 @@ for overlay in "${OVERLAY_FILES[@]}"; do
 done
 scripts_to_chmod=(
   "ralph.sh"
-  "update_task.sh"
   "verify.sh"
   "update_task.sh"
   "prd_schema_check.sh"
@@ -138,6 +147,7 @@ scripts_to_chmod=(
   "contract_check.sh"
   "contract_coverage_matrix.py"
   "contract_coverage_promote.sh"
+  "artifacts_validate.sh"
   "contract_review_validate.sh"
   "workflow_contract_gate.sh"
   "prd_ref_check.sh"
@@ -149,6 +159,125 @@ for script in "${scripts_to_chmod[@]}"; do
   fi
 done
 run_in_worktree git update-index --skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
+
+echo "Test 0f: prd_pipeline logs skipped ref check"
+run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/prd_pipeline_skip"
+  mkdir -p "$tmpdir"
+  prd="$tmpdir/prd.json"
+  cat > "$prd" <<'"'"'JSON'"'"'
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-030",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "PRD pipeline skip ref check test",
+      "contract_refs": ["CONTRACT.md §1"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": {
+        "touch": ["plans/verify.sh"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["log"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+  progress="$tmpdir/progress.txt"
+  PRD_FILE="$prd" PROGRESS_FILE="$progress" PRD_CUTTER_CMD="/bin/true" PRD_AUDITOR_ENABLED=0 PRD_REF_CHECK_ENABLED=0 ./plans/prd_pipeline.sh >/dev/null 2>&1
+  if ! grep -q "PRD ref check skipped" "$progress"; then
+    echo "FAIL: expected progress log to note skipped prd_ref_check" >&2
+    exit 1
+  fi
+'
+
+echo "Test 0g: manifest written on preflight block"
+run_in_worktree bash -c '
+  set -euo pipefail
+  cat > .ralph/artifacts.json <<'"'"'JSON'"'"'
+{
+  "schema_version": 1,
+  "run_id": "stale",
+  "iter_dir": null,
+  "head_before": null,
+  "head_after": null,
+  "commit_count": null,
+  "verify_pre_log_path": null,
+  "verify_post_log_path": null,
+  "final_verify_log_path": null,
+  "final_verify_status": "PASS",
+  "contract_review_path": null,
+  "contract_check_report_path": null,
+  "blocked_dir": null,
+  "blocked_reason": null,
+  "blocked_details": null,
+  "skipped_checks": [],
+  "generated_at": "2026-01-15T00:00:00Z"
+}
+JSON
+  set +e
+  PRD_FILE=".ralph/missing_prd.json" \
+    VERIFY_SH="/bin/true" \
+    RPH_AGENT_CMD="true" \
+    RPH_RATE_LIMIT_ENABLED=0 \
+    ./plans/ralph.sh 1 >/dev/null 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected non-zero exit for preflight block" >&2
+    exit 1
+  fi
+  manifest=".ralph/artifacts.json"
+  if [[ ! -f "$manifest" ]]; then
+    echo "FAIL: expected manifest for preflight block" >&2
+    exit 1
+  fi
+  ./plans/artifacts_validate.sh "$manifest" >/dev/null 2>&1
+  status="$(jq -r ".final_verify_status" "$manifest")"
+  if [[ "$status" != "BLOCKED" ]]; then
+    echo "FAIL: expected manifest final_verify_status=BLOCKED on preflight block" >&2
+    exit 1
+  fi
+  blocked_reason="$(jq -r ".blocked_reason" "$manifest")"
+  if [[ "$blocked_reason" != "missing_prd" ]]; then
+    echo "FAIL: expected blocked_reason=missing_prd" >&2
+    exit 1
+  fi
+  run_id="$(jq -r ".run_id // empty" "$manifest")"
+  if [[ -z "$run_id" ]]; then
+    echo "FAIL: expected run_id in manifest" >&2
+    exit 1
+  fi
+  if ! jq -e ".skipped_checks[]? | select(.name==\"final_verify\" and .reason==\"preflight_blocked\")" "$manifest" >/dev/null 2>&1; then
+    echo "FAIL: expected final_verify preflight_blocked in skipped_checks" >&2
+    exit 1
+  fi
+'
 
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
@@ -265,6 +394,11 @@ fi
 contract_norm_pattern=$'sed \'s/[*`_]/'
 if ! run_in_worktree grep -Fq "$contract_norm_pattern" "plans/contract_check.sh"; then
   echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "bash -n plans/workflow_acceptance.sh" "plans/verify.sh"; then
+  echo "FAIL: verify must syntax-check workflow_acceptance.sh" >&2
   exit 1
 fi
 
@@ -552,9 +686,6 @@ write_invalid_prd() {
 JSON
 }
 
-STUB_DIR="$WORKTREE/.ralph/stubs"
-mkdir -p "$STUB_DIR"
-
 cat > "$STUB_DIR/verify_once_then_fail.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -678,6 +809,26 @@ echo "mode=full verify_mode=none root=/tmp"
 exit 0
 EOF
 chmod +x "$STUB_DIR/verify_full_no_promotion.sh"
+
+cat > "$STUB_DIR/verify_fail_on_mode.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+mode="${1:-}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
+echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
+echo "MODE_ARG=${mode}"
+if [[ "$mode" == "promotion" ]]; then
+  exit 1
+fi
+exit 0
+EOF
+chmod +x "$STUB_DIR/verify_fail_on_mode.sh"
 
 cat > "$STUB_DIR/agent_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -1352,6 +1503,12 @@ JSON
 cat > "$iter_dir/selected.json" <<'JSON'
 {"selected_id":"S1-008"}
 JSON
+run_in_worktree bash -c '
+  set -euo pipefail
+  echo "acceptance seed $(date +%s)" > acceptance_contract_check.txt
+  git add acceptance_contract_check.txt
+  git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: contract_check seed" >/dev/null 2>&1
+'
 run_in_worktree git rev-parse HEAD~1 > "$iter_dir/head_before.txt"
 run_in_worktree git rev-parse HEAD > "$iter_dir/head_after.txt"
 cp "$contract_test_root/prd.json" "$iter_dir/prd_before.json"
@@ -1448,6 +1605,29 @@ fi
 pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_2")"
 if [[ "$pass_state" != "false" ]]; then
   echo "FAIL: passes flipped without verify_post green" >&2
+  exit 1
+fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree test -f "$manifest_path"; then
+  echo "FAIL: expected manifest for verify_post failure" >&2
+  exit 1
+fi
+if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected manifest to validate for verify_post failure" >&2
+  exit 1
+fi
+manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
+if [[ "$manifest_status" != "BLOCKED" ]]; then
+  echo "FAIL: expected final_verify_status=BLOCKED on verify_post failure" >&2
+  exit 1
+fi
+blocked_reason="$(run_in_worktree jq -r '.blocked_reason' "$manifest_path")"
+if [[ "$blocked_reason" != "verify_post_failed" ]]; then
+  echo "FAIL: expected blocked_reason=verify_post_failed" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" and .reason=="verify_post_failed")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected skipped_checks verify_post_failed entry in manifest" >&2
   exit 1
 fi
 agent_model="$(run_in_worktree jq -r '.agent_model // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
@@ -2226,6 +2406,7 @@ run_ralph env \
   SELECTED_ID="S1-020" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
+  VERIFY_MODE="promotion" \
   RPH_VERIFY_MODE="quick" \
   RPH_FINAL_VERIFY=1 \
   RPH_FINAL_VERIFY_MODE="promotion" \
@@ -2259,13 +2440,111 @@ if ! run_in_worktree grep -q "MODE_ARG=promotion" "$iter_dir/verify_post.log"; t
   echo "FAIL: expected verify_post to use promotion mode on pass" >&2
   exit 1
 fi
-final_log="$(run_in_worktree bash -c 'ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1' || true)"
-if [[ -z "$final_log" ]]; then
-  echo "FAIL: expected final verify log for final verify mode test" >&2
+final_log="${iter_dir}/final_verify.log"
+if ! run_in_worktree test -f "$final_log"; then
+  echo "FAIL: expected final verify log in iteration directory for final verify mode test" >&2
   exit 1
 fi
 if ! run_in_worktree grep -q "MODE_ARG=promotion" "$final_log"; then
   echo "FAIL: expected final verify to use promotion mode" >&2
+  exit 1
+fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree test -f "$manifest_path"; then
+  echo "FAIL: expected artifact manifest at $manifest_path" >&2
+  exit 1
+fi
+if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected artifact manifest to validate" >&2
+  exit 1
+fi
+schema_version="$(run_in_worktree jq -r '.schema_version' "$manifest_path")"
+if [[ "$schema_version" != "1" ]]; then
+  echo "FAIL: expected schema_version=1" >&2
+  exit 1
+fi
+run_id="$(run_in_worktree jq -r '.run_id // empty' "$manifest_path")"
+if [[ -z "$run_id" ]]; then
+  echo "FAIL: expected run_id in manifest" >&2
+  exit 1
+fi
+manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
+if [[ "$manifest_status" != "PASS" ]]; then
+  echo "FAIL: expected final_verify_status=PASS" >&2
+  exit 1
+fi
+manifest_final="$(run_in_worktree jq -r '.final_verify_log_path // empty' "$manifest_path")"
+if [[ "$manifest_final" != "$final_log" ]]; then
+  echo "FAIL: manifest final_verify_log_path mismatch" >&2
+  exit 1
+fi
+manifest_contract="$(run_in_worktree jq -r '.contract_review_path // empty' "$manifest_path")"
+if [[ "$manifest_contract" != "$iter_dir/contract_review.json" ]]; then
+  echo "FAIL: manifest contract_review_path mismatch" >&2
+  exit 1
+fi
+manifest_contract_check="$(run_in_worktree jq -r '.contract_check_report_path // empty' "$manifest_path")"
+if [[ "$manifest_contract_check" != "$iter_dir/contract_review.json" ]]; then
+  echo "FAIL: manifest contract_check_report_path mismatch" >&2
+  exit 1
+fi
+manifest_commit_count="$(run_in_worktree jq -r '.commit_count' "$manifest_path")"
+if [[ "$manifest_commit_count" != "1" ]]; then
+  echo "FAIL: expected manifest commit_count=1" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" and .reason=="no_story_verify_commands")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected skipped_checks story_verify entry in manifest" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
+
+
+echo "Test 10c: final verify disabled writes SKIPPED manifest"
+reset_state
+valid_prd_10c="$WORKTREE/.ralph/valid_prd_10c.json"
+write_valid_prd "$valid_prd_10c" "S1-021"
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10c_log="$WORKTREE/.ralph/test10c.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_10c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass_mode.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-021" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_VERIFY_MODE="quick" \
+  RPH_PROMOTION_VERIFY_MODE="promotion" \
+  RPH_FINAL_VERIFY=0 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10c_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for final verify disabled test" >&2
+  tail -n 120 "$test10c_log" >&2 || true
+  exit 1
+fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected artifact manifest to validate for final verify disabled" >&2
+  exit 1
+fi
+manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
+if [[ "$manifest_status" != "SKIPPED" ]]; then
+  echo "FAIL: expected final_verify_status=SKIPPED when disabled" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="final_verify" and .reason=="disabled")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected skipped_checks final_verify disabled" >&2
   exit 1
 fi
 write_contract_check_stub "PASS"
@@ -2321,6 +2600,63 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 
+write_contract_check_stub "PASS"
+
+echo "Test 10d: final verify failure writes FAIL manifest"
+reset_state
+valid_prd_10d="$WORKTREE/.ralph/valid_prd_10d.json"
+write_valid_prd "$valid_prd_10d" "S1-022"
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10d_log="$WORKTREE/.ralph/test10d.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_10d" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_fail_on_mode.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-022" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  VERIFY_MODE="promotion" \
+  RPH_VERIFY_MODE="quick" \
+  RPH_PROMOTION_VERIFY_MODE="full" \
+  RPH_FINAL_VERIFY_MODE="promotion" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10d_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for final verify failure" >&2
+  tail -n 120 "$test10d_log" >&2 || true
+  exit 1
+fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected artifact manifest to validate for final verify failure" >&2
+  exit 1
+fi
+manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
+if [[ "$manifest_status" != "FAIL" ]]; then
+  echo "FAIL: expected final_verify_status=FAIL for final verify failure" >&2
+  exit 1
+fi
+blocked_reason="$(run_in_worktree jq -r '.blocked_reason // empty' "$manifest_path")"
+if [[ "$blocked_reason" != "final_verify_failed" ]]; then
+  echo "FAIL: expected blocked_reason=final_verify_failed" >&2
+  exit 1
+fi
+manifest_log="$(run_in_worktree jq -r '.final_verify_log_path // empty' "$manifest_path")"
+if [[ -z "$manifest_log" || ! -f "$WORKTREE/$manifest_log" ]]; then
+  echo "FAIL: expected final_verify_log_path to exist for failed final verify" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
 
 echo "Test 11: contract_review_validate enforces schema file"
 valid_review="$WORKTREE/.ralph/contract_review_valid.json"
@@ -2425,6 +2761,29 @@ fi
 latest_block="$(latest_blocked_with_reason "verify_pre_failed")"
 if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected verify_pre_failed blocked artifact" >&2
+  exit 1
+fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree test -f "$manifest_path"; then
+  echo "FAIL: expected manifest for verify_pre failure" >&2
+  exit 1
+fi
+if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected manifest to validate on verify_pre failure" >&2
+  exit 1
+fi
+manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
+if [[ "$manifest_status" != "BLOCKED" ]]; then
+  echo "FAIL: expected final_verify_status=BLOCKED on verify_pre failure" >&2
+  exit 1
+fi
+blocked_reason="$(run_in_worktree jq -r '.blocked_reason' "$manifest_path")"
+if [[ "$blocked_reason" != "verify_pre_failed" ]]; then
+  echo "FAIL: expected blocked_reason=verify_pre_failed" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="final_verify" and .reason=="verify_pre_failed")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected final_verify skipped entry for verify_pre failure" >&2
   exit 1
 fi
 dirty_status="$(run_in_worktree git status --porcelain)"
