@@ -372,3 +372,9 @@ Summary: Added promotion-grade verify enforcement in update_task/state, promoted
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: workflow_acceptance.sh output; verify.sh full output.
 Next: run Ralph with RPH_VERIFY_MODE=promotion (or RPH_PROFILE=promote) for pass flips.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Fixed workflow acceptance final-verify log lookup and ensured final verify runs in Test 10b; reran workflow acceptance and full verify after rebase.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: .ralph/workflow_acceptance_run.log (EXIT:0); ./plans/verify.sh full output.
+Next: continue with workflow maintenance or return to PRD work.

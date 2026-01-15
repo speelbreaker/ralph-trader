@@ -262,7 +262,8 @@ if ! run_in_worktree awk '/NO_PROGRESS/ {found=1} END {exit found?0:1}' "plans/p
   exit 1
 fi
 
-if ! run_in_worktree grep -Eq "sed 's/\\[\\*`_\\]/" "plans/contract_check.sh"; then
+contract_norm_pattern=$'sed \'s/[*`_]/'
+if ! run_in_worktree grep -Fq "$contract_norm_pattern" "plans/contract_check.sh"; then
   echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
   exit 1
 fi
@@ -1532,7 +1533,7 @@ if [[ "$rc" -ne 0 ]]; then
   tail -n 120 "$test2c_log" >&2 || true
   exit 1
 fi
-iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" || true)"
 verify_post_log="$WORKTREE/$iter_dir/verify_post.log"
 if [[ ! -f "$verify_post_log" ]]; then
   echo "FAIL: expected verify_post.log for promotion test" >&2
@@ -2226,6 +2227,7 @@ run_ralph env \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_VERIFY_MODE="quick" \
+  RPH_FINAL_VERIFY=1 \
   RPH_FINAL_VERIFY_MODE="promotion" \
   RPH_PROMOTION_VERIFY_MODE="promotion" \
   RPH_RATE_LIMIT_ENABLED=0 \
@@ -2257,7 +2259,7 @@ if ! run_in_worktree grep -q "MODE_ARG=promotion" "$iter_dir/verify_post.log"; t
   echo "FAIL: expected verify_post to use promotion mode on pass" >&2
   exit 1
 fi
-final_log="$(run_in_worktree ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1)"
+final_log="$(run_in_worktree bash -c 'ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1' || true)"
 if [[ -z "$final_log" ]]; then
   echo "FAIL: expected final verify log for final verify mode test" >&2
   exit 1

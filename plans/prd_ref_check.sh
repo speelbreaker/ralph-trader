@@ -36,12 +36,21 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 2
 fi
 
-python3 - "$PRD_FILE" "$CONTRACT_FILE" "$PLAN_FILE" <<'PY'
+EXTRA_CONTRACT_FILES=()
+if [[ -f "docs/contract_anchors.md" ]]; then
+  EXTRA_CONTRACT_FILES+=("docs/contract_anchors.md")
+fi
+if [[ -f "docs/validation_rules.md" ]]; then
+  EXTRA_CONTRACT_FILES+=("docs/validation_rules.md")
+fi
+
+python3 - "$PRD_FILE" "$CONTRACT_FILE" "$PLAN_FILE" "${EXTRA_CONTRACT_FILES[@]}" <<'PY'
 import json
+import os
 import re
 import sys
 
-prd_path, contract_path, plan_path = sys.argv[1:]
+prd_path, contract_path, plan_path, *extra_contract_paths = sys.argv[1:]
 
 with open(prd_path, 'r', encoding='utf-8') as f:
     prd = json.load(f)
@@ -53,6 +62,13 @@ if not isinstance(items, list):
 
 with open(contract_path, 'r', encoding='utf-8') as f:
     contract_text = f.read()
+for extra_path in extra_contract_paths:
+    if not extra_path:
+        continue
+    if not os.path.isfile(extra_path):
+        continue
+    with open(extra_path, 'r', encoding='utf-8') as f:
+        contract_text += "\n" + f.read()
 with open(plan_path, 'r', encoding='utf-8') as f:
     plan_text = f.read()
 
