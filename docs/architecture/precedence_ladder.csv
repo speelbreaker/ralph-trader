@@ -1,0 +1,37 @@
+# Canonical TradingMode Precedence Ladder
+#
+# Machine-readable table extracted from CONTRACT.md
+# Source: §2.2 (lines 688-703), §1.4.3 (lines 536-538), §2.3.1-2.3.2, §4.2, §7.2
+#
+# Precedence: evaluated top-to-bottom; first match wins.
+# Severity: Kill > ReduceOnly > Active
+# Sticky: whether condition persists after trigger clears (requires explicit clear condition)
+#
+# Format: CSV-compatible for tooling ingestion
+
+cause,code,severity,sticky,clear_condition,contract_ref
+watchdog_heartbeat_stale,WATCHDOG_KILL,Kill,false,heartbeat resumes within watchdog_kill_s,§2.2 line 690
+risk_state_kill,RISK_STATE_KILL,Kill,true,manual intervention / reconcile,§2.2 line 691
+mm_util_critical,MARGIN_UTIL_CRITICAL,Kill,false,mm_util < 0.95 + emergency flatten complete,§1.4.3 line 538
+disk_used_critical,DISK_CRITICAL,Kill,false,disk_used_pct < 92%,§7.2 line 1502
+rate_limit_session_kill,RATE_LIMIT_SESSION_KILL,Kill,true,reconnect + backoff + 3-way reconcile + stable,§3.3 lines 896-900
+risk_state_maintenance,RISK_STATE_MAINTENANCE,ReduceOnly,false,maintenance window ends,§2.2 line 693
+exchange_maintenance_imminent,EXCHANGE_MAINTENANCE,ReduceOnly,false,maintenance window passes,§2.3.1 lines 751-755
+bunker_mode_active,BUNKER_MODE,ReduceOnly,true,all network metrics below threshold for 120s,§2.3.2 lines 773-777
+f1_cert_missing,F1_CERT_MISSING,ReduceOnly,false,F1_CERT.json created with status=PASS,§2.2.1 line 648
+f1_cert_stale,F1_CERT_STALE,ReduceOnly,false,F1_CERT.generated_ts_ms within f1_cert_max_age_s,§2.2.1 line 648
+f1_cert_fail,F1_CERT_FAIL,ReduceOnly,false,F1_CERT.json.status == PASS,§2.2.1 line 648
+evidence_chain_not_green,EVIDENCE_CHAIN_RED,ReduceOnly,true,EvidenceChainState == GREEN for cooldown (120s),§2.2.2 line 667
+cortex_override_reduceonly,CORTEX_FORCE_REDUCEONLY,ReduceOnly,true,cooldown expires (300s DVOL / 120s spread/depth),§2.3 lines 732-733
+cortex_ws_gap,CORTEX_WS_GAP,ReduceOnly,false,ws_gap_flag clears,§2.3 line 734
+policy_stale,POLICY_STALE,ReduceOnly,false,fresh policy received (age < max_policy_age_s),§2.2 line 708
+fee_model_stale_hard,FEE_MODEL_STALE_HARD,ReduceOnly,false,fee_model_cache_age_s < fee_cache_hard_s,§4.2 line 1081
+risk_state_degraded,RISK_STATE_DEGRADED,ReduceOnly,false,RiskState == Healthy,§2.2 line 699
+mm_util_high,MARGIN_UTIL_HIGH,ReduceOnly,false,mm_util < 0.85,§1.4.3 line 537
+disk_used_high,DISK_HIGH,ReduceOnly,false,disk_used_pct < 80%,§7.2 line 1501
+ws_book_continuity_break,WS_BOOK_CONTINUITY_BREAK,ReduceOnly,true,resubscribe + full snapshot + reconcile complete,§3.4 lines 930-938
+ws_trades_continuity_break,WS_TRADES_CONTINUITY_BREAK,ReduceOnly,true,REST trades pull + reconcile confirms no missing fills,§3.4 lines 940-947
+ws_private_disconnect,WS_PRIVATE_DISCONNECT,ReduceOnly,true,REST snapshot reconcile (orders + positions + trades),§3.4 lines 954-957
+watchdog_silence_reduceonly,WATCHDOG_SILENCE_REDUCEONLY,ReduceOnly,true,cooldown expiry + reconciliation confirms safe,§3.2 line 847
+instrument_cache_stale,INSTRUMENT_CACHE_STALE,ReduceOnly,false,instrument metadata refreshed within TTL,§1.0.X lines 136-138
+all_healthy,HEALTHY,Active,false,N/A (default state),§2.2 lines 700-703
