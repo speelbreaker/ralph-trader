@@ -1092,6 +1092,7 @@ write_artifact_manifest() {
     --arg final_verify_log_path "$final_log" \
     --arg final_verify_status "$final_status" \
     --arg contract_review_path "$contract_review_path" \
+    --arg contract_check_report_path "$contract_review_path" \
     --arg verify_pre_log_path "$verify_pre_log" \
     --arg verify_post_log_path "$verify_post_log" \
     --argjson commit_count "$commit_count" \
@@ -1107,6 +1108,7 @@ write_artifact_manifest() {
       final_verify_log_path: ($final_verify_log_path | if length>0 then . else null end),
       final_verify_status: ($final_verify_status | if length>0 then . else null end),
       contract_review_path: ($contract_review_path | if length>0 then . else null end),
+      contract_check_report_path: ($contract_check_report_path | if length>0 then . else null end),
       skipped_checks: $skipped_checks,
       generated_at: $generated_at
     }' > "$manifest"
@@ -1124,7 +1126,6 @@ run_final_verify() {
     fi
     return 0
   fi
-  local iter_dir="${1:-${ITER_DIR:-}}"
   local mode="$RPH_FINAL_VERIFY_MODE"
   if [[ "$mode" != "quick" && "$mode" != "full" && "$mode" != "promotion" ]]; then
     mode="full"
