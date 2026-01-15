@@ -1036,6 +1036,82 @@ extract_verify_log_verify_mode() {
   echo "$verify_mode"
 }
 
+add_skipped_check() {
+  local name="${1:-}"
+  local reason="${2:-}"
+  if [[ -z "$name" ]]; then
+    return 0
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    SKIPPED_CHECKS_JSON="$(jq -c --arg name "$name" --arg reason "$reason" '. + [{name:$name, reason:$reason}]' <<<"$SKIPPED_CHECKS_JSON" 2>/dev/null || echo "$SKIPPED_CHECKS_JSON")"
+  fi
+}
+
+write_artifact_manifest() {
+  local iter_dir="${1:-}"
+  local final_log="${2:-}"
+  local final_status="${3:-}"
+  local manifest="$ARTIFACT_MANIFEST"
+  local head_before=""
+  local head_after=""
+  local commit_count="null"
+  local contract_review_path=""
+  local verify_pre_log=""
+  local verify_post_log=""
+
+  if [[ -n "$iter_dir" && -d "$iter_dir" ]]; then
+    if [[ -f "$iter_dir/head_before.txt" ]]; then
+      head_before="$(cat "$iter_dir/head_before.txt" 2>/dev/null || true)"
+    fi
+    if [[ -f "$iter_dir/head_after.txt" ]]; then
+      head_after="$(cat "$iter_dir/head_after.txt" 2>/dev/null || true)"
+    fi
+    if [[ -f "$iter_dir/contract_review.json" ]]; then
+      contract_review_path="$iter_dir/contract_review.json"
+    fi
+    if [[ -f "$iter_dir/verify_pre.log" ]]; then
+      verify_pre_log="$iter_dir/verify_pre.log"
+    fi
+    if [[ -f "$iter_dir/verify_post.log" ]]; then
+      verify_post_log="$iter_dir/verify_post.log"
+    fi
+  fi
+
+  if [[ -n "$head_before" && -n "$head_after" ]]; then
+    local count_raw=""
+    count_raw="$(git rev-list --count "${head_before}..${head_after}" 2>/dev/null || true)"
+    if [[ "$count_raw" =~ ^[0-9]+$ ]]; then
+      commit_count="$count_raw"
+    fi
+  fi
+
+  jq -n \
+    --arg iter_dir "$iter_dir" \
+    --arg head_before "$head_before" \
+    --arg head_after "$head_after" \
+    --arg final_verify_log_path "$final_log" \
+    --arg final_verify_status "$final_status" \
+    --arg contract_review_path "$contract_review_path" \
+    --arg verify_pre_log_path "$verify_pre_log" \
+    --arg verify_post_log_path "$verify_post_log" \
+    --argjson commit_count "$commit_count" \
+    --argjson skipped_checks "$SKIPPED_CHECKS_JSON" \
+    --arg generated_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    '{
+      iter_dir: ($iter_dir | if length>0 then . else null end),
+      head_before: ($head_before | if length>0 then . else null end),
+      head_after: ($head_after | if length>0 then . else null end),
+      commit_count: $commit_count,
+      verify_pre_log_path: ($verify_pre_log_path | if length>0 then . else null end),
+      verify_post_log_path: ($verify_post_log_path | if length>0 then . else null end),
+      final_verify_log_path: ($final_verify_log_path | if length>0 then . else null end),
+      final_verify_status: ($final_verify_status | if length>0 then . else null end),
+      contract_review_path: ($contract_review_path | if length>0 then . else null end),
+      skipped_checks: $skipped_checks,
+      generated_at: $generated_at
+    }' > "$manifest"
+}
+
 run_final_verify() {
   local iter_dir="${1:-${ITER_DIR:-}}"
   if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
