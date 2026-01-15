@@ -2496,6 +2496,10 @@ if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" an
   echo "FAIL: expected skipped_checks story_verify entry in manifest" >&2
   exit 1
 fi
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" and .reason=="verify_post_failed")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected skipped_checks verify_post_failed entry in manifest" >&2
+  exit 1
+fi
 write_contract_check_stub "PASS"
 
 
