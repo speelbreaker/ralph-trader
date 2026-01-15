@@ -402,3 +402,9 @@ Summary: Added skipped_checks entry when verify_post fails (story_verify skipped
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
 Next: Consider logging skipped checks when verify_pre fails or when final verify is disabled.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Hardened artifact manifest with schema/version/run_id, atomic writes, blocked metadata, and skip logging across failure paths; added manifest schema + validator and acceptance coverage for preflight, verify_pre, verify_post, final verify failure/disabled.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; plans/artifacts_validate.sh; docs/schemas/artifacts.schema.json; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Optionally record blocked_dir details for additional blocked paths (e.g., circuit breaker) if you want tighter diagnostics.
