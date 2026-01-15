@@ -14,6 +14,37 @@ PRD_AUDITOR_CMD="${PRD_AUDITOR_CMD:-}"
 PRD_AUDITOR_ARGS="${PRD_AUDITOR_ARGS:-}"
 PRD_PATCHER_CMD="${PRD_PATCHER_CMD:-}"
 PRD_PATCHER_ARGS="${PRD_PATCHER_ARGS:-}"
+PRD_AUDITOR_ENABLED="${PRD_AUDITOR_ENABLED:-1}"
+PRD_AUDIT_SCOPE="${PRD_AUDIT_SCOPE:-}"
+PRD_AUDIT_SLICE="${PRD_AUDIT_SLICE:-}"
+
+slice_arg="${1:-}"
+slice_num=""
+if [[ -n "$slice_arg" ]]; then
+  if [[ "$slice_arg" =~ ^slice([0-9]+)$ ]]; then
+    slice_num="${BASH_REMATCH[1]}"
+  elif [[ "$slice_arg" =~ ^[0-9]+$ ]]; then
+    slice_num="$slice_arg"
+  fi
+fi
+
+AUDIT_SCOPE="${PRD_AUDIT_SCOPE:-}"
+AUDIT_SLICE="${PRD_AUDIT_SLICE:-}"
+if [[ -z "$AUDIT_SCOPE" ]]; then
+  if [[ -n "$slice_num" ]]; then
+    AUDIT_SCOPE="slice"
+  else
+    AUDIT_SCOPE="full"
+  fi
+fi
+if [[ "$AUDIT_SCOPE" == "slice" && -z "$AUDIT_SLICE" ]]; then
+  if [[ -n "$slice_num" ]]; then
+    AUDIT_SLICE="$slice_num"
+  else
+    echo "ERROR: AUDIT_SCOPE=slice requires PRD_AUDIT_SLICE or slice argument (e.g., slice3)" >&2
+    exit 2
+  fi
+fi
 
 sha256_file() {
   local file="$1"
@@ -87,6 +118,10 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
+if [[ -z "$PRD_AUDITOR_CMD" && "$PRD_AUDITOR_ENABLED" == "1" && -x "./plans/run_prd_auditor.sh" ]]; then
+  PRD_AUDITOR_CMD="./plans/run_prd_auditor.sh"
+fi
+
 # Stage A: Story Cutter + lint/repair loop
 pass=0
 for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
@@ -108,6 +143,15 @@ if [[ "$pass" != "1" ]]; then
   echo "ERROR: PRD lint still failing after $MAX_REPAIR_PASSES passes. Cutter should mark needs_human_decision for unresolved items." >&2
   exit 5
 fi
+
+if [[ -x "./plans/prd_ref_check.sh" ]]; then
+  ./plans/prd_ref_check.sh "$PRD_FILE"
+else
+  echo "WARN: ./plans/prd_ref_check.sh not found or not executable; skipping reference check." >&2
+fi
+
+export AUDIT_SCOPE
+export AUDIT_SLICE
 
 # Stage B: Auditor
 if [[ -n "$PRD_AUDITOR_CMD" ]]; then

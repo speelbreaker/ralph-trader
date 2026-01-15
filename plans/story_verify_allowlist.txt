@@ -13,6 +13,13 @@ cargo test -p soldier_core --test test_label
 cargo test -p soldier_core --test test_label_match
 cargo test -p soldier_core --test test_order_size
 cargo test -p soldier_core --test test_quantize
+cargo test -p soldier_core --test test_preflight
+cargo test -p soldier_core --test test_post_only_guard
+cargo test -p soldier_core --test test_capabilities
+cargo test -p soldier_core --test test_tlsm
+cargo test -p soldier_infra --test test_ledger_replay
+cargo test -p soldier_infra --test test_trade_id_registry
+cargo test -p soldier_infra --test test_dispatch_durability
 rg -n "cargo test --workspace" plans/verify.sh
 test -f docs/order_size_discovery.md
 rg -n "OrderSize" docs/order_size_discovery.md
