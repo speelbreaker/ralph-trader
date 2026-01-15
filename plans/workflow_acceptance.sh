@@ -89,7 +89,24 @@ copy_worktree_file "plans/contract_review_validate.sh"
 copy_worktree_file "plans/workflow_contract_gate.sh"
 copy_worktree_file "plans/workflow_contract_map.json"
 copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
-chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/prd_lint.sh" "$WORKTREE/plans/prd_ref_check.sh" "$WORKTREE/plans/prd_ref_index.sh" "$WORKTREE/plans/run_prd_auditor.sh" "$WORKTREE/plans/build_markdown_digest.sh" "$WORKTREE/plans/build_contract_digest.sh" "$WORKTREE/plans/build_plan_digest.sh" "$WORKTREE/plans/prd_slice_prepare.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
+scripts_to_chmod=(
+  "ralph.sh"
+  "verify.sh"
+  "prd_schema_check.sh"
+  "prd_lint.sh"
+  "prd_ref_check.sh"
+  "prd_ref_index.sh"
+  "run_prd_auditor.sh"
+  "build_markdown_digest.sh"
+  "build_contract_digest.sh"
+  "build_plan_digest.sh"
+  "prd_slice_prepare.sh"
+  "contract_review_validate.sh"
+  "workflow_contract_gate.sh"
+)
+for script in "${scripts_to_chmod[@]}"; do
+  chmod +x "$WORKTREE/plans/$script" >/dev/null 2>&1 || true
+done
 run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
