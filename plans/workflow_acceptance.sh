@@ -72,7 +72,7 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh plans/workflow_contract_gate.sh plans/workflow_contract_map.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/prd_pipeline.sh plans/prd_autofix.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_check.sh plans/contract_coverage_matrix.py plans/contract_coverage_promote.sh plans/contract_review_validate.sh plans/workflow_contract_gate.sh plans/workflow_contract_map.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 copy_worktree_file "plans/ralph.sh"
 copy_worktree_file "plans/verify.sh"
 copy_worktree_file "plans/update_task.sh"
@@ -81,11 +81,16 @@ copy_worktree_file "plans/prd_schema_check.sh"
 copy_worktree_file "plans/prd_lint.sh"
 copy_worktree_file "plans/prd_ref_check.sh"
 copy_worktree_file "plans/prd_ref_index.sh"
+copy_worktree_file "plans/prd_pipeline.sh"
+copy_worktree_file "plans/prd_autofix.sh"
 copy_worktree_file "plans/run_prd_auditor.sh"
 copy_worktree_file "plans/build_markdown_digest.sh"
 copy_worktree_file "plans/build_contract_digest.sh"
 copy_worktree_file "plans/build_plan_digest.sh"
 copy_worktree_file "plans/prd_slice_prepare.sh"
+copy_worktree_file "plans/contract_check.sh"
+copy_worktree_file "plans/contract_coverage_matrix.py"
+copy_worktree_file "plans/contract_coverage_promote.sh"
 copy_worktree_file "plans/contract_review_validate.sh"
 copy_worktree_file "plans/workflow_contract_gate.sh"
 copy_worktree_file "plans/workflow_contract_map.json"
@@ -98,18 +103,23 @@ scripts_to_chmod=(
   "prd_lint.sh"
   "prd_ref_check.sh"
   "prd_ref_index.sh"
+  "prd_pipeline.sh"
+  "prd_autofix.sh"
   "run_prd_auditor.sh"
   "build_markdown_digest.sh"
   "build_contract_digest.sh"
   "build_plan_digest.sh"
   "prd_slice_prepare.sh"
+  "contract_check.sh"
+  "contract_coverage_matrix.py"
+  "contract_coverage_promote.sh"
   "contract_review_validate.sh"
   "workflow_contract_gate.sh"
 )
 for script in "${scripts_to_chmod[@]}"; do
   chmod +x "$WORKTREE/plans/$script" >/dev/null 2>&1 || true
 done
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_review_validate.sh plans/workflow_contract_gate.sh plans/workflow_contract_map.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd.json plans/prd_schema_check.sh plans/prd_lint.sh plans/prd_ref_check.sh plans/prd_ref_index.sh plans/prd_pipeline.sh plans/prd_autofix.sh plans/run_prd_auditor.sh plans/build_markdown_digest.sh plans/build_contract_digest.sh plans/build_plan_digest.sh plans/prd_slice_prepare.sh plans/contract_check.sh plans/contract_coverage_matrix.py plans/contract_coverage_promote.sh plans/contract_review_validate.sh plans/workflow_contract_gate.sh plans/workflow_contract_map.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
@@ -151,8 +161,91 @@ if ! run_in_worktree bash -c '
   exit 1
 fi
 
+if ! run_in_worktree bash -c '
+  set -euo pipefail
+  bad="$(jq -r '"'"'
+    .items as $items
+    | ($items | map({key:.id, value:.passes}) | from_entries) as $pass
+    | ($items | map({key:.id, value:true}) | from_entries) as $exists
+    | $items[]
+    | select(.passes == true)
+    | .id as $item_id
+    | (.dependencies // [])[]
+    | . as $dep
+    | if ($exists[$dep] != true) then "\($item_id) -> \($dep) (missing)"
+      elif ($pass[$dep] != true) then "\($item_id) -> \($dep)"
+      else empty end
+  '"'"' plans/prd.json)"
+  if [[ -n "$bad" ]]; then
+    echo "FAIL: passes=true item depends on missing or non-passing dependency:" >&2
+    echo "$bad" >&2
+    exit 1
+  fi
+'; then
+  exit 1
+fi
+
 if ! run_in_worktree test -x "plans/run_prd_auditor.sh"; then
   echo "FAIL: plans/run_prd_auditor.sh not executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -x "plans/prd_autofix.sh"; then
+  echo "FAIL: plans/prd_autofix.sh not executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -x "plans/contract_coverage_matrix.py"; then
+  echo "FAIL: plans/contract_coverage_matrix.py not executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -x "plans/contract_coverage_promote.sh"; then
+  echo "FAIL: plans/contract_coverage_promote.sh not executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk '
+  /Stage A/ {in_stage=1}
+  in_stage && /Stage B/ {exit}
+  in_stage && /prd_lint.sh/ && lint==0 {lint=NR}
+  in_stage && /run_cmd PRD_CUTTER/ && cutter==0 {cutter=NR}
+  END {
+    if (lint==0 || cutter==0) exit 1
+    if (lint > cutter) exit 1
+  }
+' "plans/prd_pipeline.sh"; then
+  echo "FAIL: prd_pipeline Stage A must run lint before PRD_CUTTER" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk '/PRD_AUTOFIX/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
+  echo "FAIL: prd_pipeline must support PRD_AUTOFIX in Stage A" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk '/NO_PROGRESS/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
+  echo "FAIL: prd_pipeline must block on no-progress cutter runs" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -Eq "sed 's/\\[\\*`_\\]/" "plans/contract_check.sh"; then
+  echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "PATH_CONVENTION" "plans/prd_lint.sh"; then
+  echo "FAIL: prd_lint must flag path convention drift" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "contract_coverage_matrix.py" "plans/verify.sh"; then
+  echo "FAIL: verify must run contract coverage matrix" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "contract_coverage_ci_strict" "plans/verify.sh"; then
+  echo "FAIL: verify must gate CI strict coverage via sentinel file" >&2
   exit 1
 fi
 

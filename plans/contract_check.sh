@@ -266,7 +266,11 @@ fi
 
 contract_text_lc=""
 if [[ -f "$contract_file" ]]; then
-  contract_text_lc="$(tr '[:upper:]' '[:lower:]' < "$contract_file")"
+  contract_text_lc="$(
+    tr '[:upper:]' '[:lower:]' < "$contract_file" \
+      | sed 's/[*`_]/ /g' \
+      | sed 's/[[:space:]]\+/ /g'
+  )"
 fi
 
 missing_refs=()

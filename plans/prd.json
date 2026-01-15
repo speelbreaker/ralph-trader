@@ -21,7 +21,9 @@
       "category": "workflow",
       "description": "Confirm plans/verify.sh is the canonical verification script and runnable.",
       "contract_refs": [
-        "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)"
+        "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)",
+        "Anchor-002",
+        "VR-001"
       ],
       "plan_refs": [
         "Test harness configured (cargo test \\--workspace)."
@@ -75,7 +77,8 @@
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
       "contract_refs": [
-        "CONTRACT.md 0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)"
+        "CONTRACT.md 0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)",
+        "Anchor-001"
       ],
       "plan_refs": [
         "Rust workspace exists with crates/soldier\\_core, crates/soldier\\_infra."
@@ -137,7 +140,9 @@
       "contract_refs": [
         "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
-        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) — MUST implement"
+        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) — MUST implement",
+        "Anchor-010",
+        "VR-010"
       ],
       "plan_refs": [
         "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
@@ -199,7 +204,9 @@
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
         "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
+        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
+        "Anchor-011",
+        "VR-011"
       ],
       "plan_refs": [
         "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
@@ -237,8 +244,7 @@
         "Unit test asserts instrument_cache_ttl_s comparison is deterministic"
       ],
       "dependencies": [
-        "S1-002",
-        "S1-008"
+        "S1-002"
       ],
       "est_size": "S",
       "risk": "med",
@@ -255,7 +261,9 @@
       "category": "risk",
       "description": "Add required TTL observability hooks for instrument cache freshness.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
+        "Anchor-011",
+        "VR-011"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
@@ -313,7 +321,9 @@
       "description": "Implement OrderSize canonical sizing with deterministic notional_usd using the discovery report.",
       "contract_refs": [
         "CONTRACT.md OrderSize struct (MUST implement):",
-        "CONTRACT.md Canonical internal units (single source of truth):"
+        "CONTRACT.md Canonical internal units (single source of truth):",
+        "Anchor-012",
+        "VR-010"
       ],
       "plan_refs": [
         "S1.2 — OrderSize canonical sizing \\+ notional invariant"
@@ -352,7 +362,8 @@
         "cargo test -p soldier_core --test test_order_size output"
       ],
       "dependencies": [
-        "S1-002"
+        "S1-002",
+        "S1-008"
       ],
       "est_size": "S",
       "risk": "low",
@@ -369,7 +380,9 @@
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts using the discovery report.",
       "contract_refs": [
-        "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
+        "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
+        "Anchor-010",
+        "VR-010"
       ],
       "plan_refs": [
         "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
@@ -426,7 +439,9 @@
       "description": "Reject contract/amount mismatches and emit mismatch metrics.",
       "contract_refs": [
         "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`",
-        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
+        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
+        "Anchor-010",
+        "VR-010"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
@@ -485,7 +500,8 @@
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "1.0 Instrument Units"
+        "1.0 Instrument Units",
+        "Anchor-012"
       ],
       "plan_refs": [
         "S1.2 — OrderSize canonical sizing \\+ notional invariant"
@@ -532,7 +548,8 @@
       "category": "qa",
       "description": "Discover current dispatcher mapping logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
+        "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
+        "Anchor-010"
       ],
       "plan_refs": [
         "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
@@ -582,7 +599,9 @@
       "category": "execution",
       "description": "Implement deterministic quantization for qty and limit price with safe rounding.",
       "contract_refs": [
-        "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
+        "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)",
+        "Anchor-021",
+        "VR-020"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.1 — Integer tick/step quantization (safer direction)"
@@ -598,17 +617,18 @@
         ]
       },
       "acceptance": [
-        "GIVEN raw_qty and amount_step WHEN quantizing THEN qty_q = round_down(raw_qty, amount_step).",
-        "GIVEN a BUY raw_limit_price and tick_size WHEN quantizing THEN limit_price_q rounds down to tick; GIVEN SELL THEN it rounds up.",
+        "GIVEN raw_qty and amount_step WHEN quantizing THEN qty_steps = floor(raw_qty / amount_step) and qty_q = qty_steps * amount_step.",
+        "GIVEN a BUY raw_limit_price and tick_size WHEN quantizing THEN price_ticks = floor(raw_limit_price / tick_size) and limit_price_q = price_ticks * tick_size; GIVEN SELL THEN price_ticks = ceil(raw_limit_price / tick_size).",
         "GIVEN qty_q < min_amount WHEN quantizing THEN the intent is rejected with TooSmallAfterQuantization."
       ],
       "steps": [
         "Implement quantize helpers to read tick_size, amount_step, and min_amount from instrument metadata.",
-        "Apply round_down to qty_q and directional rounding to limit_price_q (BUY down, SELL up).",
+        "Compute qty_steps and price_ticks as integers using amount_step and tick_size with directional rounding by side.",
+        "Derive qty_q and limit_price_q from qty_steps and price_ticks.",
         "Add a rejection path when qty_q < min_amount with an explicit error type.",
         "Add counter quantization_reject_too_small_total for rejection metrics.",
         "Add unit tests in crates/soldier_core/tests/test_quantize.rs for rounding and rejection behavior.",
-        "Ensure quantized values are returned for downstream idempotency hashing."
+        "Ensure integer tick/step values are returned for downstream idempotency hashing."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -635,7 +655,9 @@
       "description": "Compute intent_hash from quantized fields only and exclude timestamps.",
       "contract_refs": [
         "CONTRACT.md 1.1 Labeling & Idempotency Contract",
-        "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
+        "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)",
+        "Anchor-020",
+        "VR-020"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.2 — Intent hash from quantized fields only"
@@ -654,14 +676,14 @@
       "acceptance": [
         "GIVEN two codepaths that yield identical quantized fields WHEN hashing THEN the intent_hash values are identical.",
         "GIVEN an intent with time-of-day timestamps WHEN hashing THEN timestamps are excluded from the hash input.",
-        "GIVEN quantized qty_q and limit_price_q WHEN hashing THEN those quantized values are used verbatim."
+        "GIVEN quantized qty_steps and price_ticks WHEN hashing THEN those integer values (plus stable strings) are used, not raw f64."
       ],
       "steps": [
-        "Implement or update the intent_hash function in crates/soldier_core/idempotency/hash.rs to accept quantized inputs.",
+        "Implement or update the intent_hash function in crates/soldier_core/idempotency/hash.rs to accept quantized integer inputs.",
         "Remove any inclusion of wall-clock timestamps from the hash input.",
-        "Use the quantized fields (qty_q, limit_price_q) directly in the hash material.",
+        "Use qty_steps and price_ticks (integers) alongside instrument, side, group_id, and leg_idx in the hash material.",
         "Add unit tests in crates/soldier_core/tests/test_idempotency.rs for deterministic hashing.",
-        "Ensure callers pass quantized fields into the hashing function."
+        "Ensure callers pass quantized integer fields into the hashing function."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -688,7 +710,9 @@
       "category": "durability",
       "description": "Implement compact label encode/decode with 64-character limit enforcement.",
       "contract_refs": [
-        "CONTRACT.md Compact Label Schema (must implement):"
+        "CONTRACT.md Compact Label Schema (must implement):",
+        "Anchor-020",
+        "VR-021"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.3 — Compact label schema encode/decode (≤64 chars)"
@@ -742,7 +766,9 @@
       "description": "Disambiguate label matches deterministically and degrade on ambiguity.",
       "contract_refs": [
         "CONTRACT.md 1.1.2 Label Parse + Disambiguation (Collision-Safe)",
-        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
+        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
+        "Anchor-022",
+        "VR-022"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.4 — Label match disambiguation; ambiguity→Degraded"
@@ -795,7 +821,9 @@
       "description": "Implement order-type preflight rules for market/stop/linked orders across instruments.",
       "contract_refs": [
         "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
-        "CONTRACT.md linked_order_type: Deribit linked/OCO semantics (venue-specific; gated off for this bot)."
+        "CONTRACT.md linked_order_type: Deribit linked/OCO semantics (venue-specific; gated off for this bot).",
+        "Anchor-030",
+        "VR-030"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.1 — Preflight guard (market/stop/linked rules)"
@@ -818,7 +846,8 @@
       "acceptance": [
         "GIVEN instrument_kind=option WHEN order_type is market or stop or trigger fields are present THEN preflight rejects the intent deterministically.",
         "GIVEN instrument_kind in {linear_future,inverse_future,perpetual} WHEN order_type is market OR stop without trigger THEN preflight rejects the intent deterministically.",
-        "GIVEN linked_order_type is set and linked orders are not explicitly enabled WHEN preflight runs THEN it rejects the intent and the preflight tests pass."
+        "GIVEN linked_order_type is set and linked orders are not explicitly enabled WHEN preflight runs THEN it rejects the intent and the preflight tests pass.",
+        "GIVEN intent construction via build_order_intent WHEN preflight runs THEN it is invoked through a single shared preflight entrypoint (no bypass)."
       ],
       "steps": [
         "Create execution/preflight.rs and execution/order_type_guard.rs and wire them into crates/soldier_core/src/execution/mod.rs.",
@@ -826,7 +855,8 @@
         "Reject any linked_order_type unless feature-flagged and capability-enabled (default false).",
         "Add preflight_reject_total{reason} counter for rejects.",
         "Add unit tests in crates/soldier_core/tests/test_preflight.rs for market, stop, linked, and trigger requirements.",
-        "Ensure preflight is invoked before any API dispatch path in the execution module."
+        "Ensure preflight is invoked before any API dispatch path in the execution module.",
+        "Expose a single preflight entrypoint (e.g., preflight_intent) and wire build_order_intent to call it."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -854,7 +884,9 @@
       "category": "execution",
       "description": "Reject post-only orders that would cross the book deterministically.",
       "contract_refs": [
-        "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)"
+        "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+        "Anchor-030",
+        "VR-030"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.2 — Post‑only crossing guard"
@@ -894,7 +926,7 @@
         "cargo test -p soldier_core --test test_post_only_guard output"
       ],
       "dependencies": [
-        "S3-000"
+        "S3-001"
       ],
       "est_size": "S",
       "risk": "med",
@@ -912,7 +944,9 @@
       "description": "Implement venue capabilities to gate linked/OCO orders behind explicit flags.",
       "contract_refs": [
         "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
-        "CONTRACT.md linked_order_type: Deribit linked/OCO semantics (venue-specific; gated off for this bot)."
+        "CONTRACT.md linked_order_type: Deribit linked/OCO semantics (venue-specific; gated off for this bot).",
+        "Anchor-031",
+        "VR-030"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.3 — Capabilities matrix \\+ feature flags"
@@ -970,7 +1004,11 @@
       "description": "Persist intents to a durable WAL and replay without resending after crash.",
       "contract_refs": [
         "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
-        "CONTRACT.md 2.4 RecordedBeforeDispatch"
+        "CONTRACT.md 2.4 RecordedBeforeDispatch",
+        "Anchor-041",
+        "Anchor-042",
+        "VR-040",
+        "VR-041"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.1 — WAL append \\+ replay no-resend"
@@ -988,12 +1026,14 @@
       "acceptance": [
         "GIVEN an intent is appended to the durable ledger before dispatch WHEN the system restarts THEN the intent is not resent.",
         "GIVEN the system restarts WHEN reconstructing state from the durable ledger THEN in-flight intents are rebuilt without duplicate dispatch.",
-        "GIVEN durable ledger append fails WHEN dispatch is attempted THEN dispatch is blocked until a durable record exists."
+        "GIVEN a recorded intent WHEN persisted THEN the record includes intent_hash, group_id, leg_idx, instrument, side, qty_steps or qty_q, limit_price_q or price_ticks, tls_state, created_ts, sent_ts, ack_ts, last_fill_ts, and exchange_order_id when available.",
+        "GIVEN ledger append fails WHEN dispatch is attempted THEN dispatch is blocked until a recorded (not necessarily durable) record exists."
       ],
       "steps": [
         "Create crates/soldier_infra/src/store/ledger.rs with append + replay primitives.",
         "Wire the store module into crates/soldier_infra/src/lib.rs.",
         "Record intents before dispatch (RecordedBeforeDispatch) and mark replay outcomes.",
+        "Define the minimum persisted intent schema in ledger storage comments and enforce it in the record struct.",
         "Add unit tests in crates/soldier_infra/tests/test_ledger_replay.rs for no-resend after crash.",
         "Document WAL initialization and replay expectations in module-level comments."
       ],
@@ -1023,7 +1063,8 @@
       "description": "Handle fill-before-ack and out-of-order TLSM events without panic.",
       "contract_refs": [
         "CONTRACT.md 2.1 Trade Lifecycle State Machine (TLSM)",
-        "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)"
+        "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
+        "Anchor-040"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.2 — TLSM out‑of‑order events (fill-before-ack)"
@@ -1067,7 +1108,7 @@
         "cargo test -p soldier_core --test test_tlsm output"
       ],
       "dependencies": [
-        "S4-000"
+        "S4-001"
       ],
       "est_size": "S",
       "risk": "med",
@@ -1084,7 +1125,9 @@
       "category": "durability",
       "description": "Persist processed trade IDs to prevent duplicate processing.",
       "contract_refs": [
-        "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)"
+        "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)",
+        "Anchor-043",
+        "VR-042"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.3 — Trade‑ID registry dedupe"
@@ -1102,14 +1145,16 @@
       "acceptance": [
         "GIVEN a trade_id already recorded WHEN handling a trade event THEN it is a NOOP and no duplicate updates occur.",
         "GIVEN a new trade_id WHEN processing a trade THEN trade_id is appended to the durable ledger before applying updates.",
-        "GIVEN a restart WHEN the same trade_id is seen again THEN it is ignored due to the registry."
+        "GIVEN a restart WHEN the same trade_id is seen again THEN it is ignored due to the registry.",
+        "GIVEN concurrent events for the same trade_id WHEN inserting THEN the registry insert is atomic and only one apply occurs."
       ],
       "steps": [
         "Create crates/soldier_infra/src/store/trade_id_registry.rs with persistent registry logic.",
         "Wire registry into crates/soldier_infra/src/lib.rs.",
         "Append trade_id before applying TLSM or position updates.",
+        "Implement insert-if-absent atomically (single transaction or unique constraint) to avoid double-apply on concurrency.",
         "Add counter trade_id_duplicates_total when a duplicate trade_id is ignored.",
-        "Add unit tests in crates/soldier_infra/tests/test_trade_id_registry.rs for dedupe behavior."
+        "Add unit tests in crates/soldier_infra/tests/test_trade_id_registry.rs for dedupe behavior, including a concurrent insert case."
       ],
       "verify": [
         "./plans/verify.sh",
@@ -1119,7 +1164,7 @@
         "cargo test -p soldier_infra --test test_trade_id_registry output"
       ],
       "dependencies": [
-        "S4-000"
+        "S4-002"
       ],
       "est_size": "S",
       "risk": "med",
@@ -1136,7 +1181,9 @@
       "category": "durability",
       "description": "Block dispatch until WAL durability marker when configured.",
       "contract_refs": [
-        "CONTRACT.md RecordedBeforeDispatch"
+        "CONTRACT.md RecordedBeforeDispatch",
+        "Anchor-042",
+        "VR-040"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.4 — Dispatch requires durable WAL barrier (when configured)"
