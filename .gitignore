@@ -3,6 +3,7 @@ target/
 plans/logs/
 plans/progress_archive.txt
 .DS_Store
+artifacts/verify/
 
 # Local Codex config
 .codex/

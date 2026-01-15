@@ -90,6 +90,15 @@ if [[ "$STATUS" == "true" ]]; then
     echo "ERROR: verify_post_log sha mismatch (state=$verify_post_log_sha actual=$actual_log_sha)" >&2
     exit 6
   fi
+  last_mode="$(jq -r '.last_verify_post_mode // empty' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ -z "$last_mode" ]]; then
+    echo "ERROR: state missing last_verify_post_mode in $STATE_FILE" >&2
+    exit 6
+  fi
+  if [[ "$last_mode" != "full" && "$last_mode" != "promotion" && "$last_mode" != "strict" ]]; then
+    echo "ERROR: last_verify_post_mode not eligible for pass flip (mode=$last_mode)" >&2
+    exit 6
+  fi
 fi
 
 # Ensure PRD is valid
