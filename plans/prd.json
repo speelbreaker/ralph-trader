@@ -970,7 +970,7 @@
       "description": "Persist intents to a durable WAL and replay without resending after crash.",
       "contract_refs": [
         "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
-        "CONTRACT.md RecordedBeforeDispatch"
+        "CONTRACT.md 2.4 RecordedBeforeDispatch"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.1 — WAL append \\+ replay no-resend"
