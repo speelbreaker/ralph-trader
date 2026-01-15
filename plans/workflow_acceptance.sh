@@ -2337,6 +2337,26 @@ if ! run_in_worktree grep -q "MODE_ARG=promotion" "$final_log"; then
   echo "FAIL: expected final verify to use promotion mode" >&2
   exit 1
 fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree test -f "$manifest_path"; then
+  echo "FAIL: expected artifact manifest at $manifest_path" >&2
+  exit 1
+fi
+manifest_final="$(run_in_worktree jq -r '.final_verify_log_path // empty' "$manifest_path")"
+if [[ "$manifest_final" != "$final_log" ]]; then
+  echo "FAIL: manifest final_verify_log_path mismatch" >&2
+  exit 1
+fi
+manifest_contract="$(run_in_worktree jq -r '.contract_review_path // empty' "$manifest_path")"
+if [[ "$manifest_contract" != "$iter_dir/contract_review.json" ]]; then
+  echo "FAIL: manifest contract_review_path mismatch" >&2
+  exit 1
+fi
+manifest_commit_count="$(run_in_worktree jq -r '.commit_count' "$manifest_path")"
+if [[ "$manifest_commit_count" != "1" ]]; then
+  echo "FAIL: expected manifest commit_count=1" >&2
+  exit 1
+fi
 write_contract_check_stub "PASS"
 
 echo "Test 10c: update_task blocks non-promotion verify"
