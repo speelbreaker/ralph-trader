@@ -360,3 +360,9 @@ Summary: Added verify profile support in ralph.sh and recorded agent model per i
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; verify + acceptance outputs.
 Next: continue with S2-003 or use RPH_PROFILE=verify for verification-only runs.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Added final verify log copy into iter artifacts, added prd_pipeline skip logging to progress, and expanded workflow acceptance to cover prd_pipeline skip + final verify log location.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/prd_pipeline.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: If desired, add a small helper in workflow_acceptance to reuse PRD fixtures for prd_pipeline tests.
