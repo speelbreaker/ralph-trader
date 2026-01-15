@@ -31,28 +31,52 @@ RPH_PROFILE_ITER_TIMEOUT_SECS=""
 RPH_PROFILE_SELF_HEAL=""
 RPH_PROFILE_RATE_LIMIT_PER_HOUR=""
 RPH_PROFILE_VERIFY_ONLY=""
+RPH_PROFILE_MODE=""
+RPH_PROFILE_FORBID_MARK_PASS=""
+RPH_PROFILE_REQUIRE_MARK_PASS=""
+RPH_PROFILE_REQUIRE_STORY_VERIFY=""
+RPH_PROFILE_REQUIRE_FULL_VERIFY=""
+RPH_PROFILE_REQUIRE_PROMOTION_VERIFY=""
 RPH_PROFILE_WARNING=""
 
 case "$RPH_PROFILE" in
   "")
     ;;
   fast)
+    RPH_PROFILE_MODE="fast"
     RPH_PROFILE_VERIFY_MODE="quick"
     RPH_PROFILE_ITER_TIMEOUT_SECS="1200"
     ;;
   thorough)
+    RPH_PROFILE_MODE="thorough"
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_ITER_TIMEOUT_SECS="3600"
     ;;
   audit)
+    RPH_PROFILE_MODE="audit"
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_SELF_HEAL="0"
     ;;
   verify)
+    RPH_PROFILE_MODE="verify"
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_VERIFY_ONLY="1"
     ;;
+  explore)
+    RPH_PROFILE_MODE="explore"
+    RPH_PROFILE_VERIFY_MODE="quick"
+    RPH_PROFILE_FORBID_MARK_PASS="1"
+    ;;
+  promote)
+    RPH_PROFILE_MODE="promote"
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_REQUIRE_MARK_PASS="1"
+    RPH_PROFILE_REQUIRE_STORY_VERIFY="1"
+    RPH_PROFILE_REQUIRE_FULL_VERIFY="1"
+    RPH_PROFILE_REQUIRE_PROMOTION_VERIFY="1"
+    ;;
   max)
+    RPH_PROFILE_MODE="max"
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_ITER_TIMEOUT_SECS="7200"
     RPH_PROFILE_AGENT_MODEL="gpt-5.2-codex"
@@ -63,13 +87,26 @@ case "$RPH_PROFILE" in
     ;;
 esac
 
+if [[ -z "$RPH_PROFILE_MODE" ]]; then
+  if [[ -n "$RPH_PROFILE" ]]; then
+    RPH_PROFILE_MODE="$RPH_PROFILE"
+  else
+    RPH_PROFILE_MODE="standard"
+  fi
+fi
+
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-${RPH_PROFILE_VERIFY_MODE:-full}}"     # quick|full|promotion (your choice)
-RPH_PROMOTION_VERIFY_MODE="${RPH_PROMOTION_VERIFY_MODE:-full}"             # full|promotion
+RPH_PROMOTION_VERIFY_MODE="${RPH_PROMOTION_VERIFY_MODE:-promotion}"        # full|promotion
 RPH_FINAL_VERIFY_MODE="${RPH_FINAL_VERIFY_MODE:-full}"                     # quick|full|promotion
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-${RPH_PROFILE_SELF_HEAL:-0}}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
+RPH_FORBID_MARK_PASS="${RPH_FORBID_MARK_PASS:-${RPH_PROFILE_FORBID_MARK_PASS:-0}}"  # 0|1
+RPH_REQUIRE_MARK_PASS="${RPH_REQUIRE_MARK_PASS:-${RPH_PROFILE_REQUIRE_MARK_PASS:-0}}"  # 0|1
+RPH_REQUIRE_STORY_VERIFY_GATE="${RPH_REQUIRE_STORY_VERIFY_GATE:-${RPH_PROFILE_REQUIRE_STORY_VERIFY:-0}}"  # 0|1
+RPH_REQUIRE_FULL_VERIFY="${RPH_REQUIRE_FULL_VERIFY:-${RPH_PROFILE_REQUIRE_FULL_VERIFY:-0}}"  # 0|1
+RPH_REQUIRE_PROMOTION_VERIFY="${RPH_REQUIRE_PROMOTION_VERIFY:-${RPH_PROFILE_REQUIRE_PROMOTION_VERIFY:-0}}"  # 0|1
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
 RPH_VERIFY_ONLY="${RPH_VERIFY_ONLY:-${RPH_PROFILE_VERIFY_ONLY:-0}}"       # 0|1 (use cheaper model for verification-only iterations)
@@ -481,6 +518,14 @@ block_preflight() {
   exit "$code"
 }
 
+# Profile gating that must fail-closed before running.
+if [[ "$RPH_REQUIRE_PROMOTION_VERIFY" == "1" && "$RPH_PROMOTION_VERIFY_MODE" != "promotion" ]]; then
+  block_preflight "profile_requires_promotion_verify" "RPH_PROFILE_MODE=$RPH_PROFILE_MODE requires RPH_PROMOTION_VERIFY_MODE=promotion (got $RPH_PROMOTION_VERIFY_MODE)"
+fi
+if [[ "$RPH_REQUIRE_FULL_VERIFY" == "1" && "$RPH_VERIFY_MODE" != "full" && "$RPH_VERIFY_MODE" != "promotion" ]]; then
+  block_preflight "profile_requires_full_verify" "RPH_PROFILE_MODE=$RPH_PROFILE_MODE requires RPH_VERIFY_MODE=full (got $RPH_VERIFY_MODE)"
+fi
+
 # --- lock (fail-closed) ---
 if ! acquire_lock; then
   block_preflight "lock_held" "Ralph lock exists at $LOCK_DIR. If no run is active, remove $LOCK_DIR and retry."
@@ -573,7 +618,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   block_preflight "dirty_worktree" "working tree dirty. Commit/stash first." 2
 fi
 
-echo "Ralph starting max_iters=$MAX_ITERS mode=$RPH_VERIFY_MODE self_heal=$RPH_SELF_HEAL iter_timeout_s=$RPH_ITER_TIMEOUT_SECS profile=${RPH_PROFILE:-none}" | tee -a "$LOG_FILE"
+echo "Ralph starting max_iters=$MAX_ITERS mode=$RPH_VERIFY_MODE self_heal=$RPH_SELF_HEAL iter_timeout_s=$RPH_ITER_TIMEOUT_SECS profile=${RPH_PROFILE:-none} profile_mode=$RPH_PROFILE_MODE" | tee -a "$LOG_FILE"
 
 # Initialize last_good_ref if missing
 if [[ ! -f "$LAST_GOOD_FILE" ]]; then
@@ -791,6 +836,57 @@ extract_mark_pass_id() {
 verify_log_has_sha() {
   local log="$1"
   grep -q '^VERIFY_SH_SHA=' "$log"
+}
+
+extract_verify_log_sha() {
+  local log="$1"
+  local line=""
+  if [[ -f "$log" ]]; then
+    line="$(grep -m1 '^VERIFY_SH_SHA=' "$log" || true)"
+  fi
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  echo "${line#VERIFY_SH_SHA=}"
+}
+
+extract_verify_mode_line() {
+  local log="$1"
+  if [[ ! -f "$log" ]]; then
+    return 0
+  fi
+  grep -m1 '^mode=' "$log" || true
+}
+
+extract_verify_log_mode() {
+  local log="$1"
+  local line=""
+  line="$(extract_verify_mode_line "$log")"
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  local mode="${line#mode=}"
+  mode="${mode%% *}"
+  echo "$mode"
+}
+
+extract_verify_log_verify_mode() {
+  local log="$1"
+  local line=""
+  line="$(extract_verify_mode_line "$log")"
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  if [[ "$line" != *"verify_mode="* ]]; then
+    echo ""
+    return 0
+  fi
+  local verify_mode="${line#*verify_mode=}"
+  verify_mode="${verify_mode%% *}"
+  echo "$verify_mode"
 }
 
 run_final_verify() {
@@ -1716,8 +1812,9 @@ You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
 Do not choose a different item even if it looks easier.
 
 PROCEDURE:
-0) Get bearings: pwd; git log --oneline -10; read AGENTS.md + selected_item.json + progress_tail_before.txt (full PRD/progress available if needed).
-0.1) Acknowledge AGENTS.md and progress.txt by noting it in your progress entry.
+0) Restate scope constraints (allowed paths from scope.touch/scope.create and avoid list), list acceptance tests, and state verify mode (${RPH_VERIFY_MODE}).
+0.1) Get bearings: pwd; git log --oneline -10; read AGENTS.md + selected_item.json + progress_tail_before.txt (full PRD/progress available if needed).
+0.2) Acknowledge AGENTS.md and progress.txt by noting it in your progress entry.
 0.5) Handoff hygiene (when relevant):
     - Update docs/codebase/* with verified facts if you touched new areas.
     - Append deferred ideas to plans/ideas.md.
@@ -1729,7 +1826,7 @@ ${LAST_FAIL_NOTE}
 2) Run: ${VERIFY_SH} ${RPH_VERIFY_MODE}  (baseline must be green; if not, fix baseline first).
 3) Implement ONLY the selected story: ${NEXT_ID}. Do not choose another.
 4) Implement with minimal diff + add/adjust tests as needed.
-5) Verify until green: ${VERIFY_SH} ${RPH_VERIFY_MODE}
+5) Small tests first: Run the smallest targeted test(s) first; only then run full verify: ${VERIFY_SH} ${RPH_VERIFY_MODE}
 6) Mark pass by printing: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
 7) Append to progress.txt with required labels: Summary:, Commands:, Evidence:, Next:. Keep command logs short (key commands only). Include story ID and a YYYY-MM-DD date. Append-only.
    Copy/paste template:
@@ -1822,6 +1919,13 @@ PROMPT
     save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
     BLOCK_DIR="$(write_blocked_with_state "mark_pass_mismatch" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
     echo "Blocked: mark_pass id mismatch in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+  if [[ "$RPH_FORBID_MARK_PASS" == "1" && -n "$MARK_PASS_ID" ]]; then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "mark_pass_forbidden" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_MARK_PASS_FORBIDDEN</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: mark_pass forbidden for profile $RPH_PROFILE_MODE in $BLOCK_DIR" | tee -a "$LOG_FILE"
     exit 1
   fi
   if [[ "$PRD_PASSES_AFTER" != "$PRD_PASSES_BEFORE" ]]; then
@@ -1923,8 +2027,9 @@ PROMPT
   if [[ -n "$MARK_PASS_ID" && "$VERIFY_POST_MODE" == "quick" ]]; then
     VERIFY_POST_MODE="full"
   fi
+  VERIFY_POST_MODE_ARG="$VERIFY_POST_MODE"
   verify_post_rc=0
-  if run_verify "${ITER_DIR}/verify_post.log" "$VERIFY_POST_MODE"; then
+  if run_verify "${ITER_DIR}/verify_post.log" "$VERIFY_POST_MODE_ARG"; then
     verify_post_rc=0
   else
     verify_post_rc=$?
@@ -1937,10 +2042,14 @@ PROMPT
     exit 1
   fi
 
+  STORY_VERIFY_RAN=0
+  STORY_VERIFY_OK=0
   if (( verify_post_rc == 0 )); then
+    STORY_VERIFY_RAN=1
     if run_story_verify "$NEXT_ITEM_JSON" "$ITER_DIR"; then
-      :
+      STORY_VERIFY_OK=1
     else
+      STORY_VERIFY_OK=0
       verify_post_rc=1
     fi
   else
@@ -1951,14 +2060,29 @@ PROMPT
   VERIFY_POST_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
   VERIFY_POST_LOG_SHA="$(sha256_file "${ITER_DIR}/verify_post.log")"
   VERIFY_POST_TS="$(date +%s)"
+  VERIFY_POST_MODE="$(extract_verify_log_mode "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_VERIFY_MODE="$(extract_verify_log_verify_mode "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_VERIFY_SH_SHA="$(extract_verify_log_sha "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_CMD="${VERIFY_SH} ${VERIFY_POST_MODE_ARG}"
   state_merge \
     --argjson last_verify_post_rc "$verify_post_rc" \
     --arg verify_post_log "${ITER_DIR}/verify_post.log" \
     --arg verify_post_head "$VERIFY_POST_HEAD" \
     --arg verify_post_log_sha256 "$VERIFY_POST_LOG_SHA" \
     --arg verify_post_mode "$VERIFY_POST_MODE" \
+    --arg verify_post_verify_mode "$VERIFY_POST_VERIFY_MODE" \
+    --arg verify_post_cmd "$VERIFY_POST_CMD" \
+    --arg verify_post_verify_sh_sha "$VERIFY_POST_VERIFY_SH_SHA" \
     --argjson verify_post_ts "$VERIFY_POST_TS" \
-    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log | .last_verify_post_head=$verify_post_head | .last_verify_post_log_sha256=$verify_post_log_sha256 | .last_verify_post_mode=$verify_post_mode | .last_verify_post_ts=$verify_post_ts'
+    '.last_verify_post_rc=$last_verify_post_rc
+      | .last_verify_post_log=$verify_post_log
+      | .last_verify_post_head=$verify_post_head
+      | .last_verify_post_log_sha256=$verify_post_log_sha256
+      | .last_verify_post_mode=$verify_post_mode
+      | .last_verify_post_verify_mode=$verify_post_verify_mode
+      | .last_verify_post_cmd=$verify_post_cmd
+      | .last_verify_post_verify_sh_sha=$verify_post_verify_sh_sha
+      | .last_verify_post_ts=$verify_post_ts'
 
   POST_VERIFY_FAILED=0
   POST_VERIFY_EXIT=0
@@ -2036,12 +2160,47 @@ PROMPT
     fi
   fi
 
+  if [[ "$RPH_REQUIRE_STORY_VERIFY_GATE" == "1" ]]; then
+    if (( STORY_VERIFY_RAN == 0 )); then
+      save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+      BLOCK_DIR="$(write_blocked_with_state "promote_story_verify_missing" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+      echo "<promise>BLOCKED_PROMOTE_STORY_VERIFY_MISSING</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: story verify missing for profile $RPH_PROFILE_MODE in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 1
+    fi
+    if (( STORY_VERIFY_OK == 0 )); then
+      save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+      BLOCK_DIR="$(write_blocked_with_state "promote_story_verify_failed" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+      echo "<promise>BLOCKED_PROMOTE_STORY_VERIFY_FAILED</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: story verify failed for profile $RPH_PROFILE_MODE in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 1
+    fi
+  fi
+
+  if [[ "$RPH_REQUIRE_MARK_PASS" == "1" && -z "$MARK_PASS_ID" ]]; then
+    save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+    BLOCK_DIR="$(write_blocked_with_state "promote_mark_pass_missing" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+    echo "<promise>BLOCKED_PROMOTE_MARK_PASS_MISSING</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked: mark_pass missing for profile $RPH_PROFILE_MODE in $BLOCK_DIR" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+
   if [[ -n "$MARK_PASS_ID" ]]; then
     if (( POST_VERIFY_FAILED == 1 )); then
       echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
     else
       if (( CONTRACT_REVIEW_OK == 1 )); then
+        set +e
         RPH_UPDATE_TASK_OK=1 RPH_STATE_FILE="$STATE_FILE" ./plans/update_task.sh "$MARK_PASS_ID" true
+        update_task_rc=$?
+        set -e
+        if (( update_task_rc != 0 )); then
+          save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+          BLOCK_DIR="$(write_blocked_with_state "update_task_failed" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+          echo "<promise>BLOCKED_UPDATE_TASK_FAILED</promise>" | tee -a "$LOG_FILE"
+          echo "Blocked: update_task failed in $BLOCK_DIR" | tee -a "$LOG_FILE"
+          exit 1
+        fi
         git add -A
         if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" ]]; then
           git commit --amend --no-edit

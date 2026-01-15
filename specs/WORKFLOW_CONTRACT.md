@@ -87,6 +87,9 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 
 Observable gate requirement:
 - [WF-2.6] plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.
+- [WF-2.7] Promotion-grade verify is required to flip passes=true.
+  - Ralph MUST capture verify_post mode + verify_mode in state from verify_post.log.
+  - update_task.sh MUST reject passes=true unless verify_post shows mode=full and verify_mode=promotion.
 
 ---
 
