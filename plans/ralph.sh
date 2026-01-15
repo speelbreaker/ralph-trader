@@ -1048,6 +1048,7 @@ run_final_verify() {
     fi
     return 0
   fi
+  local iter_dir="${1:-${ITER_DIR:-}}"
   local mode="$RPH_FINAL_VERIFY_MODE"
   if [[ "$mode" != "quick" && "$mode" != "full" && "$mode" != "promotion" ]]; then
     mode="full"
