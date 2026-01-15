@@ -378,3 +378,9 @@ Summary: Wired skipped_checks into artifact manifest (story_verify no-ops) and a
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
 Next: Consider recording skipped checks for other optional gates (e.g., final verify disabled).
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Added skipped_checks entry when verify_post fails (story_verify skipped) and asserted in acceptance.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Consider logging skipped checks when verify_pre fails or when final verify is disabled.
