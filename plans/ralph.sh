@@ -19,6 +19,10 @@ PROGRESS_FILE="${PROGRESS_FILE:-plans/progress.txt}"
 VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
 ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 PRD_SCHEMA_CHECK_SH="${PRD_SCHEMA_CHECK_SH:-./plans/prd_schema_check.sh}"
+RPH_RUN_ID="${RPH_RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
+VERIFY_RUN_ID="${VERIFY_RUN_ID:-$RPH_RUN_ID}"
+VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$REPO_ROOT/.ralph/verify/$VERIFY_RUN_ID}"
+export VERIFY_RUN_ID VERIFY_ARTIFACTS_DIR
 
 RPH_PROFILE="${RPH_PROFILE:-}"
 RPH_PROFILE_VERIFY_MODE=""
@@ -26,6 +30,7 @@ RPH_PROFILE_AGENT_MODEL=""
 RPH_PROFILE_ITER_TIMEOUT_SECS=""
 RPH_PROFILE_SELF_HEAL=""
 RPH_PROFILE_RATE_LIMIT_PER_HOUR=""
+RPH_PROFILE_VERIFY_ONLY=""
 RPH_PROFILE_WARNING=""
 
 case "$RPH_PROFILE" in
@@ -42,6 +47,10 @@ case "$RPH_PROFILE" in
   audit)
     RPH_PROFILE_VERIFY_MODE="full"
     RPH_PROFILE_SELF_HEAL="0"
+    ;;
+  verify)
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_VERIFY_ONLY="1"
     ;;
   max)
     RPH_PROFILE_VERIFY_MODE="full"
@@ -62,13 +71,21 @@ RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
 RPH_REQUIRE_STORY_VERIFY="${RPH_REQUIRE_STORY_VERIFY:-1}"  # legacy; gate is mandatory
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
+RPH_VERIFY_ONLY="${RPH_VERIFY_ONLY:-${RPH_PROFILE_VERIFY_ONLY:-0}}"       # 0|1 (use cheaper model for verification-only iterations)
+RPH_VERIFY_ONLY_MODEL="${RPH_VERIFY_ONLY_MODEL:-gpt-5-mini}"
+if [[ "$RPH_VERIFY_ONLY" == "1" ]]; then
+  RPH_AGENT_MODEL="$RPH_VERIFY_ONLY_MODEL"
+fi
 RPH_ITER_TIMEOUT_SECS="${RPH_ITER_TIMEOUT_SECS:-${RPH_PROFILE_ITER_TIMEOUT_SECS:-0}}"
 if [[ -z "${RPH_AGENT_ARGS+x}" ]]; then
   if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
-    RPH_AGENT_ARGS="exec --model ${RPH_AGENT_MODEL} --cd ${REPO_ROOT}"
+    RPH_AGENT_ARGS="exec --model ${RPH_AGENT_MODEL} --cd ${REPO_ROOT} --sandbox danger-full-access"
   else
     RPH_AGENT_ARGS="--permission-mode acceptEdits"
   fi
+fi
+if [[ "$RPH_AGENT_CMD" == "codex" && "$RPH_AGENT_ARGS" != *"--sandbox"* ]]; then
+  RPH_AGENT_ARGS="${RPH_AGENT_ARGS} --sandbox danger-full-access"
 fi
 if [[ -z "${RPH_PROMPT_FLAG+x}" ]]; then
   if [[ "$RPH_AGENT_CMD" == "codex" ]]; then
@@ -1353,6 +1370,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   echo "Artifacts: $ITER_DIR" | tee -a "$LOG_FILE"
 
   save_iter_artifacts "$ITER_DIR"
+  printf '%s\n' "$RPH_AGENT_MODEL" > "${ITER_DIR}/agent_model.txt"
   HEAD_BEFORE="$(git rev-parse HEAD)"
   PRD_HASH_BEFORE="$(sha256_file "$PRD_FILE")"
   PRD_PASSES_BEFORE="$(jq -c '.items | map({id, passes})' "$PRD_FILE")"
@@ -1401,6 +1419,11 @@ for ((i=1; i<=MAX_ITERS; i++)); do
     --arg iter_dir "$ITER_DIR" \
     --arg last_good_ref "$LAST_GOOD_REF" \
     '.iteration=$iteration | .active_slice=$active_slice | .selection_mode=$selection_mode | .last_iter_dir=$iter_dir | .last_good_ref=$last_good_ref'
+  state_merge \
+    --arg agent_model "$RPH_AGENT_MODEL" \
+    --arg agent_cmd "$RPH_AGENT_CMD" \
+    --arg verify_only "$RPH_VERIFY_ONLY" \
+    '.agent_model=$agent_model | .agent_cmd=$agent_cmd | .verify_only=$verify_only'
   state_merge \
     --arg head_before "$HEAD_BEFORE" \
     --arg prd_hash_before "$PRD_HASH_BEFORE" \
@@ -1652,6 +1675,7 @@ PROCEDURE:
     - Append deferred ideas to plans/ideas.md.
     - If pausing mid-story, fill plans/pause.md.
     - Append to plans/progress.txt; include Assumptions/Open questions when applicable.
+Operator tip: For verification-only iterations, set RPH_VERIFY_ONLY=1 (uses RPH_VERIFY_ONLY_MODEL, default gpt-5-mini); tests/CI run in shell.
 ${LAST_FAIL_NOTE}
 1) If plans/init.sh exists, run it.
 2) Run: ${VERIFY_SH} ${RPH_VERIFY_MODE}  (baseline must be green; if not, fix baseline first).
@@ -1659,7 +1683,14 @@ ${LAST_FAIL_NOTE}
 4) Implement with minimal diff + add/adjust tests as needed.
 5) Verify until green: ${VERIFY_SH} ${RPH_VERIFY_MODE}
 6) Mark pass by printing: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
-7) Append to progress.txt: what changed, commands run, what’s next.
+7) Append to progress.txt with required labels: Summary:, Commands:, Evidence:, Next:. Keep command logs short (key commands only). Include story ID and a YYYY-MM-DD date. Append-only.
+   Copy/paste template:
+   Story: ${NEXT_ID}
+   Date: YYYY-MM-DD
+   Summary: ...
+   Commands: ...
+   Evidence: ...
+   Next: ...
 8) Commit: git add -A && git commit -m "PRD: ${NEXT_ID} - <short description>"
 
 If ALL items pass, output exactly: ${RPH_COMPLETE_SENTINEL}

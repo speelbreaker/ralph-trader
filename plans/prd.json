@@ -570,7 +570,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2-000",
@@ -589,7 +589,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/"
+          "crates/soldier_core/src/execution/**",
+          "crates/soldier_core/tests/test_quantize.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/label.rs",
@@ -621,7 +622,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2-001",
@@ -641,7 +642,9 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/idempotency/*"
+          "crates/soldier_core/src/idempotency/**",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/test_idempotency.rs"
         ],
         "avoid": [
           "crates/soldier_core/execution/label.rs",
@@ -673,7 +676,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2-002",
@@ -692,7 +695,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/"
+          "crates/soldier_core/src/execution/**",
+          "crates/soldier_core/tests/test_label.rs"
         ],
         "avoid": [
           "crates/soldier_core/recovery/**"
@@ -725,7 +729,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     },
     {
       "id": "S2-003",

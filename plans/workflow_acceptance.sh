@@ -55,17 +55,85 @@ copy_worktree_file() {
 }
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
-run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd_schema_check.sh plans/contract_review_validate.sh plans/prd.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
 copy_worktree_file "plans/ralph.sh"
 copy_worktree_file "plans/verify.sh"
 copy_worktree_file "plans/update_task.sh"
 copy_worktree_file "plans/prd_schema_check.sh"
 copy_worktree_file "plans/contract_review_validate.sh"
+copy_worktree_file "plans/prd.json"
 copy_worktree_file "plans/workflow_contract_gate.sh"
 copy_worktree_file "plans/workflow_contract_map.json"
 copy_worktree_file "specs/WORKFLOW_CONTRACT.md"
 chmod +x "$WORKTREE/plans/ralph.sh" "$WORKTREE/plans/verify.sh" "$WORKTREE/plans/update_task.sh" "$WORKTREE/plans/prd_schema_check.sh" "$WORKTREE/plans/contract_review_validate.sh" "$WORKTREE/plans/workflow_contract_gate.sh" >/dev/null 2>&1 || true
-run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd_schema_check.sh plans/contract_review_validate.sh specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+run_in_worktree git update-index --skip-worktree plans/ralph.sh plans/verify.sh plans/update_task.sh plans/prd_schema_check.sh plans/contract_review_validate.sh plans/prd.json specs/WORKFLOW_CONTRACT.md >/dev/null 2>&1 || true
+
+if ! grep -q "Summary:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Summary in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Story:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include Story label in progress template" >&2
+  exit 1
+fi
+if ! grep -q "Date: YYYY-MM-DD" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include Date template with YYYY-MM-DD" >&2
+  exit 1
+fi
+if ! grep -q "Commands:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Commands in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Evidence:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Evidence in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Next:" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require Next in progress entries" >&2
+  exit 1
+fi
+if ! grep -qi "command logs short" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must remind to keep command logs short" >&2
+  exit 1
+fi
+if ! grep -q "Operator tip: For verification-only iterations" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include model-split operator tip" >&2
+  exit 1
+fi
+if ! grep -q "RPH_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_VERIFY_ONLY" >&2
+  exit 1
+fi
+if ! grep -q "RPH_VERIFY_ONLY_MODEL" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_VERIFY_ONLY_MODEL" >&2
+  exit 1
+fi
+if ! grep -q "RPH_PROFILE_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_PROFILE_VERIFY_ONLY for verify profile" >&2
+  exit 1
+fi
+if ! grep -q "verify)" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must include verify profile case" >&2
+  exit 1
+fi
+if ! grep -q "gpt-5-mini" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must mention gpt-5-mini default for verification-only model" >&2
+  exit 1
+fi
+if ! grep -q -- "--sandbox danger-full-access" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph default agent args must include danger-full-access sandbox" >&2
+  exit 1
+fi
+if ! grep -Eq "VERIFY_ARTIFACTS_DIR=.*\\.ralph/verify" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must default VERIFY_ARTIFACTS_DIR under .ralph/verify" >&2
+  exit 1
+fi
+bad_scope_patterns="$(run_in_worktree jq -r '.items[].scope.touch[]?, .items[].scope.create[]? | select(endswith("/")) | select(contains("*") | not)' "$WORKTREE/plans/prd.json")"
+if [[ -n "$bad_scope_patterns" ]]; then
+  echo "FAIL: scope patterns ending in / must include a glob (e.g., **):" >&2
+  echo "$bad_scope_patterns" >&2
+  exit 1
+fi
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 echo "plans/contract_check.sh" >> "$exclude_file"
@@ -717,6 +785,25 @@ fi
 pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_2")"
 if [[ "$pass_state" != "false" ]]; then
   echo "FAIL: passes flipped without verify_post green" >&2
+  exit 1
+fi
+agent_model="$(run_in_worktree jq -r '.agent_model // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$agent_model" ]]; then
+  echo "FAIL: expected agent_model recorded in state.json" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir in state.json" >&2
+  exit 1
+fi
+if ! run_in_worktree test -f "$iter_dir/agent_model.txt"; then
+  echo "FAIL: expected agent_model.txt in iteration artifacts" >&2
+  exit 1
+fi
+iter_model="$(run_in_worktree cat "$iter_dir/agent_model.txt" 2>/dev/null || true)"
+if [[ -z "$iter_model" ]]; then
+  echo "FAIL: agent_model.txt is empty" >&2
   exit 1
 fi
 
