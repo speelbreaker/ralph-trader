@@ -2171,6 +2171,7 @@ PROMPT
   else
     : > "${ITER_DIR}/story_verify.log"
     echo "Skipped story-specific verify commands because verify.sh failed." >> "${ITER_DIR}/story_verify.log"
+    add_skipped_check "story_verify" "verify_post_failed"
   fi
 
   VERIFY_POST_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
