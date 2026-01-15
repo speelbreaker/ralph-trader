@@ -15,7 +15,7 @@ require_tools() {
 }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-require_tools git jq mktemp find wc tr sed awk stat sort head tail date grep
+require_tools git jq python3 mktemp find wc tr sed awk stat sort head tail date grep
 mkdir -p "$ROOT/.ralph"
 WORKTREE="$(mktemp -d "${ROOT}/.ralph/workflow_acceptance_XXXXXX")"
 
@@ -108,6 +108,15 @@ OVERLAY_FILES=(
   "plans/workflow_contract_gate.sh"
   "plans/workflow_contract_map.json"
   "specs/WORKFLOW_CONTRACT.md"
+  "CONTRACT.md"
+  "IMPLEMENTATION_PLAN.md"
+  "docs/contract_anchors.md"
+  "docs/validation_rules.md"
+  "docs/contract_kernel.json"
+  "scripts/build_contract_kernel.py"
+  "scripts/check_contract_kernel.py"
+  "scripts/contract_kernel_lib.py"
+  "scripts/test_contract_kernel.py"
   "docs/schemas/artifacts.schema.json"
 )
 OPTIONAL_OVERLAY_FILES=(
@@ -393,6 +402,7 @@ fi
 
 contract_norm_pattern=$'sed \'s/[*`_]/'
 if ! run_in_worktree grep -Fq "$contract_norm_pattern" "plans/contract_check.sh"; then
+ 
   echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
   exit 1
 fi
@@ -414,6 +424,89 @@ fi
 
 if ! run_in_worktree grep -q "contract_coverage_ci_strict" "plans/verify.sh"; then
   echo "FAIL: verify must gate CI strict coverage via sentinel file" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "CONTRACT_COVERAGE_OUT" "plans/verify.sh"; then
+  echo "FAIL: verify must direct contract coverage output via CONTRACT_COVERAGE_OUT" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "CONTRACT_COVERAGE_UPDATE_DOCS" "plans/verify.sh"; then
+  echo "FAIL: verify must support CONTRACT_COVERAGE_UPDATE_DOCS override" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk '/CONTRACT_COVERAGE_UPDATE_DOCS/ && /:-0/ {found=1} END {exit found?0:1}' "plans/verify.sh"; then
+  echo "FAIL: verify must default CONTRACT_COVERAGE_UPDATE_DOCS to 0" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q 'contract_coverage_out="${VERIFY_ARTIFACTS_DIR}/contract_coverage.md"' "plans/verify.sh"; then
+  echo "FAIL: verify must default contract coverage output under VERIFY_ARTIFACTS_DIR" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -f "scripts/contract_kernel_lib.py"; then
+  echo "FAIL: expected scripts/contract_kernel_lib.py in overlay" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -f "scripts/test_contract_kernel.py"; then
+  echo "FAIL: expected scripts/test_contract_kernel.py in overlay" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "contract_kernel_tests" "plans/verify.sh"; then
+  echo "FAIL: verify must run contract kernel unit tests" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "scripts/test_contract_kernel.py" "plans/verify.sh"; then
+  echo "FAIL: verify must reference scripts/test_contract_kernel.py" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "WORKFLOW_ACCEPTANCE_POLICY" "plans/verify.sh"; then
+  echo "FAIL: verify must support WORKFLOW_ACCEPTANCE_POLICY override" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "should_run_workflow_acceptance" "plans/verify.sh"; then
+  echo "FAIL: verify must include workflow acceptance diff gate" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "is_workflow_file" "plans/verify.sh"; then
+  echo "FAIL: verify must include workflow allowlist helper" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "collect_changed_files" "plans/verify.sh"; then
+  echo "FAIL: verify must include workflow diff collector" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q 'git diff --name-only "$BASE_REF"...HEAD' "plans/verify.sh"; then
+  echo "FAIL: verify must diff against BASE_REF for workflow acceptance gate" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "Skipping workflow acceptance (no workflow-critical files changed; local auto mode)." "plans/verify.sh"; then
+  echo "FAIL: verify must log workflow acceptance skip reason" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk '
+  /is_workflow_file/ {in_block=1}
+  in_block && index($0, "plans/verify.sh") {has_verify=1}
+  in_block && index($0, "plans/workflow_acceptance.sh") {has_accept=1}
+  in_block && index($0, "specs/WORKFLOW_CONTRACT.md") {has_contract=1}
+  in_block && index($0, "scripts/check_contract_kernel.py") {has_kernel=1}
+  in_block && index($0, "docs/validation_rules.md") {has_rules=1}
+  END { exit (has_verify && has_accept && has_contract && has_kernel && has_rules) ? 0 : 1 }
+' "plans/verify.sh"; then
+  echo "FAIL: workflow allowlist must include core workflow files" >&2
   exit 1
 fi
 
@@ -3305,6 +3398,18 @@ fi
 # We expect exit 1 because max iters reached (since loop didn't complete story)
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected exit 1 from self-healing loop (max iters)" >&2
+  exit 1
+fi
+
+echo "Test 22: contract kernel validates against sources (fail-closed)"
+if ! run_in_worktree test -f "docs/contract_kernel.json"; then
+  echo "FAIL: docs/contract_kernel.json missing" >&2
+  exit 1
+fi
+kernel_log="$WORKTREE/.ralph/contract_kernel_check.log"
+if ! run_in_worktree python3 scripts/check_contract_kernel.py >"$kernel_log" 2>&1; then
+  echo "FAIL: contract kernel validation failed" >&2
+  tail -n 120 "$kernel_log" >&2 || true
   exit 1
 fi
 

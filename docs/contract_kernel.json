@@ -1,0 +1,255 @@
+{
+  "anchors": [
+    {
+      "contract_ref": "\u00a70.X",
+      "id": "Anchor-001",
+      "proof": {
+        "line": 32,
+        "section": "\u00a70.X"
+      },
+      "title": "Repository Layout & Module Mapping"
+    },
+    {
+      "contract_ref": "\u00a70.Y",
+      "id": "Anchor-002",
+      "proof": {
+        "line": 50,
+        "section": "\u00a70.Y"
+      },
+      "title": "Verification Harness"
+    },
+    {
+      "contract_ref": "\u00a71.0",
+      "id": "Anchor-010",
+      "proof": {
+        "line": 110,
+        "section": "\u00a71.0"
+      },
+      "title": "Instrument Units & Notional Invariants"
+    },
+    {
+      "contract_ref": "\u00a71.0.X",
+      "id": "Anchor-011",
+      "proof": {
+        "line": 128,
+        "section": "\u00a71.0.X"
+      },
+      "title": "Instrument Metadata Freshness (Instrument Cache TTL)"
+    },
+    {
+      "contract_ref": "\u00a71.0",
+      "id": "Anchor-012",
+      "proof": {
+        "line": 110,
+        "section": "\u00a71.0"
+      },
+      "title": "OrderSize Struct & Canonical Units"
+    },
+    {
+      "contract_ref": "\u00a71.1",
+      "id": "Anchor-020",
+      "proof": {
+        "line": 87,
+        "section": "\u00a71.1"
+      },
+      "title": "Labeling & Idempotency Contract"
+    },
+    {
+      "contract_ref": "\u00a71.1.1",
+      "id": "Anchor-021",
+      "proof": {
+        "line": 87,
+        "section": "\u00a71.1.1"
+      },
+      "title": "Canonical Quantization (Pre-Hash & Pre-Dispatch)"
+    },
+    {
+      "contract_ref": "\u00a71.1.2",
+      "id": "Anchor-022",
+      "proof": {
+        "line": 200,
+        "section": "\u00a71.1.2"
+      },
+      "title": "Label Parse + Disambiguation (Collision-Safe)"
+    },
+    {
+      "contract_ref": "\u00a71.4.4",
+      "id": "Anchor-030",
+      "proof": {
+        "line": 85,
+        "section": "\u00a71.4.4"
+      },
+      "title": "Order-Type Preflight Guard"
+    },
+    {
+      "contract_ref": "\u00a71.4.4",
+      "id": "Anchor-031",
+      "proof": {
+        "line": 85,
+        "section": "\u00a71.4.4"
+      },
+      "title": "Linked Orders Gate"
+    },
+    {
+      "contract_ref": "\u00a72.1",
+      "id": "Anchor-040",
+      "proof": {
+        "line": 267,
+        "section": "\u00a72.1"
+      },
+      "title": "Trade Lifecycle State Machine (TLSM)"
+    },
+    {
+      "contract_ref": "\u00a72.4",
+      "id": "Anchor-041",
+      "proof": {
+        "line": 783,
+        "section": "\u00a72.4"
+      },
+      "title": "Durable Intent Ledger (WAL Truth Source)"
+    },
+    {
+      "contract_ref": "\u00a72.4",
+      "id": "Anchor-042",
+      "proof": {
+        "line": 783,
+        "section": "\u00a72.4"
+      },
+      "title": "RecordedBeforeDispatch"
+    },
+    {
+      "contract_ref": "\u00a72.4",
+      "id": "Anchor-043",
+      "proof": {
+        "line": 783,
+        "section": "\u00a72.4"
+      },
+      "title": "Trade-ID Idempotency Registry (Ghost-Race Hardening)"
+    }
+  ],
+  "contract_version": "4.9",
+  "generated_at_utc": "2026-01-15T20:50:40Z",
+  "kernel_version": 3,
+  "sources": {
+    "anchors_path": "docs/contract_anchors.md",
+    "anchors_sha256": "db6461f35d2bb54161826cecd5722f898d5bdb1e480cf65c4bed598b209ab7e4",
+    "contract_path": "CONTRACT.md",
+    "contract_sha256": "2db6f085e62211f3e091b512c5bab05ded715f8868a77da98419d4bb3f8f9af2",
+    "plan_path": "IMPLEMENTATION_PLAN.md",
+    "plan_sha256": "c92f2359c2673048a50e7d89b136f39049c4f50c5dac31f4f11fc8180ed91fdf",
+    "rules_path": "docs/validation_rules.md",
+    "rules_sha256": "5651b45fca2a2ae98b41605d433a24a1425f61d04131deb0f12439c4af38a584"
+  },
+  "validation_rules": [
+    {
+      "contract_ref": "CONTRACT.md \u00a70.Y Verification Harness (Non-Negotiable)",
+      "enforcement": {
+        "rule": "plans/verify.sh runs `cargo test --workspace`."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-001",
+      "rule": "plans/verify.sh runs `cargo test --workspace`.",
+      "title": "Verification Harness Runs Workspace Tests"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a71.0 Instrument Units & Notional Invariants",
+      "enforcement": {
+        "rule": "Canonical sizing rules are enforced and mismatches reject."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-010",
+      "rule": "Canonical sizing rules are enforced and mismatches reject.",
+      "title": "Instrument Units & Notional Invariants Enforced"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a71.0.X Instrument Metadata Freshness",
+      "enforcement": {
+        "rule": "Stale instrument metadata forces degrade/reduce-only behavior."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-011",
+      "rule": "Stale instrument metadata forces degrade/reduce-only behavior.",
+      "title": "Instrument Metadata TTL Fail-Closed"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a71.1.1 Canonical Quantization",
+      "enforcement": {
+        "rule": "Quantization occurs before intent hashing and dispatch."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-020",
+      "rule": "Quantization occurs before intent hashing and dispatch.",
+      "title": "Quantization Before Hash/Dispatch"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a71.1 Labeling & Idempotency Contract",
+      "enforcement": {
+        "rule": "Order labels follow the compact schema and enforce length limits."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-021",
+      "rule": "Order labels follow the compact schema and enforce length limits.",
+      "title": "Compact Label Schema \u226464"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a71.1.2 Label Parse + Disambiguation",
+      "enforcement": {
+        "rule": "Tie-breaker ordering is deterministic; ambiguity degrades."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-022",
+      "rule": "Tie-breaker ordering is deterministic; ambiguity degrades.",
+      "title": "Label Disambiguation is Collision-Safe"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a71.4.4 Deribit Order-Type Preflight Guard",
+      "enforcement": {
+        "rule": "Market/stop/linked orders are rejected per contract rules."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-030",
+      "rule": "Market/stop/linked orders are rejected per contract rules.",
+      "title": "Order-Type Preflight Rejects Illegal Orders"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a72.4 Durable Intent Ledger (WAL Truth Source)",
+      "enforcement": {
+        "rule": "Intent record exists before any dispatch."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-040",
+      "rule": "Intent record exists before any dispatch.",
+      "title": "RecordedBeforeDispatch Required"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a72.4 Durable Intent Ledger (WAL Truth Source)",
+      "enforcement": {
+        "rule": "Replay reconstructs state without duplicate sends."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-041",
+      "rule": "Replay reconstructs state without duplicate sends.",
+      "title": "Replay Does Not Resend"
+    },
+    {
+      "contract_ref": "CONTRACT.md \u00a72.4 Trade-ID Idempotency Registry",
+      "enforcement": {
+        "rule": "Duplicate trade IDs are ignored deterministically."
+      },
+      "fields": {},
+      "gate_ids": [],
+      "id": "VR-042",
+      "rule": "Duplicate trade IDs are ignored deterministically.",
+      "title": "Trade-ID Registry Prevents Duplicate Applies"
+    }
+  ]
+}

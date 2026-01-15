@@ -32,15 +32,30 @@ def parse_anchor_ids(md: str) -> list[tuple[str, str]]:
 def parse_rule_ids(md: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     current_title = None
+    gate_block = False
     for line in md.splitlines():
         h = re.match(r"^##\s+(VR-\d{3})\s*:\s*(.+)$", line)
         if h:
             current_title = h.group(2).strip()
             out.append((h.group(1), current_title))
+            gate_block = False
             continue
-        g = re.match(r"^\*\*Gate ID:\*\*\s*(VR-\d{3}[a-z]?)", line)
-        if g and current_title:
-            out.append((g.group(1), current_title))
+        field = re.match(r"^\*\*(.+?):\*\*\s*(.*)$", line.strip())
+        if field and current_title:
+            gate_block = False
+            label = field.group(1).strip().lower()
+            value = field.group(2).strip()
+            if label == "gate id":
+                ids = re.findall(r"\bVR-\d{3}[a-z]?\b", value)
+                for gid in ids:
+                    out.append((gid, current_title))
+                if not value:
+                    gate_block = True
+            continue
+        if gate_block and current_title:
+            ids = re.findall(r"\bVR-\d{3}[a-z]?\b", line)
+            for gid in ids:
+                out.append((gid, current_title))
     return dedup(out)
 
 

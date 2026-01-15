@@ -7,6 +7,10 @@ Purpose
 Format
 - Anchor IDs are referenced in PRD contract_refs as `Anchor-XYZ`.
 - Titles should match the corresponding CONTRACT.md section.
+- Required format per anchor:
+  - `## Anchor-XYZ: <Title> (Contract §X.Y)`
+  - The contract ref must appear in `CONTRACT.md` (with or without the leading `§`).
+  - Kernel validation derives `proof.section` and `proof.line` from this ref.
 
 ## Anchor-001: Repository Layout & Module Mapping (Contract §0.X)
 ## Anchor-002: Verification Harness (Contract §0.Y)

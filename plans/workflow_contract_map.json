@@ -112,6 +112,23 @@
       ]
     },
     {
+      "id": "WF-1.7",
+      "title": "docs/contract_kernel.json optional derived index; if present, it MUST be validated before use.",
+      "enforcement": [
+        "scripts/check_contract_kernel.py"
+      ],
+      "artifacts": [
+        "docs/contract_kernel.json",
+        "docs/contract_anchors.md",
+        "docs/validation_rules.md",
+        "CONTRACT.md",
+        "IMPLEMENTATION_PLAN.md"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 22)"
+      ]
+    },
+    {
       "id": "WF-2.1",
       "title": "1) Contract alignment is mandatory.",
       "enforcement": [
@@ -224,6 +241,20 @@
       ],
       "tests": [
         "plans/workflow_acceptance.sh (Test 0g, Test 10d)"
+      ]
+    },
+    {
+      "id": "WF-2.9",
+      "title": "Contract kernel use is fail-closed.",
+      "enforcement": [
+        "scripts/check_contract_kernel.py",
+        "plans/workflow_acceptance.sh"
+      ],
+      "artifacts": [
+        "docs/contract_kernel.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 22)"
       ]
     },
     {

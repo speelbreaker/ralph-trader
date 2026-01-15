@@ -7,6 +7,14 @@ Purpose
 Format
 - Rule IDs are referenced in PRD contract_refs as `VR-XYZ` (and optional suffix letters).
 - Each rule points to a specific contract section.
+- Required fields per rule:
+  - Header line: `## VR-XYZ: <Title>`
+  - `**Contract ref:** CONTRACT.md §X.Y ...`
+  - `**Rule:** <deterministic rule text>`
+- Optional fields are allowed and are captured in the contract kernel under `fields` (snake_case keys, list values).
+- Optional Gate IDs may be provided via `**Gate ID:**` (repeatable) or as a block:
+  - `**Gate ID:**` followed by `- VR-XYZa` / `- VR-XYZb` lines until the next field or header.
+- Additional fields are allowed, but the required lines must be present and accurate.
 
 ## VR-001: Verification Harness Runs Workspace Tests
 **Contract ref:** CONTRACT.md §0.Y Verification Harness (Non-Negotiable)  

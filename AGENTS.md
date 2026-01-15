@@ -5,9 +5,13 @@ Read this first. It is the shortest, enforceable workflow summary.
 ## Non-negotiables
 - Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
 - Verification is mandatory; never weaken gates or tests.
+- Contract kernel use is derived-only; it never overrides CONTRACT.md and must be validated before use.
 
 ## Start here (every session)
-- Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
+- Read `docs/contract_kernel.json` (if present and validated), `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
+- If the kernel is missing, stale, invalid, or any rule is ambiguous/conflicting, read full `CONTRACT.md` before proceeding.
+- If acting as Story Cutter or Contract Arbiter, read full `CONTRACT.md` first.
+- If using the kernel, run `python3 scripts/check_contract_kernel.py` and stop on failure.
 - If running the Ralph loop, read `plans/prd.json` and `plans/progress.txt`.
 - Read `docs/skills/workflow.md`.
 - If running the Ralph loop, run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
@@ -43,7 +47,7 @@ All workflow gating must target **`plans/verify.sh`**.
 Do not mix them. If a workflow rule is being enforced, it must cite `specs/WORKFLOW_CONTRACT.md`.
 
 ### Changes must be self-proving
-Any change to `plans/*` must include:
+Any change to workflow/harness files (see allowlist in `plans/verify.sh:is_workflow_file`) must include:
 - updated/added assertions in `plans/workflow_acceptance.sh` (or a dedicated gate script invoked by it)
 - and a run that passes `./plans/verify.sh`
 

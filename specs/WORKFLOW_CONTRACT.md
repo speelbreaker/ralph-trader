@@ -29,6 +29,12 @@ A JSON backlog file `plans/prd.json` that contains stories. Ralph executes stori
 ### Workflow maintenance task
 Changes to the workflow/harness itself (e.g., `specs/WORKFLOW_CONTRACT.md`, `plans/ralph.sh`, `plans/verify.sh`, PRD tooling). These tasks are **not** executed via PRD stories; they are governed by §11 Change Control.
 
+### Contract Kernel (Derived, Optional)
+An optional JSON index (`docs/contract_kernel.json`) compiled from `docs/contract_anchors.md` and
+`docs/validation_rules.md` (and hash-tracked to `CONTRACT.md` and `IMPLEMENTATION_PLAN.md`).
+The kernel is derived-only; it cannot introduce new behavior. Any ambiguity or conflict requires
+reading full `CONTRACT.md` (fail-closed).
+
 ### “Contract-first”
 The trading behavior contract is the source of truth. If a plan/story conflicts with the contract, we **fail closed** and block.
 
@@ -56,6 +62,7 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 - `docs/codebase/*` — lightweight codebase map (stack/architecture/structure/testing/integrations/conventions/concerns)
 - `plans/ideas.md` — append-only deferred ideas log (non-PRD)
 - `plans/pause.md` — short pause note for mid-story handoffs
+- [WF-1.7] `docs/contract_kernel.json` — optional derived index; if present, it MUST be validated before use.
 
 ---
 
@@ -91,6 +98,10 @@ Observable gate requirement:
   - Ralph MUST capture verify_post mode + verify_mode in state from verify_post.log.
   - update_task.sh MUST reject passes=true unless verify_post shows mode=full and verify_mode=promotion.
 - [WF-2.8] Ralph MUST write `.ralph/artifacts.json` for every run (pass, fail, or blocked), and the manifest MUST be overwritten per run (no stale manifests). The schema is defined in `docs/schemas/artifacts.schema.json`.
+- [WF-2.9] **Contract kernel use is fail-closed.**
+  - If the kernel is used, `scripts/check_contract_kernel.py` MUST pass (source hashes match current files).
+  - If validation fails or kernel is missing, agents MUST read full `CONTRACT.md` or stop.
+  - Contract review always compares diffs to `CONTRACT.md`, not the kernel.
 
 ---
 
@@ -221,6 +232,7 @@ Never rewrites/reorders the file. Never changes IDs. Never flips passes=true.
 ### 4.4 Implementer (Ralph execution agent) [WF-4.4]
 
 Runs inside the Ralph harness. Implements exactly one story, verifies green, appends progress, commits.
+May use a validated kernel for slice-scoped context; ambiguity/conflict requires full `CONTRACT.md`.
 
 ### 4.5 Contract Arbiter (post-commit contract check) [WF-4.5]
 
@@ -343,6 +355,12 @@ Mode separation:
 - Final verification uses RPH_FINAL_VERIFY_MODE (default full), independent of iteration mode.
 
 [WF-5.5.1] verify.sh MUST enforce the endpoint-level test gate: if endpoint-ish files change, corresponding tests must change, unless ENDPOINT_GATE=0 in a non-CI run.
+
+Workflow acceptance policy (local throughput, CI non-bypass):
+- verify.sh MAY skip workflow acceptance locally when no workflow-critical files changed.
+- verify.sh MUST always run workflow acceptance in CI.
+- Local override: WORKFLOW_ACCEPTANCE_POLICY=auto|always|never (never ignored in CI).
+- The workflow-critical allowlist is defined in plans/verify.sh:is_workflow_file and is authoritative.
 
 ### 5.6 Story verify requirement gate [WF-5.6]
 
