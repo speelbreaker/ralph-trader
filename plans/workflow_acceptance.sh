@@ -190,6 +190,10 @@ if ! grep -q "Next:" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must require Next in progress entries" >&2
   exit 1
 fi
+if ! grep -q "Do not paste full verify output into chat." "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include verify output discipline guidance" >&2
+  exit 1
+fi
 if ! grep -qi "command logs short" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must remind to keep command logs short" >&2
   exit 1
@@ -447,6 +451,32 @@ echo "VERIFY_SH_SHA=stub"
 exit 1
 EOF
 chmod +x "$STUB_DIR/verify_fail.sh"
+
+cat > "$STUB_DIR/verify_fail_noisy.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "VERIFY_SH_SHA=stub"
+i=1
+while [[ "$i" -le 300 ]]; do
+  echo "line $i"
+  i=$((i + 1))
+done
+echo "error: noisy failure"
+echo "FAILED noisy_test"
+echo "thread 'main' panicked at noisy failure"
+exit 1
+EOF
+chmod +x "$STUB_DIR/verify_fail_noisy.sh"
+
+cat > "$STUB_DIR/verify_pass_mode.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+mode="${1:-}"
+echo "VERIFY_SH_SHA=stub"
+echo "MODE_ARG=${mode}"
+exit 0
+EOF
+chmod +x "$STUB_DIR/verify_pass_mode.sh"
 
 cat > "$STUB_DIR/agent_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -1889,6 +1919,64 @@ if [[ "$required_count" -lt 1 || "$missing_count" -ne 0 ]]; then
   exit 1
 fi
 
+echo "Test 10b: final verify uses RPH_FINAL_VERIFY_MODE"
+reset_state
+valid_prd_10b="$WORKTREE/.ralph/valid_prd_10b.json"
+write_valid_prd "$valid_prd_10b" "S1-020"
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10b_log="$WORKTREE/.ralph/test10b.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_10b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass_mode.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-020" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_VERIFY_MODE="quick" \
+  RPH_FINAL_VERIFY_MODE="promotion" \
+  RPH_PROMOTION_VERIFY_MODE="full" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for final verify mode test" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test10b_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir for final verify mode test" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "MODE_ARG=quick" "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected verify_pre to use quick mode" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "MODE_ARG=full" "$iter_dir/verify_post.log"; then
+  echo "FAIL: expected verify_post to use full mode on pass" >&2
+  exit 1
+fi
+final_log="$(run_in_worktree ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1)"
+if [[ -z "$final_log" ]]; then
+  echo "FAIL: expected final verify log for final verify mode test" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "MODE_ARG=promotion" "$final_log"; then
+  echo "FAIL: expected final verify to use promotion mode" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
+
 
 echo "Test 11: contract_review_validate enforces schema file"
 valid_review="$WORKTREE/.ralph/contract_review_valid.json"
@@ -1999,6 +2087,64 @@ dirty_status="$(run_in_worktree git status --porcelain)"
 if [[ -n "$dirty_status" ]]; then
   echo "FAIL: expected clean worktree after verify_pre failure" >&2
   echo "$dirty_status" >&2
+  exit 1
+fi
+
+echo "Test 14b: verify output is tailed and summary created"
+reset_state
+valid_prd_14b="$WORKTREE/.ralph/valid_prd_14b.json"
+write_valid_prd "$valid_prd_14b" "S1-010"
+run_in_worktree mkdir -p .ralph
+verify_tail_log="$WORKTREE/.ralph/verify_tail_test.log"
+set +e
+run_ralph env \
+  PRD_FILE="$valid_prd_14b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_fail_noisy.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  SELECTED_ID="S1-010" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  RPH_VERIFY_FAIL_TAIL=40 \
+  RPH_VERIFY_SUMMARY_MAX=5 \
+  ./plans/ralph.sh 1 > "$verify_tail_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for noisy verify_pre failure" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir for noisy verify_pre test" >&2
+  exit 1
+fi
+summary_path="$WORKTREE/$iter_dir/verify_summary.txt"
+if [[ ! -f "$summary_path" ]]; then
+  echo "FAIL: expected verify_summary.txt at $summary_path" >&2
+  exit 1
+fi
+if ! grep -q "error: noisy failure" "$summary_path"; then
+  echo "FAIL: expected noisy error line in verify_summary.txt" >&2
+  exit 1
+fi
+if ! grep -q "FAILED noisy_test" "$summary_path"; then
+  echo "FAIL: expected FAILED line in verify_summary.txt" >&2
+  exit 1
+fi
+if ! grep -q "panicked" "$summary_path"; then
+  echo "FAIL: expected panicked line in verify_summary.txt" >&2
+  exit 1
+fi
+if grep -q "line 1" "$verify_tail_log"; then
+  echo "FAIL: verify output should be tailed; found early lines in log" >&2
+  exit 1
+fi
+if ! grep -q "line 300" "$verify_tail_log"; then
+  echo "FAIL: expected tail of noisy output to include line 300" >&2
   exit 1
 fi
 

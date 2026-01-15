@@ -65,6 +65,7 @@ esac
 
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-${RPH_PROFILE_VERIFY_MODE:-full}}"     # quick|full|promotion (your choice)
 RPH_PROMOTION_VERIFY_MODE="${RPH_PROMOTION_VERIFY_MODE:-full}"             # full|promotion
+RPH_FINAL_VERIFY_MODE="${RPH_FINAL_VERIFY_MODE:-full}"                     # quick|full|promotion
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-${RPH_PROFILE_SELF_HEAL:-0}}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
@@ -116,6 +117,9 @@ RPH_ALLOW_UNSAFE_STORY_VERIFY="${RPH_ALLOW_UNSAFE_STORY_VERIFY:-0}"  # 0|1
 RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
 RPH_MARK_PASS_CLOSE="${RPH_MARK_PASS_CLOSE:-</mark_pass>}"
 RPH_FINAL_VERIFY="${RPH_FINAL_VERIFY:-1}"  # 0|1
+RPH_VERIFY_PASS_TAIL="${RPH_VERIFY_PASS_TAIL:-20}"
+RPH_VERIFY_FAIL_TAIL="${RPH_VERIFY_FAIL_TAIL:-200}"
+RPH_VERIFY_SUMMARY_MAX="${RPH_VERIFY_SUMMARY_MAX:-200}"
 RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nplans/logs/*\nartifacts/*\n.ralph/*'}"
 
 # Parse RPH_AGENT_ARGS (space-delimited) into an array (global IFS excludes spaces).
@@ -416,10 +420,42 @@ run_verify() {
     mode="$1"
     shift
   fi
+  local pass_tail="$RPH_VERIFY_PASS_TAIL"
+  local fail_tail="$RPH_VERIFY_FAIL_TAIL"
+  local summary_max="$RPH_VERIFY_SUMMARY_MAX"
+  if ! [[ "$pass_tail" =~ ^[0-9]+$ ]]; then pass_tail=20; fi
+  if ! [[ "$fail_tail" =~ ^[0-9]+$ ]]; then fail_tail=200; fi
+  if ! [[ "$summary_max" =~ ^[0-9]+$ ]]; then summary_max=200; fi
+  local out_dir
+  local summary_file
+  out_dir="$(dirname "$out")"
+  summary_file="${out_dir}/verify_summary.txt"
+  local cmd=( "$VERIFY_SH" "$mode" "$@" )
+  echo "verify command: ${cmd[*]}"
   set +e
-  timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$VERIFY_SH" "$mode" "$@" 2>&1 | tee "$out"
-  local rc=${PIPESTATUS[0]}
+  timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$VERIFY_SH" "$mode" "$@" >"$out" 2>&1
+  local rc=$?
   set -e
+  : > "$summary_file"
+  if [[ -s "$out" ]]; then
+    if command -v rg >/dev/null 2>&1; then
+      rg -n -i -e 'error:|failed|panicked' "$out" | head -n "$summary_max" > "$summary_file" || true
+    else
+      grep -nE -i 'error:|failed|panicked' "$out" | head -n "$summary_max" > "$summary_file" || true
+    fi
+  fi
+  if (( rc == 0 )); then
+    tail -n "$pass_tail" "$out" || true
+  else
+    if [[ -s "$summary_file" ]]; then
+      echo "verify summary (first ${summary_max} lines):" >&2
+      cat "$summary_file" >&2
+    else
+      echo "verify summary: (no matches)" >&2
+    fi
+    echo "verify failed (showing last ${fail_tail} lines):" >&2
+    tail -n "$fail_tail" "$out" >&2 || true
+  fi
   return $rc
 }
 
@@ -681,6 +717,11 @@ write_blocked_artifacts() {
   cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true
   if [[ -n "${VERIFY_PRE_LOG_PATH:-}" && -f "$VERIFY_PRE_LOG_PATH" ]]; then
     cp "$VERIFY_PRE_LOG_PATH" "$block_dir/verify_pre.log" || true
+    local pre_summary
+    pre_summary="$(dirname "$VERIFY_PRE_LOG_PATH")/verify_summary.txt"
+    if [[ -f "$pre_summary" ]]; then
+      cp "$pre_summary" "$block_dir/verify_summary.txt" || true
+    fi
   fi
   jq -n \
     --arg reason "$reason" \
@@ -756,8 +797,12 @@ run_final_verify() {
   if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
     return 0
   fi
+  local mode="$RPH_FINAL_VERIFY_MODE"
+  if [[ "$mode" != "quick" && "$mode" != "full" && "$mode" != "promotion" ]]; then
+    mode="full"
+  fi
   local log=".ralph/final_verify_$(date +%Y%m%d-%H%M%S).log"
-  if ! run_verify "$log"; then
+  if ! run_verify "$log" "$mode"; then
     local block_dir
     block_dir="$(write_blocked_basic "final_verify_failed" "Final verify failed (see $log)" "blocked_final_verify")"
     echo "<promise>BLOCKED_FINAL_VERIFY_FAILED</promise>" | tee -a "$LOG_FILE"
@@ -1644,7 +1689,7 @@ PROMPT
   if [[ -f "$LAST_FAIL_FILE" ]]; then
     LAST_FAIL_PATH="$(cat "$LAST_FAIL_FILE" || true)"
     if [[ -n "$LAST_FAIL_PATH" && -d "$LAST_FAIL_PATH" ]]; then
-      LAST_FAIL_NOTE=$'\n'"Last iteration failed. Read these files FIRST:"$'\n'"- ${LAST_FAIL_PATH}/verify_post.log"$'\n'"- ${LAST_FAIL_PATH}/agent.out"$'\n'"Then fix baseline back to green before attempting new work."$'\n'
+      LAST_FAIL_NOTE=$'\n'"Last iteration failed. Read these files FIRST:"$'\n'"- ${LAST_FAIL_PATH}/verify_summary.txt"$'\n'"- ${LAST_FAIL_PATH}/verify_post.log"$'\n'"- ${LAST_FAIL_PATH}/agent.out"$'\n'"Then fix baseline back to green before attempting new work."$'\n'
     fi
   fi
 
@@ -1662,6 +1707,9 @@ NON-NEGOTIABLE RULES:
 - Do NOT edit PRD directly unless explicitly allowed (RPH_ALLOW_AGENT_PRD_EDIT=1).
 - To mark a story pass, print exactly: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
 - Append to progress.txt (do not rewrite it).
+
+OUTPUT DISCIPLINE:
+- Do not paste full verify output into chat. Use verify_summary.txt and the tail of verify_pre.log/verify_post.log.
 
 Selected story ID (ONLY): ${NEXT_ID}
 You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
