@@ -360,3 +360,9 @@ Summary: Added verify profile support in ralph.sh and recorded agent model per i
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; verify + acceptance outputs.
 Next: continue with S2-003 or use RPH_PROFILE=verify for verification-only runs.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Read AGENTS.md/progress.txt; added explore/promote profiles with promotion gates, prompt restatement + small-tests-first guidance, and PRD ref check/index scripts; expanded workflow acceptance coverage.
+Commands: ./plans/prd_ref_check.sh plans/prd.json; ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: workflow_acceptance.sh output; verify.sh full output.
+Next: continue with workflow maintenance or return to PRD work.
