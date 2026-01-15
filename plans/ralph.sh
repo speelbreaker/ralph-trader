@@ -797,6 +797,7 @@ run_final_verify() {
   if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
     return 0
   fi
+  local iter_dir="${1:-${ITER_DIR:-}}"
   local mode="$RPH_FINAL_VERIFY_MODE"
   if [[ "$mode" != "quick" && "$mode" != "full" && "$mode" != "promotion" ]]; then
     mode="full"
@@ -815,6 +816,23 @@ run_final_verify() {
     echo "<promise>BLOCKED_FINAL_VERIFY_MISSING_SHA</promise>" | tee -a "$LOG_FILE"
     echo "Blocked: final verify missing SHA in $block_dir" | tee -a "$LOG_FILE"
     return 1
+  fi
+  if [[ -n "$iter_dir" ]]; then
+    if [[ ! -d "$iter_dir" ]]; then
+      local block_dir
+      block_dir="$(write_blocked_basic "final_verify_missing_iter_dir" "Final verify iter dir missing: $iter_dir" "blocked_final_verify")"
+      echo "<promise>BLOCKED_FINAL_VERIFY_MISSING_ITER_DIR</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: final verify iter dir missing in $block_dir" | tee -a "$LOG_FILE"
+      return 1
+    fi
+    local dest="${iter_dir}/final_verify.log"
+    if ! cp "$log" "$dest"; then
+      local block_dir
+      block_dir="$(write_blocked_basic "final_verify_log_copy_failed" "Final verify log copy failed: $log -> $dest" "blocked_final_verify")"
+      echo "<promise>BLOCKED_FINAL_VERIFY_LOG_COPY</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: final verify log copy failed in $block_dir" | tee -a "$LOG_FILE"
+      return 1
+    fi
   fi
   return 0
 }
@@ -1432,7 +1450,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   ' "$PRD_FILE")"
   if [[ -z "$ACTIVE_SLICE" ]]; then
     if completion_requirements_met "" ""; then
-      if ! run_final_verify; then
+      if ! run_final_verify "$ITER_DIR"; then
         exit 1
       fi
       echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
@@ -2155,7 +2173,7 @@ PROMPT
   # 6) Completion detection: sentinel OR PRD all-pass
   if grep -Fx "$RPH_COMPLETE_SENTINEL" "${ITER_DIR}/agent.out"; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
-      if ! run_final_verify; then
+      if ! run_final_verify "$ITER_DIR"; then
         exit 1
       fi
       echo "Agent signaled COMPLETE and PRD is fully passed. Exiting." | tee -a "$LOG_FILE"
@@ -2169,7 +2187,7 @@ PROMPT
 
   if all_items_passed; then
     if completion_requirements_met "$ITER_DIR" "$verify_post_rc"; then
-      if ! run_final_verify; then
+      if ! run_final_verify "$ITER_DIR"; then
         exit 1
       fi
       echo "All PRD items are passes=true. Done after $i iterations." | tee -a "$LOG_FILE"
