@@ -183,6 +183,8 @@ RPH_LOCK_TTL_SECS="${RPH_LOCK_TTL_SECS:-14400}"
 
 mkdir -p .ralph
 mkdir -p plans/logs
+# Ensure the artifact manifest always corresponds to the current run.
+rm -f "$ARTIFACT_MANIFEST" 2>/dev/null || true
 
 LOG_FILE="plans/logs/ralph.$(date +%Y%m%d-%H%M%S).log"
 LAST_GOOD_FILE=".ralph/last_good_ref"

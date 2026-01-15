@@ -219,7 +219,27 @@ JSON
 echo "Test 0g: manifest written on preflight block"
 run_in_worktree bash -c '
   set -euo pipefail
-  rm -f .ralph/artifacts.json
+  cat > .ralph/artifacts.json <<'"'"'JSON'"'"'
+{
+  "schema_version": 1,
+  "run_id": "stale",
+  "iter_dir": null,
+  "head_before": null,
+  "head_after": null,
+  "commit_count": null,
+  "verify_pre_log_path": null,
+  "verify_post_log_path": null,
+  "final_verify_log_path": null,
+  "final_verify_status": "PASS",
+  "contract_review_path": null,
+  "contract_check_report_path": null,
+  "blocked_dir": null,
+  "blocked_reason": null,
+  "blocked_details": null,
+  "skipped_checks": [],
+  "generated_at": "2026-01-15T00:00:00Z"
+}
+JSON
   set +e
   PRD_FILE=".ralph/missing_prd.json" \
     VERIFY_SH="/bin/true" \
