@@ -2190,9 +2190,18 @@ if [[ "$manifest_contract" != "$iter_dir/contract_review.json" ]]; then
   echo "FAIL: manifest contract_review_path mismatch" >&2
   exit 1
 fi
+manifest_contract_check="$(run_in_worktree jq -r '.contract_check_report_path // empty' "$manifest_path")"
+if [[ "$manifest_contract_check" != "$iter_dir/contract_review.json" ]]; then
+  echo "FAIL: manifest contract_check_report_path mismatch" >&2
+  exit 1
+fi
 manifest_commit_count="$(run_in_worktree jq -r '.commit_count' "$manifest_path")"
 if [[ "$manifest_commit_count" != "1" ]]; then
   echo "FAIL: expected manifest commit_count=1" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" and .reason=="no_story_verify_commands")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected skipped_checks story_verify entry in manifest" >&2
   exit 1
 fi
 write_contract_check_stub "PASS"

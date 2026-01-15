@@ -614,11 +614,13 @@ run_story_verify() {
   local log="${iter_dir}/story_verify.log"
   local cmds=""
   local rc=0
+  local saw_extra=0
 
   : > "$log"
   cmds="$(jq -r '(.verify // [])[]' <<<"$item_json" 2>/dev/null || true)"
   if [[ -z "$cmds" ]]; then
     echo "No story-specific verify commands." | tee -a "$log"
+    add_skipped_check "story_verify" "no_story_verify_commands"
     return 0
   fi
 
@@ -627,6 +629,7 @@ run_story_verify() {
     if [[ "$cmd" == "./plans/verify.sh" ]]; then
       continue
     fi
+    saw_extra=1
     if ! story_verify_cmd_allowed "$cmd"; then
       rc=1
       echo "FAIL: story verify command not allowlisted: $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
@@ -642,6 +645,11 @@ run_story_verify() {
       echo "FAIL: story verify command failed (rc=$cmd_rc): $cmd" | tee -a "$log" | tee -a "$LOG_FILE"
     fi
   done <<<"$cmds"
+
+  if (( saw_extra == 0 )); then
+    echo "No story-specific verify commands." | tee -a "$log"
+    add_skipped_check "story_verify" "no_story_verify_commands"
+  fi
 
   return $rc
 }
@@ -851,6 +859,7 @@ write_artifact_manifest() {
     --arg final_verify_log_path "$final_log" \
     --arg final_verify_status "$final_status" \
     --arg contract_review_path "$contract_review_path" \
+    --arg contract_check_report_path "$contract_review_path" \
     --arg verify_pre_log_path "$verify_pre_log" \
     --arg verify_post_log_path "$verify_post_log" \
     --argjson commit_count "$commit_count" \
@@ -866,16 +875,24 @@ write_artifact_manifest() {
       final_verify_log_path: ($final_verify_log_path | if length>0 then . else null end),
       final_verify_status: ($final_verify_status | if length>0 then . else null end),
       contract_review_path: ($contract_review_path | if length>0 then . else null end),
+      contract_check_report_path: ($contract_check_report_path | if length>0 then . else null end),
       skipped_checks: $skipped_checks,
       generated_at: $generated_at
     }' > "$manifest"
 }
 
 run_final_verify() {
+  local iter_dir="${1:-${ITER_DIR:-}}"
   if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
+    if [[ "$RPH_DRY_RUN" == "1" ]]; then
+      add_skipped_check "final_verify" "dry_run"
+      write_artifact_manifest "$iter_dir" "" "SKIPPED"
+    else
+      add_skipped_check "final_verify" "disabled"
+      write_artifact_manifest "$iter_dir" "" "SKIPPED"
+    fi
     return 0
   fi
-  local iter_dir="${1:-${ITER_DIR:-}}"
   local mode="$RPH_FINAL_VERIFY_MODE"
   if [[ "$mode" != "quick" && "$mode" != "full" && "$mode" != "promotion" ]]; then
     mode="full"
