@@ -37,6 +37,57 @@ sha256_file() {
   fi
 }
 
+extract_verify_log_sha() {
+  local log="$1"
+  local line=""
+  if [[ -f "$log" ]]; then
+    line="$(grep -m1 '^VERIFY_SH_SHA=' "$log" || true)"
+  fi
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  echo "${line#VERIFY_SH_SHA=}"
+}
+
+extract_verify_mode_line() {
+  local log="$1"
+  if [[ ! -f "$log" ]]; then
+    return 0
+  fi
+  grep -m1 '^mode=' "$log" || true
+}
+
+extract_verify_log_mode() {
+  local log="$1"
+  local line=""
+  line="$(extract_verify_mode_line "$log")"
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  local mode="${line#mode=}"
+  mode="${mode%% *}"
+  echo "$mode"
+}
+
+extract_verify_log_verify_mode() {
+  local log="$1"
+  local line=""
+  line="$(extract_verify_mode_line "$log")"
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  if [[ "$line" != *"verify_mode="* ]]; then
+    echo ""
+    return 0
+  fi
+  local verify_mode="${line#*verify_mode=}"
+  verify_mode="${verify_mode%% *}"
+  echo "$verify_mode"
+}
+
 if [[ "$STATUS" == "true" ]]; then
   if [[ "${RPH_UPDATE_TASK_OK:-}" != "1" ]]; then
     echo "ERROR: refusing to set passes=true without RPH_UPDATE_TASK_OK=1" >&2
@@ -95,8 +146,54 @@ if [[ "$STATUS" == "true" ]]; then
     echo "ERROR: state missing last_verify_post_mode in $STATE_FILE" >&2
     exit 6
   fi
-  if [[ "$last_mode" != "full" && "$last_mode" != "promotion" && "$last_mode" != "strict" ]]; then
-    echo "ERROR: last_verify_post_mode not eligible for pass flip (mode=$last_mode)" >&2
+  if [[ "$last_mode" != "full" ]]; then
+    echo "ERROR: last_verify_post_mode must be full for promotion (got $last_mode)" >&2
+    exit 6
+  fi
+  last_verify_mode="$(jq -r '.last_verify_post_verify_mode // empty' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ -z "$last_verify_mode" ]]; then
+    echo "ERROR: state missing last_verify_post_verify_mode in $STATE_FILE" >&2
+    exit 6
+  fi
+  if [[ "$last_verify_mode" != "promotion" ]]; then
+    echo "ERROR: last_verify_post_verify_mode must be promotion (got $last_verify_mode)" >&2
+    exit 6
+  fi
+  last_cmd="$(jq -r '.last_verify_post_cmd // empty' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ -z "$last_cmd" ]]; then
+    echo "ERROR: state missing last_verify_post_cmd in $STATE_FILE" >&2
+    exit 6
+  fi
+  last_verify_sh_sha="$(jq -r '.last_verify_post_verify_sh_sha // empty' "$STATE_FILE" 2>/dev/null || true)"
+  if [[ -z "$last_verify_sh_sha" ]]; then
+    echo "ERROR: state missing last_verify_post_verify_sh_sha in $STATE_FILE" >&2
+    exit 6
+  fi
+  actual_verify_sh_sha="$(extract_verify_log_sha "$verify_post_log")"
+  if [[ -z "$actual_verify_sh_sha" ]]; then
+    echo "ERROR: verify_post_log missing VERIFY_SH_SHA line" >&2
+    exit 6
+  fi
+  if [[ "$actual_verify_sh_sha" != "$last_verify_sh_sha" ]]; then
+    echo "ERROR: verify_post_log VERIFY_SH_SHA mismatch (state=$last_verify_sh_sha actual=$actual_verify_sh_sha)" >&2
+    exit 6
+  fi
+  actual_mode="$(extract_verify_log_mode "$verify_post_log")"
+  if [[ -z "$actual_mode" ]]; then
+    echo "ERROR: verify_post_log missing mode line" >&2
+    exit 6
+  fi
+  if [[ "$actual_mode" != "$last_mode" ]]; then
+    echo "ERROR: verify_post_log mode mismatch (state=$last_mode actual=$actual_mode)" >&2
+    exit 6
+  fi
+  actual_verify_mode="$(extract_verify_log_verify_mode "$verify_post_log")"
+  if [[ -z "$actual_verify_mode" ]]; then
+    echo "ERROR: verify_post_log missing verify_mode entry" >&2
+    exit 6
+  fi
+  if [[ "$actual_verify_mode" != "$last_verify_mode" ]]; then
+    echo "ERROR: verify_post_log verify_mode mismatch (state=$last_verify_mode actual=$actual_verify_mode)" >&2
     exit 6
   fi
 fi

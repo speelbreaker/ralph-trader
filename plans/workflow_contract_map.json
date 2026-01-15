@@ -197,6 +197,21 @@
       ]
     },
     {
+      "id": "WF-2.7",
+      "title": "Promotion-grade verify is required to flip passes=true.",
+      "enforcement": [
+        "plans/ralph.sh (verify_post state capture)",
+        "plans/update_task.sh (promotion verify enforcement)"
+      ],
+      "artifacts": [
+        ".ralph/state.json",
+        ".ralph/iter_*/verify_post.log"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 10b)"
+      ]
+    },
+    {
       "id": "WF-3.0",
       "title": "The PRD applies only to Ralph loop execution (implementation stories). Workflow maintenance tasks are not entered into PRD; they are handled via 11 Change Control.",
       "enforcement": [

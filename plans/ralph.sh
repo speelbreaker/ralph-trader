@@ -36,6 +36,7 @@ RPH_PROFILE_FORBID_MARK_PASS=""
 RPH_PROFILE_REQUIRE_MARK_PASS=""
 RPH_PROFILE_REQUIRE_STORY_VERIFY=""
 RPH_PROFILE_REQUIRE_FULL_VERIFY=""
+RPH_PROFILE_REQUIRE_PROMOTION_VERIFY=""
 RPH_PROFILE_WARNING=""
 
 case "$RPH_PROFILE" in
@@ -72,6 +73,7 @@ case "$RPH_PROFILE" in
     RPH_PROFILE_REQUIRE_MARK_PASS="1"
     RPH_PROFILE_REQUIRE_STORY_VERIFY="1"
     RPH_PROFILE_REQUIRE_FULL_VERIFY="1"
+    RPH_PROFILE_REQUIRE_PROMOTION_VERIFY="1"
     ;;
   max)
     RPH_PROFILE_MODE="max"
@@ -94,7 +96,7 @@ if [[ -z "$RPH_PROFILE_MODE" ]]; then
 fi
 
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-${RPH_PROFILE_VERIFY_MODE:-full}}"     # quick|full|promotion (your choice)
-RPH_PROMOTION_VERIFY_MODE="${RPH_PROMOTION_VERIFY_MODE:-full}"             # full|promotion
+RPH_PROMOTION_VERIFY_MODE="${RPH_PROMOTION_VERIFY_MODE:-promotion}"        # full|promotion
 RPH_FINAL_VERIFY_MODE="${RPH_FINAL_VERIFY_MODE:-full}"                     # quick|full|promotion
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-${RPH_PROFILE_SELF_HEAL:-0}}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
@@ -104,6 +106,7 @@ RPH_FORBID_MARK_PASS="${RPH_FORBID_MARK_PASS:-${RPH_PROFILE_FORBID_MARK_PASS:-0}
 RPH_REQUIRE_MARK_PASS="${RPH_REQUIRE_MARK_PASS:-${RPH_PROFILE_REQUIRE_MARK_PASS:-0}}"  # 0|1
 RPH_REQUIRE_STORY_VERIFY_GATE="${RPH_REQUIRE_STORY_VERIFY_GATE:-${RPH_PROFILE_REQUIRE_STORY_VERIFY:-0}}"  # 0|1
 RPH_REQUIRE_FULL_VERIFY="${RPH_REQUIRE_FULL_VERIFY:-${RPH_PROFILE_REQUIRE_FULL_VERIFY:-0}}"  # 0|1
+RPH_REQUIRE_PROMOTION_VERIFY="${RPH_REQUIRE_PROMOTION_VERIFY:-${RPH_PROFILE_REQUIRE_PROMOTION_VERIFY:-0}}"  # 0|1
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 RPH_AGENT_MODEL="${RPH_AGENT_MODEL:-${RPH_PROFILE_AGENT_MODEL:-gpt-5.2-codex}}"
 RPH_VERIFY_ONLY="${RPH_VERIFY_ONLY:-${RPH_PROFILE_VERIFY_ONLY:-0}}"       # 0|1 (use cheaper model for verification-only iterations)
@@ -516,7 +519,10 @@ block_preflight() {
 }
 
 # Profile gating that must fail-closed before running.
-if [[ "$RPH_REQUIRE_FULL_VERIFY" == "1" && "$RPH_VERIFY_MODE" != "full" ]]; then
+if [[ "$RPH_REQUIRE_PROMOTION_VERIFY" == "1" && "$RPH_PROMOTION_VERIFY_MODE" != "promotion" ]]; then
+  block_preflight "profile_requires_promotion_verify" "RPH_PROFILE_MODE=$RPH_PROFILE_MODE requires RPH_PROMOTION_VERIFY_MODE=promotion (got $RPH_PROMOTION_VERIFY_MODE)"
+fi
+if [[ "$RPH_REQUIRE_FULL_VERIFY" == "1" && "$RPH_VERIFY_MODE" != "full" && "$RPH_VERIFY_MODE" != "promotion" ]]; then
   block_preflight "profile_requires_full_verify" "RPH_PROFILE_MODE=$RPH_PROFILE_MODE requires RPH_VERIFY_MODE=full (got $RPH_VERIFY_MODE)"
 fi
 
@@ -830,6 +836,57 @@ extract_mark_pass_id() {
 verify_log_has_sha() {
   local log="$1"
   grep -q '^VERIFY_SH_SHA=' "$log"
+}
+
+extract_verify_log_sha() {
+  local log="$1"
+  local line=""
+  if [[ -f "$log" ]]; then
+    line="$(grep -m1 '^VERIFY_SH_SHA=' "$log" || true)"
+  fi
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  echo "${line#VERIFY_SH_SHA=}"
+}
+
+extract_verify_mode_line() {
+  local log="$1"
+  if [[ ! -f "$log" ]]; then
+    return 0
+  fi
+  grep -m1 '^mode=' "$log" || true
+}
+
+extract_verify_log_mode() {
+  local log="$1"
+  local line=""
+  line="$(extract_verify_mode_line "$log")"
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  local mode="${line#mode=}"
+  mode="${mode%% *}"
+  echo "$mode"
+}
+
+extract_verify_log_verify_mode() {
+  local log="$1"
+  local line=""
+  line="$(extract_verify_mode_line "$log")"
+  if [[ -z "$line" ]]; then
+    echo ""
+    return 0
+  fi
+  if [[ "$line" != *"verify_mode="* ]]; then
+    echo ""
+    return 0
+  fi
+  local verify_mode="${line#*verify_mode=}"
+  verify_mode="${verify_mode%% *}"
+  echo "$verify_mode"
 }
 
 run_final_verify() {
@@ -1970,8 +2027,9 @@ PROMPT
   if [[ -n "$MARK_PASS_ID" && "$VERIFY_POST_MODE" == "quick" ]]; then
     VERIFY_POST_MODE="full"
   fi
+  VERIFY_POST_MODE_ARG="$VERIFY_POST_MODE"
   verify_post_rc=0
-  if run_verify "${ITER_DIR}/verify_post.log" "$VERIFY_POST_MODE"; then
+  if run_verify "${ITER_DIR}/verify_post.log" "$VERIFY_POST_MODE_ARG"; then
     verify_post_rc=0
   else
     verify_post_rc=$?
@@ -2002,14 +2060,29 @@ PROMPT
   VERIFY_POST_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
   VERIFY_POST_LOG_SHA="$(sha256_file "${ITER_DIR}/verify_post.log")"
   VERIFY_POST_TS="$(date +%s)"
+  VERIFY_POST_MODE="$(extract_verify_log_mode "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_VERIFY_MODE="$(extract_verify_log_verify_mode "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_VERIFY_SH_SHA="$(extract_verify_log_sha "${ITER_DIR}/verify_post.log")"
+  VERIFY_POST_CMD="${VERIFY_SH} ${VERIFY_POST_MODE_ARG}"
   state_merge \
     --argjson last_verify_post_rc "$verify_post_rc" \
     --arg verify_post_log "${ITER_DIR}/verify_post.log" \
     --arg verify_post_head "$VERIFY_POST_HEAD" \
     --arg verify_post_log_sha256 "$VERIFY_POST_LOG_SHA" \
     --arg verify_post_mode "$VERIFY_POST_MODE" \
+    --arg verify_post_verify_mode "$VERIFY_POST_VERIFY_MODE" \
+    --arg verify_post_cmd "$VERIFY_POST_CMD" \
+    --arg verify_post_verify_sh_sha "$VERIFY_POST_VERIFY_SH_SHA" \
     --argjson verify_post_ts "$VERIFY_POST_TS" \
-    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log | .last_verify_post_head=$verify_post_head | .last_verify_post_log_sha256=$verify_post_log_sha256 | .last_verify_post_mode=$verify_post_mode | .last_verify_post_ts=$verify_post_ts'
+    '.last_verify_post_rc=$last_verify_post_rc
+      | .last_verify_post_log=$verify_post_log
+      | .last_verify_post_head=$verify_post_head
+      | .last_verify_post_log_sha256=$verify_post_log_sha256
+      | .last_verify_post_mode=$verify_post_mode
+      | .last_verify_post_verify_mode=$verify_post_verify_mode
+      | .last_verify_post_cmd=$verify_post_cmd
+      | .last_verify_post_verify_sh_sha=$verify_post_verify_sh_sha
+      | .last_verify_post_ts=$verify_post_ts'
 
   POST_VERIFY_FAILED=0
   POST_VERIFY_EXIT=0
@@ -2117,7 +2190,17 @@ PROMPT
       echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
     else
       if (( CONTRACT_REVIEW_OK == 1 )); then
+        set +e
         RPH_UPDATE_TASK_OK=1 RPH_STATE_FILE="$STATE_FILE" ./plans/update_task.sh "$MARK_PASS_ID" true
+        update_task_rc=$?
+        set -e
+        if (( update_task_rc != 0 )); then
+          save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+          BLOCK_DIR="$(write_blocked_with_state "update_task_failed" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+          echo "<promise>BLOCKED_UPDATE_TASK_FAILED</promise>" | tee -a "$LOG_FILE"
+          echo "Blocked: update_task failed in $BLOCK_DIR" | tee -a "$LOG_FILE"
+          exit 1
+        fi
         git add -A
         if [[ "$HEAD_AFTER" != "$HEAD_BEFORE" ]]; then
           git commit --amend --no-edit

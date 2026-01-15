@@ -123,6 +123,7 @@ for overlay in "${OVERLAY_FILES[@]}"; do
 done
 scripts_to_chmod=(
   "ralph.sh"
+  "update_task.sh"
   "verify.sh"
   "update_task.sh"
   "prd_schema_check.sh"
@@ -556,6 +557,13 @@ mkdir -p "$STUB_DIR"
 cat > "$STUB_DIR/verify_once_then_fail.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+mode="${1:-quick}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 count_file="${VERIFY_COUNT_FILE:-.ralph/verify_count}"
 count=0
 if [[ -f "$count_file" ]]; then
@@ -564,6 +572,7 @@ fi
 count=$((count + 1))
 echo "$count" > "$count_file"
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 if [[ "$count" -ge 2 ]]; then
   exit 1
 fi
@@ -574,7 +583,15 @@ chmod +x "$STUB_DIR/verify_once_then_fail.sh"
 cat > "$STUB_DIR/verify_pass.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+mode="${1:-quick}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 exit 0
 EOF
 chmod +x "$STUB_DIR/verify_pass.sh"
@@ -583,7 +600,14 @@ cat > "$STUB_DIR/verify_record_mode.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 mode="${1:-}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 echo "VERIFY_MODE_ARG=${mode}"
 exit 0
 EOF
@@ -592,7 +616,15 @@ chmod +x "$STUB_DIR/verify_record_mode.sh"
 cat > "$STUB_DIR/verify_fail.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+mode="${1:-quick}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 exit 1
 EOF
 chmod +x "$STUB_DIR/verify_fail.sh"
@@ -600,7 +632,15 @@ chmod +x "$STUB_DIR/verify_fail.sh"
 cat > "$STUB_DIR/verify_fail_noisy.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+mode="${1:-quick}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 i=1
 while [[ "$i" -le 300 ]]; do
   echo "line $i"
@@ -617,11 +657,26 @@ cat > "$STUB_DIR/verify_pass_mode.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 mode="${1:-}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 echo "MODE_ARG=${mode}"
 exit 0
 EOF
 chmod +x "$STUB_DIR/verify_pass_mode.sh"
+cat > "$STUB_DIR/verify_full_no_promotion.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "VERIFY_SH_SHA=stub"
+echo "mode=full verify_mode=none root=/tmp"
+exit 0
+EOF
+chmod +x "$STUB_DIR/verify_full_no_promotion.sh"
 
 cat > "$STUB_DIR/agent_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -2112,6 +2167,8 @@ run_ralph env \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-009" \
+  RPH_VERIFY_MODE="promotion" \
+  RPH_PROMOTION_VERIFY_MODE="promotion" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_RATE_LIMIT_ENABLED=0 \
@@ -2170,7 +2227,7 @@ run_ralph env \
   RPH_AGENT_ARGS="" \
   RPH_VERIFY_MODE="quick" \
   RPH_FINAL_VERIFY_MODE="promotion" \
-  RPH_PROMOTION_VERIFY_MODE="full" \
+  RPH_PROMOTION_VERIFY_MODE="promotion" \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
@@ -2196,8 +2253,8 @@ if ! run_in_worktree grep -q "MODE_ARG=quick" "$iter_dir/verify_pre.log"; then
   echo "FAIL: expected verify_pre to use quick mode" >&2
   exit 1
 fi
-if ! run_in_worktree grep -q "MODE_ARG=full" "$iter_dir/verify_post.log"; then
-  echo "FAIL: expected verify_post to use full mode on pass" >&2
+if ! run_in_worktree grep -q "MODE_ARG=promotion" "$iter_dir/verify_post.log"; then
+  echo "FAIL: expected verify_post to use promotion mode on pass" >&2
   exit 1
 fi
 final_log="$(run_in_worktree ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1)"
@@ -2210,6 +2267,57 @@ if ! run_in_worktree grep -q "MODE_ARG=promotion" "$final_log"; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+
+echo "Test 10c: update_task blocks non-promotion verify"
+reset_state
+valid_prd_10c="$WORKTREE/plans/prd_acceptance_non_promo.json"
+write_valid_prd "$valid_prd_10c" "S1-010"
+run_in_worktree git add "$valid_prd_10c" >/dev/null 2>&1
+run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd non-promo" >/dev/null 2>&1
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10c_log="$WORKTREE/.ralph/test10c.log"
+before_blocked="$(count_blocked)"
+run_ralph env \
+  PRD_FILE="$valid_prd_10c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_full_no_promotion.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-010" \
+  RPH_VERIFY_MODE="full" \
+  RPH_PROMOTION_VERIFY_MODE="full" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10c_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for non-promotion verify when marking pass" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test10c_log" >&2 || true
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for update_task failure" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test10c_log" >&2 || true
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "update_task_failed")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected update_task_failed blocked artifact" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test10c_log" >&2 || true
+  exit 1
+fi
 
 
 echo "Test 11: contract_review_validate enforces schema file"

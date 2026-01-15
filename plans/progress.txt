@@ -366,3 +366,9 @@ Summary: Read AGENTS.md/progress.txt; added explore/promote profiles with promot
 Commands: ./plans/prd_ref_check.sh plans/prd.json; ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: workflow_acceptance.sh output; verify.sh full output.
 Next: continue with workflow maintenance or return to PRD work.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Added promotion-grade verify enforcement in update_task/state, promoted profile to use promotion mode, and updated workflow contract + acceptance coverage.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: workflow_acceptance.sh output; verify.sh full output.
+Next: run Ralph with RPH_VERIFY_MODE=promotion (or RPH_PROFILE=promote) for pass flips.
