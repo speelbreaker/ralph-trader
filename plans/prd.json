@@ -16,7 +16,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.0 Verify harness baseline",
       "category": "workflow",
       "description": "Confirm plans/verify.sh is the canonical verification script and runnable.",
@@ -24,7 +24,7 @@
         "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)"
       ],
       "plan_refs": [
-        "Test harness configured (cargo test \\--workspace)."
+        "Test harness configured (cargo test --workspace)."
       ],
       "scope": {
         "touch": [
@@ -70,7 +70,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.0 Workspace scaffolding",
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
@@ -78,7 +78,7 @@
         "CONTRACT.md 0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)"
       ],
       "plan_refs": [
-        "Rust workspace exists with crates/soldier\\_core, crates/soldier\\_infra."
+        "Rust workspace exists with crates/soldier_core, crates/soldier_infra."
       ],
       "scope": {
         "touch": [
@@ -130,7 +130,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.1 InstrumentKind and RiskState",
       "category": "execution",
       "description": "Implement InstrumentKind derivation and RiskState enum per contract definitions.",
@@ -140,7 +140,7 @@
         "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) — MUST implement"
       ],
       "plan_refs": [
-        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "S1.1 — InstrumentKind derivation + instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -193,7 +193,7 @@
       "priority": 70,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL",
       "category": "risk",
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
@@ -202,7 +202,7 @@
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "S1.1 — InstrumentKind derivation + instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -250,7 +250,7 @@
       "priority": 65,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL observability",
       "category": "risk",
       "description": "Add required TTL observability hooks for instrument cache freshness.",
@@ -258,7 +258,7 @@
         "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units + Dispatcher Invariants / S1.1 — InstrumentKind derivation + instrument cache TTL (fail‑closed)"
       ],
       "scope": {
         "touch": [
@@ -307,7 +307,7 @@
       "priority": 60,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize canonical sizing",
       "category": "execution",
       "description": "Implement OrderSize canonical sizing with deterministic notional_usd using the discovery report.",
@@ -316,7 +316,7 @@
         "CONTRACT.md Canonical internal units (single source of truth):"
       ],
       "plan_refs": [
-        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
+        "S1.2 — OrderSize canonical sizing + notional invariant"
       ],
       "scope": {
         "touch": [
@@ -364,7 +364,7 @@
       "priority": 50,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher amount mapping",
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts using the discovery report.",
@@ -372,7 +372,7 @@
         "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
-        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "S1.3 — Dispatcher amount mapping + mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
@@ -420,7 +420,7 @@
       "priority": 55,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mismatch rejection",
       "category": "execution",
       "description": "Reject contract/amount mismatches and emit mismatch metrics.",
@@ -429,7 +429,7 @@
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units + Dispatcher Invariants / S1.3 — Dispatcher amount mapping + mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
@@ -480,7 +480,7 @@
       "priority": 95,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize discovery",
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
@@ -488,7 +488,7 @@
         "1.0 Instrument Units"
       ],
       "plan_refs": [
-        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
+        "S1.2 — OrderSize canonical sizing + notional invariant"
       ],
       "scope": {
         "touch": [
@@ -527,7 +527,7 @@
       "priority": 85,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 — Instrument Units + Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mapping discovery",
       "category": "qa",
       "description": "Discover current dispatcher mapping logic and document gaps vs contract before implementation.",
@@ -535,7 +535,7 @@
         "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
-        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "S1.3 — Dispatcher amount mapping + mismatch reject→Degraded"
       ],
       "scope": {
         "touch": [
@@ -577,7 +577,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization + Labeling + Idempotency",
       "story_ref": "S2.1 Quantization rounding",
       "category": "execution",
       "description": "Implement deterministic quantization for qty and limit price with safe rounding.",
@@ -585,7 +585,7 @@
         "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.1 — Integer tick/step quantization (safer direction)"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization + Labeling + Idempotency / S2.1 — Integer tick/step quantization (safer direction)"
       ],
       "scope": {
         "touch": [
@@ -628,7 +628,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization + Labeling + Idempotency",
       "story_ref": "S2.2 Intent hash from quantized fields",
       "category": "durability",
       "description": "Compute intent_hash from quantized fields only and exclude timestamps.",
@@ -637,7 +637,7 @@
         "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.2 — Intent hash from quantized fields only"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization + Labeling + Idempotency / S2.2 — Intent hash from quantized fields only"
       ],
       "scope": {
         "touch": [
@@ -680,7 +680,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization + Labeling + Idempotency",
       "story_ref": "S2.3 Compact label schema",
       "category": "durability",
       "description": "Implement compact label encode/decode with 64-character limit enforcement.",
@@ -688,7 +688,7 @@
         "CONTRACT.md Compact Label Schema (must implement):"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.3 — Compact label schema encode/decode (≤64 chars)"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization + Labeling + Idempotency / S2.3 — Compact label schema encode/decode (≤64 chars)"
       ],
       "scope": {
         "touch": [
@@ -732,7 +732,7 @@
       "priority": 70,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 — Quantization + Labeling + Idempotency",
       "story_ref": "S2.4 Label match disambiguation",
       "category": "risk",
       "description": "Disambiguate label matches deterministically and degrade on ambiguity.",
@@ -741,7 +741,7 @@
         "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.4 — Label match disambiguation; ambiguity→Degraded"
+        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization + Labeling + Idempotency / S2.4 — Label match disambiguation; ambiguity→Degraded"
       ],
       "scope": {
         "touch": [
@@ -785,7 +785,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 — Order‑Type Preflight + Venue Capabilities (artifact‑backed)",
       "story_ref": "S3.1 Preflight guard",
       "category": "execution",
       "description": "Implement order-type preflight rules for market/stop/linked orders across instruments.",
@@ -794,7 +794,7 @@
         "CONTRACT.md linked_order_type: Deribit linked/OCO semantics (venue-specific; gated off for this bot)."
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.1 — Preflight guard (market/stop/linked rules)"
+        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight + Venue Capabilities (artifact‑backed) / S3.1 — Preflight guard (market/stop/linked rules)"
       ],
       "scope": {
         "touch": [
@@ -845,7 +845,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 — Order‑Type Preflight + Venue Capabilities (artifact‑backed)",
       "story_ref": "S3.2 Post-only crossing guard",
       "category": "execution",
       "description": "Reject post-only orders that would cross the book deterministically.",
@@ -853,7 +853,7 @@
         "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.2 — Post‑only crossing guard"
+        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight + Venue Capabilities (artifact‑backed) / S3.2 — Post‑only crossing guard"
       ],
       "scope": {
         "touch": [
@@ -902,7 +902,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 — Order‑Type Preflight + Venue Capabilities (artifact‑backed)",
       "story_ref": "S3.3 Capabilities matrix + feature flags",
       "category": "execution",
       "description": "Implement venue capabilities to gate linked/OCO orders behind explicit flags.",
@@ -911,7 +911,7 @@
         "CONTRACT.md linked_order_type: Deribit linked/OCO semantics (venue-specific; gated off for this bot)."
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.3 — Capabilities matrix \\+ feature flags"
+        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight + Venue Capabilities (artifact‑backed) / S3.3 — Capabilities matrix + feature flags"
       ],
       "scope": {
         "touch": [
@@ -960,7 +960,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 — Durable WAL + TLSM + Trade‑ID Registry",
       "story_ref": "S4.1 WAL append + replay no-resend",
       "category": "durability",
       "description": "Persist intents to a durable WAL and replay without resending after crash.",
@@ -969,7 +969,7 @@
         "CONTRACT.md 2.4 RecordedBeforeDispatch"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.1 — WAL append \\+ replay no-resend"
+        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL + TLSM + Trade‑ID Registry / S4.1 — WAL append + replay no-resend"
       ],
       "scope": {
         "touch": [
@@ -1013,7 +1013,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 — Durable WAL + TLSM + Trade‑ID Registry",
       "story_ref": "S4.2 TLSM out-of-order events",
       "category": "execution",
       "description": "Handle fill-before-ack and out-of-order TLSM events without panic.",
@@ -1022,7 +1022,7 @@
         "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.2 — TLSM out‑of‑order events (fill-before-ack)"
+        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL + TLSM + Trade‑ID Registry / S4.2 — TLSM out‑of‑order events (fill-before-ack)"
       ],
       "scope": {
         "touch": [
@@ -1075,7 +1075,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 — Durable WAL + TLSM + Trade‑ID Registry",
       "story_ref": "S4.3 Trade-ID registry dedupe",
       "category": "durability",
       "description": "Persist processed trade IDs to prevent duplicate processing.",
@@ -1083,7 +1083,7 @@
         "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.3 — Trade‑ID registry dedupe"
+        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL + TLSM + Trade‑ID Registry / S4.3 — Trade‑ID registry dedupe"
       ],
       "scope": {
         "touch": [
@@ -1127,7 +1127,7 @@
       "priority": 70,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 — Durable WAL + TLSM + Trade‑ID Registry",
       "story_ref": "S4.4 Dispatch requires durable WAL barrier",
       "category": "durability",
       "description": "Block dispatch until WAL durability marker when configured.",
@@ -1135,7 +1135,7 @@
         "CONTRACT.md RecordedBeforeDispatch"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.4 — Dispatch requires durable WAL barrier (when configured)"
+        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL + TLSM + Trade‑ID Registry / S4.4 — Dispatch requires durable WAL barrier (when configured)"
       ],
       "scope": {
         "touch": [
