@@ -10,6 +10,8 @@ PRD_PIPELINE_BLOCKED_JSON="${PRD_PIPELINE_BLOCKED_JSON:-.context/prd_pipeline_bl
 
 PRD_CUTTER_CMD="${PRD_CUTTER_CMD:-}"
 PRD_CUTTER_ARGS="${PRD_CUTTER_ARGS:-}"
+PRD_AUTOFIX_CMD="${PRD_AUTOFIX_CMD:-}"
+PRD_AUTOFIX_ARGS="${PRD_AUTOFIX_ARGS:-}"
 PRD_AUDITOR_CMD="${PRD_AUDITOR_CMD:-}"
 PRD_AUDITOR_ARGS="${PRD_AUDITOR_ARGS:-}"
 PRD_PATCHER_CMD="${PRD_PATCHER_CMD:-}"
@@ -121,18 +123,68 @@ fi
 if [[ -z "$PRD_AUDITOR_CMD" && "$PRD_AUDITOR_ENABLED" == "1" && -x "./plans/run_prd_auditor.sh" ]]; then
   PRD_AUDITOR_CMD="./plans/run_prd_auditor.sh"
 fi
+if [[ -z "$PRD_AUTOFIX_CMD" && -x "./plans/prd_autofix.sh" ]]; then
+  PRD_AUTOFIX_CMD="./plans/prd_autofix.sh"
+fi
 
 # Stage A: Story Cutter + lint/repair loop
 pass=0
 for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
   echo "==> Stage A (repair pass $i/$MAX_REPAIR_PASSES)" >&2
-  # Cutter is expected to read PRD_LINT_JSON and fix PRD when present.
-  run_cmd PRD_CUTTER "$PRD_CUTTER_CMD" "$PRD_CUTTER_ARGS"
-  ./plans/prd_schema_check.sh "$PRD_FILE"
+  if ! ./plans/prd_schema_check.sh "$PRD_FILE"; then
+    write_blocked "SCHEMA_FAIL" "PRD schema check failed before repair pass $i."
+    echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
+    echo "ERROR: PRD schema check failed before repair pass $i." >&2
+    exit 4
+  fi
+
   if ./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"; then
     pass=1
     break
   fi
+
+  if [[ -n "$PRD_AUTOFIX_CMD" ]]; then
+    run_cmd PRD_AUTOFIX "$PRD_AUTOFIX_CMD" "$PRD_AUTOFIX_ARGS"
+    if ! ./plans/prd_schema_check.sh "$PRD_FILE"; then
+      write_blocked "SCHEMA_FAIL" "PRD schema check failed after autofix on pass $i."
+      echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
+      echo "ERROR: PRD schema check failed after autofix on pass $i." >&2
+      exit 4
+    fi
+    if ./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"; then
+      pass=1
+      break
+    fi
+  fi
+
+  if [[ -z "$PRD_CUTTER_CMD" ]]; then
+    write_blocked "LINT_FAIL" "PRD lint failing and PRD_CUTTER_CMD not set after pass $i."
+    echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
+    echo "ERROR: PRD lint failing and PRD_CUTTER_CMD not set after pass $i." >&2
+    exit 5
+  fi
+
+  # Cutter is expected to read PRD_LINT_JSON and fix PRD when present.
+  pre_hash="$(sha256_file "$PRD_FILE")"
+  run_cmd PRD_CUTTER "$PRD_CUTTER_CMD" "$PRD_CUTTER_ARGS"
+  post_hash="$(sha256_file "$PRD_FILE")"
+  if [[ -n "$pre_hash" && "$pre_hash" == "$post_hash" ]]; then
+    write_blocked "NO_PROGRESS" "PRD_CUTTER produced no changes on pass $i; see lint at $PRD_LINT_JSON."
+    echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
+    echo "ERROR: PRD_CUTTER produced no changes on pass $i; see lint at $PRD_LINT_JSON." >&2
+    exit 6
+  fi
+  if ! ./plans/prd_schema_check.sh "$PRD_FILE"; then
+    write_blocked "SCHEMA_FAIL" "PRD schema check failed after cutter on pass $i."
+    echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
+    echo "ERROR: PRD schema check failed after cutter on pass $i." >&2
+    exit 4
+  fi
+  if ./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"; then
+    pass=1
+    break
+  fi
+
   echo "Lint errors detected. Continuing repair loop..." >&2
   sleep 0.2
 done

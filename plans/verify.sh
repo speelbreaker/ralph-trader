@@ -191,6 +191,8 @@ RUST_TEST_TIMEOUT="${RUST_TEST_TIMEOUT:-20m}"
 PYTEST_TIMEOUT="${PYTEST_TIMEOUT:-10m}"
 RUFF_TIMEOUT="${RUFF_TIMEOUT:-5m}"
 MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
+CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
+CONTRACT_COVERAGE_CI_SENTINEL="${CONTRACT_COVERAGE_CI_SENTINEL:-plans/contract_coverage_ci_strict}"
 
 has_playwright_config() {
   [[ -f playwright.config.ts || -f playwright.config.js || -f playwright.config.mjs || -f playwright.config.cjs ]]
@@ -271,6 +273,33 @@ if [[ -f package.json ]]; then
       warn "No JS lockfile found (expected pnpm-lock.yaml or package-lock.json or yarn.lock)"
     fi
   fi
+fi
+
+# Default to strict coverage locally; enable in CI only after promotion.
+if [[ -z "${CONTRACT_COVERAGE_STRICT:-}" ]]; then
+  if is_ci; then
+    if [[ -f "$CONTRACT_COVERAGE_CI_SENTINEL" ]]; then
+      CONTRACT_COVERAGE_STRICT=1
+    else
+      CONTRACT_COVERAGE_STRICT=0
+    fi
+  else
+    CONTRACT_COVERAGE_STRICT=1
+  fi
+fi
+export CONTRACT_COVERAGE_STRICT
+
+# -----------------------------------------------------------------------------
+# 0b) Contract coverage matrix
+# -----------------------------------------------------------------------------
+log "0b) Contract coverage matrix"
+if [[ ! -f "plans/contract_coverage_matrix.py" ]]; then
+  fail "Missing contract coverage script: plans/contract_coverage_matrix.py"
+fi
+ensure_python
+run_logged "contract_coverage" "$CONTRACT_COVERAGE_TIMEOUT" "$PYTHON_BIN" "plans/contract_coverage_matrix.py"
+if [[ -z "${CI:-}" && "$CONTRACT_COVERAGE_STRICT" == "1" && ! -f "$CONTRACT_COVERAGE_CI_SENTINEL" ]]; then
+  warn "Contract coverage strict passed locally. Run ./plans/contract_coverage_promote.sh to enable strict coverage in CI."
 fi
 
 # -----------------------------------------------------------------------------

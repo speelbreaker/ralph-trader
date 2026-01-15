@@ -109,6 +109,15 @@ if [[ -z "$repo_root" ]]; then
   finish
 fi
 
+core_has_src=0
+infra_has_src=0
+if [[ -d "$repo_root/crates/soldier_core/src" ]]; then
+  core_has_src=1
+fi
+if [[ -d "$repo_root/crates/soldier_infra/src" ]]; then
+  infra_has_src=1
+fi
+
 # Duplicate ID check (ignore missing/empty ids here).
 if command -v sort >/dev/null 2>&1; then
   dup_ids=$(jq -r '.items[] | .id // empty' "$prd_file" | sort | uniq -d)
@@ -191,6 +200,32 @@ print(count)
 PY
 }
 
+check_path_convention() {
+  local item_id="$1"
+  local raw_path="$2"
+  local path="${raw_path#./}"
+
+  if (( core_has_src == 1 )); then
+    if [[ "$path" == crates/soldier_core/* && "$path" != crates/soldier_core/src/* ]]; then
+      case "$path" in
+        crates/soldier_core/execution*|crates/soldier_core/idempotency*|crates/soldier_core/recovery*|crates/soldier_core/venue*|crates/soldier_core/risk*|crates/soldier_core/strategy*)
+          report_warn PATH_CONVENTION "$item_id" "path '$raw_path' should be under crates/soldier_core/src/"
+          ;;
+      esac
+    fi
+  fi
+
+  if (( infra_has_src == 1 )); then
+    if [[ "$path" == crates/soldier_infra/* && "$path" != crates/soldier_infra/src/* ]]; then
+      case "$path" in
+        crates/soldier_infra/deribit*|crates/soldier_infra/store*)
+          report_warn PATH_CONVENTION "$item_id" "path '$raw_path' should be under crates/soldier_infra/src/"
+          ;;
+      esac
+    fi
+  fi
+}
+
 check_required() {
   local filter="$1"
   local field="$2"
@@ -270,6 +305,7 @@ while IFS= read -r entry; do
   if printf '%s' "$item_json" | jq -e '.scope.touch | type == "array"' >/dev/null 2>&1; then
     while IFS= read -r touch; do
       [[ -z "$touch" ]] && continue
+      check_path_convention "$item_id" "$touch"
 
       if [[ "$touch" == *".DS_Store"* ]]; then
         report_warn JUNK_PATH "$item_id" "scope.touch contains .DS_Store"
@@ -302,8 +338,16 @@ while IFS= read -r entry; do
     done <<< "$(printf '%s' "$item_json" | jq -r '.scope.touch[]')"
   fi
 
+  if printf '%s' "$item_json" | jq -e '.scope.avoid | type == "array"' >/dev/null 2>&1; then
+    while IFS= read -r avoid; do
+      [[ -z "$avoid" ]] && continue
+      check_path_convention "$item_id" "$avoid"
+    done <<< "$(printf '%s' "$item_json" | jq -r '.scope.avoid[]')"
+  fi
+
   if (( ${#create_paths[@]} > 0 )); then
     for create_path in "${create_paths[@]}"; do
+      check_path_convention "$item_id" "$create_path"
       if has_glob_chars "$create_path"; then
         report_error CREATE_PATH_GLOB "$item_id" "scope.create path contains glob characters: $create_path"
         continue
