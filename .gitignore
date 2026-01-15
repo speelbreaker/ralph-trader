@@ -2,6 +2,7 @@
 target/
 plans/logs/
 plans/progress_archive.txt
+artifacts/verify/
 .DS_Store
 
 # Local Codex config
