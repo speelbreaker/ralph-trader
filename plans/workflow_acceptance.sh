@@ -157,6 +157,62 @@ for script in "${scripts_to_chmod[@]}"; do
 done
 run_in_worktree git update-index --skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
 
+echo "Test 0f: prd_pipeline logs skipped ref check"
+run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/prd_pipeline_skip"
+  mkdir -p "$tmpdir"
+  prd="$tmpdir/prd.json"
+  cat > "$prd" <<'"'"'JSON'"'"'
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-030",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Story 1",
+      "category": "acceptance",
+      "description": "PRD pipeline skip ref check test",
+      "contract_refs": ["CONTRACT.md §1"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "scope": {
+        "touch": ["plans/verify.sh"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["log"],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+  progress="$tmpdir/progress.txt"
+  PRD_FILE="$prd" PROGRESS_FILE="$progress" PRD_CUTTER_CMD="/bin/true" PRD_AUDITOR_ENABLED=0 ./plans/prd_pipeline.sh >/dev/null 2>&1
+  if ! grep -q "PRD ref check skipped" "$progress"; then
+    echo "FAIL: expected progress log to note skipped prd_ref_check" >&2
+    exit 1
+  fi
+'
+
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
 if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
@@ -1359,6 +1415,12 @@ JSON
 cat > "$iter_dir/selected.json" <<'JSON'
 {"selected_id":"S1-008"}
 JSON
+run_in_worktree bash -c '
+  set -euo pipefail
+  echo "acceptance seed $(date +%s)" > acceptance_contract_check.txt
+  git add acceptance_contract_check.txt
+  git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: contract_check seed" >/dev/null 2>&1
+'
 run_in_worktree git rev-parse HEAD~1 > "$iter_dir/head_before.txt"
 run_in_worktree git rev-parse HEAD > "$iter_dir/head_after.txt"
 cp "$contract_test_root/prd.json" "$iter_dir/prd_before.json"
@@ -2266,9 +2328,9 @@ if ! run_in_worktree grep -q "MODE_ARG=promotion" "$iter_dir/verify_post.log"; t
   echo "FAIL: expected verify_post to use promotion mode on pass" >&2
   exit 1
 fi
-final_log="$(run_in_worktree bash -c 'ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1' || true)"
-if [[ -z "$final_log" ]]; then
-  echo "FAIL: expected final verify log for final verify mode test" >&2
+final_log="${iter_dir}/final_verify.log"
+if ! run_in_worktree test -f "$final_log"; then
+  echo "FAIL: expected final verify log in iteration directory for final verify mode test" >&2
   exit 1
 fi
 if ! run_in_worktree grep -q "MODE_ARG=promotion" "$final_log"; then
