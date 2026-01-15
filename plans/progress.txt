@@ -390,3 +390,9 @@ Summary: Added artifact manifest (.ralph/artifacts.json) with final verify log p
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
 Next: Consider wiring skipped_checks into the manifest when optional checks are skipped in ralph.
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Wired skipped_checks into artifact manifest (story_verify no-ops) and added contract_check_report_path alias; acceptance asserts both.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/ralph.sh; plans/workflow_acceptance.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Consider recording skipped checks for other optional gates (e.g., final verify disabled).
