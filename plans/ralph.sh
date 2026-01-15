@@ -64,6 +64,8 @@ case "$RPH_PROFILE" in
 esac
 
 RPH_VERIFY_MODE="${RPH_VERIFY_MODE:-${RPH_PROFILE_VERIFY_MODE:-full}}"     # quick|full|promotion (your choice)
+RPH_PROMOTION_VERIFY_MODE="${RPH_PROMOTION_VERIFY_MODE:-full}"             # full|promotion
+RPH_FINAL_VERIFY_MODE="${RPH_FINAL_VERIFY_MODE:-full}"                     # quick|full|promotion
 RPH_SELF_HEAL="${RPH_SELF_HEAL:-${RPH_PROFILE_SELF_HEAL:-0}}"            # 0|1
 RPH_DRY_RUN="${RPH_DRY_RUN:-0}"                # 0|1
 RPH_SELECTION_MODE="${RPH_SELECTION_MODE:-harness}"  # harness|agent
@@ -115,6 +117,10 @@ RPH_ALLOW_UNSAFE_STORY_VERIFY="${RPH_ALLOW_UNSAFE_STORY_VERIFY:-0}"  # 0|1
 RPH_MARK_PASS_OPEN="${RPH_MARK_PASS_OPEN:-<mark_pass>}"
 RPH_MARK_PASS_CLOSE="${RPH_MARK_PASS_CLOSE:-</mark_pass>}"
 RPH_FINAL_VERIFY="${RPH_FINAL_VERIFY:-1}"  # 0|1
+RPH_VERIFY_PASS_TAIL="${RPH_VERIFY_PASS_TAIL:-20}"
+RPH_VERIFY_FAIL_TAIL="${RPH_VERIFY_FAIL_TAIL:-200}"
+RPH_VERIFY_SUMMARY_MAX="${RPH_VERIFY_SUMMARY_MAX:-200}"
+RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nplans/logs/*\nartifacts/*\n.ralph/*'}"
 
 # Parse RPH_AGENT_ARGS (space-delimited) into an array (global IFS excludes spaces).
 RPH_AGENT_ARGS_ARR=()
@@ -134,6 +140,7 @@ RPH_MAX_SAME_FAILURE="${RPH_MAX_SAME_FAILURE:-3}"
 RPH_MAX_NO_PROGRESS="${RPH_MAX_NO_PROGRESS:-2}"
 RPH_STATE_FILE="${RPH_STATE_FILE:-.ralph/state.json}"
 RPH_LOCK_DIR="${RPH_LOCK_DIR:-.ralph/lock}"
+RPH_LOCK_TTL_SECS="${RPH_LOCK_TTL_SECS:-14400}"
 
 mkdir -p .ralph
 mkdir -p plans/logs
@@ -259,12 +266,85 @@ PY
   return $?
 }
 
+lock_info_field() {
+  local field="$1"
+  local file="$LOCK_INFO_FILE"
+  [[ -f "$file" ]] || return 0
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$file" "$field" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+key = sys.argv[2]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    val = data.get(key, "")
+    if isinstance(val, (dict, list)):
+        sys.exit(0)
+    print(val)
+except Exception:
+    pass
+PY
+    return 0
+  fi
+  sed -n "s/.*\"${field}\"[[:space:]]*:[[:space:]]*\"\\{0,1\\}\\([^\",}]*\\)\"\\{0,1\\}.*/\\1/p" "$file" | head -n 1
+}
+
+lock_dir_mtime() {
+  if stat -f '%m' "$LOCK_DIR" >/dev/null 2>&1; then
+    stat -f '%m' "$LOCK_DIR"
+    return 0
+  fi
+  stat -c '%Y' "$LOCK_DIR" 2>/dev/null || true
+}
+
+lock_age_seconds() {
+  local now
+  local epoch
+  local started_at
+  local mtime
+  now="$(date +%s)"
+  epoch="$(lock_info_field "started_at_epoch")"
+  if [[ "$epoch" =~ ^[0-9]+$ ]]; then
+    echo $((now - epoch))
+    return 0
+  fi
+  started_at="$(lock_info_field "started_at")"
+  if [[ -n "$started_at" && -n "$(command -v python3 || true)" ]]; then
+    python3 - "$started_at" "$now" <<'PY'
+import datetime
+import sys
+
+raw = sys.argv[1]
+now = int(sys.argv[2])
+try:
+    dt = datetime.datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ")
+    epoch = int(dt.replace(tzinfo=datetime.timezone.utc).timestamp())
+    print(max(0, now - epoch))
+except Exception:
+    pass
+PY
+    return 0
+  fi
+  mtime="$(lock_dir_mtime)"
+  if [[ "$mtime" =~ ^[0-9]+$ ]]; then
+    echo $((now - mtime))
+    return 0
+  fi
+  echo ""
+}
+
 write_lock_info() {
   local now
+  local now_epoch
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf '{"pid":%s,"started_at":"%s","cwd":"%s","cmd":"%s"}\n' \
+  now_epoch="$(date +%s)"
+  printf '{"pid":%s,"started_at":"%s","started_at_epoch":%s,"cwd":"%s","cmd":"%s"}\n' \
     "$$" \
     "$(json_escape "$now")" \
+    "$now_epoch" \
     "$(json_escape "$PWD")" \
     "$(json_escape "$0")" \
     > "$LOCK_INFO_FILE" || true
@@ -275,6 +355,29 @@ acquire_lock() {
     LOCK_ACQUIRED=1
     write_lock_info
     return 0
+  fi
+  local pid
+  local age
+  local ttl
+  pid="$(lock_info_field "pid")"
+  age="$(lock_age_seconds)"
+  ttl="$RPH_LOCK_TTL_SECS"
+  if ! [[ "$ttl" =~ ^[0-9]+$ ]]; then
+    ttl=14400
+  fi
+  if [[ -n "$pid" ]]; then
+    if kill -0 "$pid" 2>/dev/null; then
+      return 1
+    fi
+  fi
+  if [[ -n "$age" && "$age" -gt "$ttl" ]]; then
+    echo "WARN: clearing stale lock (age=${age}s ttl=${ttl}s pid=${pid:-unknown})" | tee -a "$LOG_FILE"
+    rm -rf "$LOCK_DIR" || true
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      LOCK_ACQUIRED=1
+      write_lock_info
+      return 0
+    fi
   fi
   return 1
 }
@@ -312,10 +415,47 @@ write_blocked_basic() {
 run_verify() {
   local out="$1"
   shift
+  local mode="$RPH_VERIFY_MODE"
+  if [[ "${1:-}" == "quick" || "${1:-}" == "full" || "${1:-}" == "promotion" ]]; then
+    mode="$1"
+    shift
+  fi
+  local pass_tail="$RPH_VERIFY_PASS_TAIL"
+  local fail_tail="$RPH_VERIFY_FAIL_TAIL"
+  local summary_max="$RPH_VERIFY_SUMMARY_MAX"
+  if ! [[ "$pass_tail" =~ ^[0-9]+$ ]]; then pass_tail=20; fi
+  if ! [[ "$fail_tail" =~ ^[0-9]+$ ]]; then fail_tail=200; fi
+  if ! [[ "$summary_max" =~ ^[0-9]+$ ]]; then summary_max=200; fi
+  local out_dir
+  local summary_file
+  out_dir="$(dirname "$out")"
+  summary_file="${out_dir}/verify_summary.txt"
+  local cmd=( "$VERIFY_SH" "$mode" "$@" )
+  echo "verify command: ${cmd[*]}"
   set +e
-  timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$VERIFY_SH" "$RPH_VERIFY_MODE" "$@" 2>&1 | tee "$out"
-  local rc=${PIPESTATUS[0]}
+  timeout_cmd "$RPH_ITER_TIMEOUT_SECS" "$VERIFY_SH" "$mode" "$@" >"$out" 2>&1
+  local rc=$?
   set -e
+  : > "$summary_file"
+  if [[ -s "$out" ]]; then
+    if command -v rg >/dev/null 2>&1; then
+      rg -n -i -e 'error:|failed|panicked' "$out" | head -n "$summary_max" > "$summary_file" || true
+    else
+      grep -nE -i 'error:|failed|panicked' "$out" | head -n "$summary_max" > "$summary_file" || true
+    fi
+  fi
+  if (( rc == 0 )); then
+    tail -n "$pass_tail" "$out" || true
+  else
+    if [[ -s "$summary_file" ]]; then
+      echo "verify summary (first ${summary_max} lines):" >&2
+      cat "$summary_file" >&2
+    else
+      echo "verify summary: (no matches)" >&2
+    fi
+    echo "verify failed (showing last ${fail_tail} lines):" >&2
+    tail -n "$fail_tail" "$out" >&2 || true
+  fi
   return $rc
 }
 
@@ -350,6 +490,17 @@ trap release_lock EXIT INT TERM
 # --- preflight ---
 command -v git >/dev/null 2>&1 || block_preflight "missing_git" "git required"
 command -v jq  >/dev/null 2>&1 || block_preflight "missing_jq" "jq required"
+git_email="$(git config --get user.email 2>/dev/null || true)"
+git_name="$(git config --get user.name 2>/dev/null || true)"
+if [[ -z "$git_email" ]]; then
+  git config user.email "ralph@local"
+fi
+if [[ -z "$git_name" ]]; then
+  git config user.name "ralph"
+fi
+if ! command -v timeout >/dev/null 2>&1 && ! command -v gtimeout >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
+  block_preflight "missing_timeout_or_python3" "timeout/gtimeout or python3 required for iteration timeouts"
+fi
 if [[ -n "$RPH_CHEAT_ALLOWLIST" && "$RPH_ALLOW_CHEAT_ALLOWLIST" != "1" ]]; then
   block_preflight "cheat_allowlist_requires_opt_in" "RPH_CHEAT_ALLOWLIST set but RPH_ALLOW_CHEAT_ALLOWLIST!=1"
 fi
@@ -566,6 +717,11 @@ write_blocked_artifacts() {
   cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true
   if [[ -n "${VERIFY_PRE_LOG_PATH:-}" && -f "$VERIFY_PRE_LOG_PATH" ]]; then
     cp "$VERIFY_PRE_LOG_PATH" "$block_dir/verify_pre.log" || true
+    local pre_summary
+    pre_summary="$(dirname "$VERIFY_PRE_LOG_PATH")/verify_summary.txt"
+    if [[ -f "$pre_summary" ]]; then
+      cp "$pre_summary" "$block_dir/verify_summary.txt" || true
+    fi
   fi
   jq -n \
     --arg reason "$reason" \
@@ -641,8 +797,12 @@ run_final_verify() {
   if [[ "$RPH_FINAL_VERIFY" != "1" || "$RPH_DRY_RUN" == "1" ]]; then
     return 0
   fi
+  local mode="$RPH_FINAL_VERIFY_MODE"
+  if [[ "$mode" != "quick" && "$mode" != "full" && "$mode" != "promotion" ]]; then
+    mode="full"
+  fi
   local log=".ralph/final_verify_$(date +%Y%m%d-%H%M%S).log"
-  if ! run_verify "$log"; then
+  if ! run_verify "$log" "$mode"; then
     local block_dir
     block_dir="$(write_blocked_basic "final_verify_failed" "Final verify failed (see $log)" "blocked_final_verify")"
     echo "<promise>BLOCKED_FINAL_VERIFY_FAILED</promise>" | tee -a "$LOG_FILE"
@@ -917,6 +1077,45 @@ scope_gate() {
     return 1
   fi
   return 0
+}
+
+pass_touch_gate() {
+  local head_before="$1"
+  local head_after="$2"
+  local item_json="$3"
+  local touch_patterns
+  local meta_patterns
+  local changed_files
+  local has_touch=0
+  local has_non_meta=0
+
+  touch_patterns="$(jq -r '.scope.touch[]?' <<<"$item_json")"
+  meta_patterns="${RPH_PASS_META_PATTERNS:-}"
+  changed_files="$(git diff --name-only "$head_before" "$head_after")"
+
+  if [[ -z "$changed_files" ]]; then
+    echo "no_changes"
+    return 1
+  fi
+
+  local file
+  while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    if [[ -n "$touch_patterns" ]] && matches_patterns "$file" "$touch_patterns"; then
+      has_touch=1
+    fi
+    if [[ -n "$meta_patterns" ]] && matches_patterns "$file" "$meta_patterns"; then
+      :
+    else
+      has_non_meta=1
+    fi
+  done <<<"$changed_files"
+
+  if (( has_touch == 1 || has_non_meta == 1 )); then
+    return 0
+  fi
+  echo "only_meta_changes"
+  return 1
 }
 
 progress_gate() {
@@ -1490,7 +1689,7 @@ PROMPT
   if [[ -f "$LAST_FAIL_FILE" ]]; then
     LAST_FAIL_PATH="$(cat "$LAST_FAIL_FILE" || true)"
     if [[ -n "$LAST_FAIL_PATH" && -d "$LAST_FAIL_PATH" ]]; then
-      LAST_FAIL_NOTE=$'\n'"Last iteration failed. Read these files FIRST:"$'\n'"- ${LAST_FAIL_PATH}/verify_post.log"$'\n'"- ${LAST_FAIL_PATH}/agent.out"$'\n'"Then fix baseline back to green before attempting new work."$'\n'
+      LAST_FAIL_NOTE=$'\n'"Last iteration failed. Read these files FIRST:"$'\n'"- ${LAST_FAIL_PATH}/verify_summary.txt"$'\n'"- ${LAST_FAIL_PATH}/verify_post.log"$'\n'"- ${LAST_FAIL_PATH}/agent.out"$'\n'"Then fix baseline back to green before attempting new work."$'\n'
     fi
   fi
 
@@ -1508,6 +1707,9 @@ NON-NEGOTIABLE RULES:
 - Do NOT edit PRD directly unless explicitly allowed (RPH_ALLOW_AGENT_PRD_EDIT=1).
 - To mark a story pass, print exactly: ${RPH_MARK_PASS_OPEN}${NEXT_ID}${RPH_MARK_PASS_CLOSE}
 - Append to progress.txt (do not rewrite it).
+
+OUTPUT DISCIPLINE:
+- Do not paste full verify output into chat. Use verify_summary.txt and the tail of verify_pre.log/verify_post.log.
 
 Selected story ID (ONLY): ${NEXT_ID}
 You MUST implement ONLY this PRD item: ${NEXT_ID} — ${NEXT_DESC}
@@ -1698,9 +1900,31 @@ PROMPT
     fi
   fi
 
+  if [[ -n "$MARK_PASS_ID" ]]; then
+    pass_touch_issue=""
+    if ! pass_touch_issue="$(pass_touch_gate "$HEAD_BEFORE" "$HEAD_AFTER" "$NEXT_ITEM_JSON")"; then
+      echo "ERROR: mark_pass requires a non-meta change or scope.touch match (${pass_touch_issue})" | tee -a "$LOG_FILE"
+      save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
+      BLOCK_DIR="$(write_blocked_with_state "pass_flip_no_touch" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
+      echo "<promise>BLOCKED_PASS_FLIP_NO_TOUCH</promise>" | tee -a "$LOG_FILE"
+      echo "Blocked: pass flip without meaningful change in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      exit 1
+    fi
+  fi
+
   # 4) Post-verify
+  VERIFY_POST_MODE="$RPH_VERIFY_MODE"
+  if [[ -n "$MARK_PASS_ID" ]]; then
+    VERIFY_POST_MODE="$RPH_PROMOTION_VERIFY_MODE"
+  fi
+  if [[ "$VERIFY_POST_MODE" != "quick" && "$VERIFY_POST_MODE" != "full" && "$VERIFY_POST_MODE" != "promotion" ]]; then
+    VERIFY_POST_MODE="full"
+  fi
+  if [[ -n "$MARK_PASS_ID" && "$VERIFY_POST_MODE" == "quick" ]]; then
+    VERIFY_POST_MODE="full"
+  fi
   verify_post_rc=0
-  if run_verify "${ITER_DIR}/verify_post.log"; then
+  if run_verify "${ITER_DIR}/verify_post.log" "$VERIFY_POST_MODE"; then
     verify_post_rc=0
   else
     verify_post_rc=$?
@@ -1732,8 +1956,9 @@ PROMPT
     --arg verify_post_log "${ITER_DIR}/verify_post.log" \
     --arg verify_post_head "$VERIFY_POST_HEAD" \
     --arg verify_post_log_sha256 "$VERIFY_POST_LOG_SHA" \
+    --arg verify_post_mode "$VERIFY_POST_MODE" \
     --argjson verify_post_ts "$VERIFY_POST_TS" \
-    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log | .last_verify_post_head=$verify_post_head | .last_verify_post_log_sha256=$verify_post_log_sha256 | .last_verify_post_ts=$verify_post_ts'
+    '.last_verify_post_rc=$last_verify_post_rc | .last_verify_post_log=$verify_post_log | .last_verify_post_head=$verify_post_head | .last_verify_post_log_sha256=$verify_post_log_sha256 | .last_verify_post_mode=$verify_post_mode | .last_verify_post_ts=$verify_post_ts'
 
   POST_VERIFY_FAILED=0
   POST_VERIFY_EXIT=0

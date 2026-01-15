@@ -75,6 +75,7 @@ copy_worktree_file() {
 OVERLAY_FILES=(
   "plans/ralph.sh"
   "plans/verify.sh"
+  "plans/update_task.sh"
   "plans/prd.json"
   "plans/prd_schema_check.sh"
   "plans/prd_lint.sh"
@@ -118,6 +119,7 @@ done
 scripts_to_chmod=(
   "ralph.sh"
   "verify.sh"
+  "update_task.sh"
   "prd_schema_check.sh"
   "prd_lint.sh"
   "run_prd_auditor.sh"
@@ -218,6 +220,10 @@ if ! grep -q "Evidence:" "$WORKTREE/plans/ralph.sh"; then
 fi
 if ! grep -q "Next:" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must require Next in progress entries" >&2
+  exit 1
+fi
+if ! grep -q "Do not paste full verify output into chat." "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must include verify output discipline guidance" >&2
   exit 1
 fi
 if ! grep -qi "command logs short" "$WORKTREE/plans/ralph.sh"; then
@@ -460,6 +466,16 @@ exit 0
 EOF
 chmod +x "$STUB_DIR/verify_pass.sh"
 
+cat > "$STUB_DIR/verify_record_mode.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+mode="${1:-}"
+echo "VERIFY_SH_SHA=stub"
+echo "VERIFY_MODE_ARG=${mode}"
+exit 0
+EOF
+chmod +x "$STUB_DIR/verify_record_mode.sh"
+
 cat > "$STUB_DIR/verify_fail.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -467,6 +483,32 @@ echo "VERIFY_SH_SHA=stub"
 exit 1
 EOF
 chmod +x "$STUB_DIR/verify_fail.sh"
+
+cat > "$STUB_DIR/verify_fail_noisy.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "VERIFY_SH_SHA=stub"
+i=1
+while [[ "$i" -le 300 ]]; do
+  echo "line $i"
+  i=$((i + 1))
+done
+echo "error: noisy failure"
+echo "FAILED noisy_test"
+echo "thread 'main' panicked at noisy failure"
+exit 1
+EOF
+chmod +x "$STUB_DIR/verify_fail_noisy.sh"
+
+cat > "$STUB_DIR/verify_pass_mode.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+mode="${1:-}"
+echo "VERIFY_SH_SHA=stub"
+echo "MODE_ARG=${mode}"
+exit 0
+EOF
+chmod +x "$STUB_DIR/verify_pass_mode.sh"
 
 cat > "$STUB_DIR/agent_mark_pass.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -492,6 +534,51 @@ EOT
 echo "<mark_pass>${id}</mark_pass>"
 EOF
 chmod +x "$STUB_DIR/agent_mark_pass_with_progress.sh"
+
+cat > "$STUB_DIR/agent_mark_pass_with_commit.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-src/lib.rs}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mark pass with commit
+Commands: echo >> ${touch_file}; git add; git commit
+Evidence: acceptance stub
+Next: proceed
+EOT
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file"
+else
+  git add "$touch_file" "$progress"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: touch" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_mark_pass_with_commit.sh"
+
+cat > "$STUB_DIR/agent_mark_pass_meta_only.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mark pass meta only
+Commands: append progress only
+Evidence: acceptance stub
+Next: proceed
+EOT
+git add "$progress"
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: progress only" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_mark_pass_meta_only.sh"
 
 cat > "$STUB_DIR/agent_commit_with_progress.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -1170,7 +1257,7 @@ run_ralph env \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
   VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test2" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-001" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1211,6 +1298,117 @@ fi
 iter_model="$(run_in_worktree cat "$iter_dir/agent_model.txt" 2>/dev/null || true)"
 if [[ -z "$iter_model" ]]; then
   echo "FAIL: agent_model.txt is empty" >&2
+  exit 1
+fi
+
+echo "Test 2b: mark_pass without meaningful change is blocked"
+reset_state
+valid_prd_2b="$WORKTREE/.ralph/valid_prd_2b.json"
+write_valid_prd "$valid_prd_2b" "S1-001"
+before_blocked="$(count_blocked)"
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_2b" \
+  PROGRESS_FILE="$WORKTREE/plans/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_meta_only.sh" \
+  SELECTED_ID="S1-001" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for mark_pass without meaningful change" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for pass_flip_no_touch" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "pass_flip_no_touch")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected pass_flip_no_touch blocked artifact" >&2
+  exit 1
+fi
+
+echo "Test 2c: mark_pass promotes verify mode"
+reset_state
+valid_prd_2c="$WORKTREE/.ralph/valid_prd_2c.json"
+write_valid_prd "$valid_prd_2c" "S1-002"
+set +e
+test2c_log="$WORKTREE/.ralph/test2c.log"
+run_in_worktree env \
+  PRD_FILE="$valid_prd_2c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_record_mode.sh" \
+  RPH_VERIFY_MODE=quick \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-002" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >"$test2c_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for verify promotion test" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test2c_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+verify_post_log="$WORKTREE/$iter_dir/verify_post.log"
+if [[ ! -f "$verify_post_log" ]]; then
+  echo "FAIL: expected verify_post.log for promotion test" >&2
+  exit 1
+fi
+if ! grep -q "VERIFY_MODE_ARG=full" "$verify_post_log"; then
+  echo "FAIL: expected verify_post to run in full mode for mark_pass" >&2
+  echo "verify_post.log:" >&2
+  tail -n 20 "$verify_post_log" >&2 || true
+  exit 1
+fi
+
+echo "Test 2d: update_task requires full verify mode"
+reset_state
+valid_prd_2d="$WORKTREE/.ralph/valid_prd_2d.json"
+write_valid_prd "$valid_prd_2d" "S1-003"
+state_dir="$WORKTREE/.ralph"
+mkdir -p "$state_dir"
+state_file="$state_dir/state.json"
+verify_log_path="$state_dir/verify_post_stub.log"
+echo "VERIFY_SH_SHA=stub" > "$verify_log_path"
+verify_log_sha="$(run_in_worktree sh -c 'sha256sum .ralph/verify_post_stub.log 2>/dev/null | cut -d " " -f1' || true)"
+if [[ -z "$verify_log_sha" ]]; then
+  verify_log_sha="$(run_in_worktree sh -c 'shasum -a 256 .ralph/verify_post_stub.log | cut -d " " -f1' || true)"
+fi
+current_head="$(run_in_worktree git rev-parse HEAD)"
+cat > "$state_file" <<JSON
+{
+  "selected_id": "S1-003",
+  "last_verify_post_rc": 0,
+  "last_verify_post_head": "${current_head}",
+  "last_verify_post_log": ".ralph/verify_post_stub.log",
+  "last_verify_post_log_sha256": "${verify_log_sha}",
+  "last_verify_post_mode": "quick"
+}
+JSON
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_2d" \
+  RPH_UPDATE_TASK_OK=1 \
+  ./plans/update_task.sh "S1-003" true >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected update_task to reject non-full verify mode" >&2
   exit 1
 fi
 
@@ -1388,20 +1586,118 @@ if [[ "$reason" != "lock_held" ]]; then
   exit 1
 fi
 
-echo "Test 5b: contract review sees iteration artifacts"
+echo "Test 5a: stale lock auto-clears"
 reset_state
-valid_prd_5b="$WORKTREE/plans/prd_iter_artifacts.json"
+valid_prd_5a="$WORKTREE/.ralph/valid_prd_5a.json"
+write_valid_prd "$valid_prd_5a" "S1-004"
+mkdir -p "$WORKTREE/.ralph/lock"
+old_ts="$(( $(date +%s) - 10 ))"
+cat > "$WORKTREE/.ralph/lock/lock.json" <<JSON
+{"pid":999999,"started_at":"2000-01-01T00:00:00Z","started_at_epoch":${old_ts}}
+JSON
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_5a" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_LOCK_TTL_SECS=1 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected stale lock to be cleared" >&2
+  exit 1
+fi
+if [[ -d "$WORKTREE/.ralph/lock" ]]; then
+  echo "FAIL: expected lock directory to be released after stale lock test" >&2
+  exit 1
+fi
+
+echo "Test 5b: git identity is set when missing"
+reset_state
+valid_prd_5b="$WORKTREE/.ralph/valid_prd_5b.json"
 write_valid_prd "$valid_prd_5b" "S1-004"
-run_in_worktree git add "$valid_prd_5b" >/dev/null 2>&1
+run_in_worktree git config --local --unset-all user.email >/dev/null 2>&1 || true
+run_in_worktree git config --local --unset-all user.name >/dev/null 2>&1 || true
+set +e
+run_in_worktree env \
+  PRD_FILE="$valid_prd_5b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  GIT_CONFIG_SYSTEM=/dev/null \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected preflight to set git identity" >&2
+  exit 1
+fi
+git_email="$(run_in_worktree git config --local --get user.email || true)"
+git_name="$(run_in_worktree git config --local --get user.name || true)"
+if [[ "$git_email" != "ralph@local" || "$git_name" != "ralph" ]]; then
+  echo "FAIL: expected git identity to be set locally (got name=${git_name} email=${git_email})" >&2
+  exit 1
+fi
+
+echo "Test 5c: preflight blocks without timeout or python3"
+reset_state
+valid_prd_5c="$WORKTREE/.ralph/valid_prd_5c.json"
+write_valid_prd "$valid_prd_5c" "S1-004"
+no_timeout_bin="$WORKTREE/.ralph/no_timeout_bin"
+rm -rf "$no_timeout_bin"
+mkdir -p "$no_timeout_bin"
+for cmd in bash git jq date dirname mkdir tee cp sed awk head tail sort tr stat; do
+  cmd_path="$(command -v "$cmd" || true)"
+  if [[ -z "$cmd_path" ]]; then
+    echo "FAIL: required command missing for test setup: $cmd" >&2
+    exit 1
+  fi
+  ln -s "$cmd_path" "$no_timeout_bin/$cmd"
+done
+before_blocked="$(count_blocked)"
+set +e
+run_in_worktree env \
+  PATH="$no_timeout_bin" \
+  PRD_FILE="$valid_prd_5c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected preflight to block without timeout/python3" >&2
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -le "$before_blocked" ]]; then
+  echo "FAIL: expected blocked artifact for missing_timeout_or_python3" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "missing_timeout_or_python3")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected missing_timeout_or_python3 blocked artifact" >&2
+  exit 1
+fi
+
+echo "Test 5d: contract review sees iteration artifacts"
+reset_state
+valid_prd_5d="$WORKTREE/plans/prd_iter_artifacts.json"
+write_valid_prd "$valid_prd_5d" "S1-004"
+run_in_worktree git add "$valid_prd_5d" >/dev/null 2>&1
 run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: iter artifacts prd" >/dev/null 2>&1
 write_contract_check_stub_require_iter_artifacts
 set +e
 test5b_log="$WORKTREE/.ralph/test5b.log"
 run_ralph env \
-  PRD_FILE="$valid_prd_5b" \
+  PRD_FILE="$valid_prd_5d" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-004" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1451,7 +1747,7 @@ run_ralph env \
   PRD_FILE="$valid_prd_6" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-005" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1511,7 +1807,7 @@ run_ralph env \
   PRD_FILE="$valid_prd_7" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-006" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1543,7 +1839,7 @@ run_ralph env \
   PRD_FILE="$valid_prd_8" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-007" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1575,7 +1871,7 @@ run_ralph env \
   PRD_FILE="$valid_prd_9" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-008" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1620,7 +1916,7 @@ run_ralph env \
   PRD_FILE="$valid_prd_10" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-009" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
@@ -1662,6 +1958,64 @@ if [[ "$required_count" -lt 1 || "$missing_count" -ne 0 ]]; then
   echo "FAIL: expected evidence requirements satisfied for pass flip allow test" >&2
   exit 1
 fi
+
+echo "Test 10b: final verify uses RPH_FINAL_VERIFY_MODE"
+reset_state
+valid_prd_10b="$WORKTREE/.ralph/valid_prd_10b.json"
+write_valid_prd "$valid_prd_10b" "S1-020"
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10b_log="$WORKTREE/.ralph/test10b.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_10b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass_mode.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-020" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_VERIFY_MODE="quick" \
+  RPH_FINAL_VERIFY_MODE="promotion" \
+  RPH_PROMOTION_VERIFY_MODE="full" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10b_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for final verify mode test" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test10b_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir for final verify mode test" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "MODE_ARG=quick" "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected verify_pre to use quick mode" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "MODE_ARG=full" "$iter_dir/verify_post.log"; then
+  echo "FAIL: expected verify_post to use full mode on pass" >&2
+  exit 1
+fi
+final_log="$(run_in_worktree ls -t .ralph/final_verify_*.log 2>/dev/null | head -n 1)"
+if [[ -z "$final_log" ]]; then
+  echo "FAIL: expected final verify log for final verify mode test" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "MODE_ARG=promotion" "$final_log"; then
+  echo "FAIL: expected final verify to use promotion mode" >&2
+  exit 1
+fi
+write_contract_check_stub "PASS"
 
 
 echo "Test 11: contract_review_validate enforces schema file"
@@ -1773,6 +2127,64 @@ dirty_status="$(run_in_worktree git status --porcelain)"
 if [[ -n "$dirty_status" ]]; then
   echo "FAIL: expected clean worktree after verify_pre failure" >&2
   echo "$dirty_status" >&2
+  exit 1
+fi
+
+echo "Test 14b: verify output is tailed and summary created"
+reset_state
+valid_prd_14b="$WORKTREE/.ralph/valid_prd_14b.json"
+write_valid_prd "$valid_prd_14b" "S1-010"
+run_in_worktree mkdir -p .ralph
+verify_tail_log="$WORKTREE/.ralph/verify_tail_test.log"
+set +e
+run_ralph env \
+  PRD_FILE="$valid_prd_14b" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_fail_noisy.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  SELECTED_ID="S1-010" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  RPH_VERIFY_FAIL_TAIL=40 \
+  RPH_VERIFY_SUMMARY_MAX=5 \
+  ./plans/ralph.sh 1 > "$verify_tail_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for noisy verify_pre failure" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir for noisy verify_pre test" >&2
+  exit 1
+fi
+summary_path="$WORKTREE/$iter_dir/verify_summary.txt"
+if [[ ! -f "$summary_path" ]]; then
+  echo "FAIL: expected verify_summary.txt at $summary_path" >&2
+  exit 1
+fi
+if ! grep -q "error: noisy failure" "$summary_path"; then
+  echo "FAIL: expected noisy error line in verify_summary.txt" >&2
+  exit 1
+fi
+if ! grep -q "FAILED noisy_test" "$summary_path"; then
+  echo "FAIL: expected FAILED line in verify_summary.txt" >&2
+  exit 1
+fi
+if ! grep -q "panicked" "$summary_path"; then
+  echo "FAIL: expected panicked line in verify_summary.txt" >&2
+  exit 1
+fi
+if grep -q "line 1" "$verify_tail_log"; then
+  echo "FAIL: verify output should be tailed; found early lines in log" >&2
+  exit 1
+fi
+if ! grep -q "line 300" "$verify_tail_log"; then
+  echo "FAIL: expected tail of noisy output to include line 300" >&2
   exit 1
 fi
 
@@ -2120,7 +2532,7 @@ run_ralph env \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
   VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test19" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-015" \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_CIRCUIT_BREAKER_ENABLED=1 \

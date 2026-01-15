@@ -328,6 +328,16 @@ Baseline integrity (fail closed):
 - If verify_pre fails, Ralph MUST NOT run implementation steps.
 - If RPH_SELF_HEAL=1, Ralph MAY attempt a reset and rerun verify_pre once, but MUST stop if verify_pre remains red.
 
+Output discipline (token-safe):
+- Ralph MUST capture full verify output in verify_pre.log/verify_post.log.
+- Ralph MUST limit console output to a tail (pass/fail) plus a grep summary.
+- Ralph MUST write verify_summary.txt (grep error:/FAILED/panicked) alongside the verify log and use it for console output.
+- RPH_VERIFY_PASS_TAIL, RPH_VERIFY_FAIL_TAIL, and RPH_VERIFY_SUMMARY_MAX control the limits.
+Mode separation:
+- verify_pre/verify_post use RPH_VERIFY_MODE by default.
+- When a pass is requested, verify_post uses RPH_PROMOTION_VERIFY_MODE (default full).
+- Final verification uses RPH_FINAL_VERIFY_MODE (default full), independent of iteration mode.
+
 [WF-5.5.1] verify.sh MUST enforce the endpoint-level test gate: if endpoint-ish files change, corresponding tests must change, unless ENDPOINT_GATE=0 in a non-CI run.
 
 ### 5.6 Story verify requirement gate [WF-5.6]
