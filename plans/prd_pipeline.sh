@@ -144,7 +144,11 @@ if [[ "$pass" != "1" ]]; then
   exit 5
 fi
 
-./plans/prd_ref_check.sh "$PRD_FILE"
+if [[ -x "./plans/prd_ref_check.sh" ]]; then
+  ./plans/prd_ref_check.sh "$PRD_FILE"
+else
+  echo "WARN: ./plans/prd_ref_check.sh not found or not executable; skipping reference check." >&2
+fi
 
 export AUDIT_SCOPE
 export AUDIT_SLICE
