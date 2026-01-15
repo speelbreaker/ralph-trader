@@ -31,6 +31,9 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
+STUB_DIR="$WORKTREE/.ralph/stubs"
+mkdir -p "$STUB_DIR"
+
 snapshot_worktree_if_dirty() {
   run_in_worktree bash -c '
     if [[ -n "$(git status --porcelain)" ]]; then
@@ -206,7 +209,7 @@ run_in_worktree bash -c '
 }
 JSON
   progress="$tmpdir/progress.txt"
-  PRD_FILE="$prd" PROGRESS_FILE="$progress" PRD_CUTTER_CMD="/bin/true" PRD_AUDITOR_ENABLED=0 ./plans/prd_pipeline.sh >/dev/null 2>&1
+  PRD_FILE="$prd" PROGRESS_FILE="$progress" PRD_CUTTER_CMD="/bin/true" PRD_AUDITOR_ENABLED=0 PRD_REF_CHECK_ENABLED=0 ./plans/prd_pipeline.sh >/dev/null 2>&1
   if ! grep -q "PRD ref check skipped" "$progress"; then
     echo "FAIL: expected progress log to note skipped prd_ref_check" >&2
     exit 1
@@ -219,8 +222,8 @@ run_in_worktree bash -c '
   rm -f .ralph/artifacts.json
   set +e
   PRD_FILE=".ralph/missing_prd.json" \
-    VERIFY_SH="'"$STUB_DIR"'/verify_pass.sh" \
-    RPH_AGENT_CMD="'"$STUB_DIR"'/agent_mark_pass.sh" \
+    VERIFY_SH="/bin/true" \
+    RPH_AGENT_CMD="true" \
     RPH_RATE_LIMIT_ENABLED=0 \
     ./plans/ralph.sh 1 >/dev/null 2>&1
   rc=$?
@@ -235,17 +238,17 @@ run_in_worktree bash -c '
     exit 1
   fi
   ./plans/artifacts_validate.sh "$manifest" >/dev/null 2>&1
-  status="$(jq -r '.final_verify_status' "$manifest")"
+  status="$(jq -r ".final_verify_status" "$manifest")"
   if [[ "$status" != "BLOCKED" ]]; then
     echo "FAIL: expected manifest final_verify_status=BLOCKED on preflight block" >&2
     exit 1
   fi
-  blocked_reason="$(jq -r '.blocked_reason' "$manifest")"
+  blocked_reason="$(jq -r ".blocked_reason" "$manifest")"
   if [[ "$blocked_reason" != "missing_prd" ]]; then
     echo "FAIL: expected blocked_reason=missing_prd" >&2
     exit 1
   fi
-  run_id="$(jq -r '.run_id // empty' "$manifest")"
+  run_id="$(jq -r ".run_id // empty" "$manifest")"
   if [[ -z "$run_id" ]]; then
     echo "FAIL: expected run_id in manifest" >&2
     exit 1
@@ -663,9 +666,6 @@ write_invalid_prd() {
 JSON
 }
 
-STUB_DIR="$WORKTREE/.ralph/stubs"
-mkdir -p "$STUB_DIR"
-
 cat > "$STUB_DIR/verify_once_then_fail.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -794,7 +794,14 @@ cat > "$STUB_DIR/verify_fail_on_mode.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 mode="${1:-}"
+log_mode="$mode"
+verify_mode="${VERIFY_MODE:-none}"
+if [[ "$mode" == "promotion" ]]; then
+  log_mode="full"
+  verify_mode="promotion"
+fi
 echo "VERIFY_SH_SHA=stub"
+echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 echo "MODE_ARG=${mode}"
 if [[ "$mode" == "promotion" ]]; then
   exit 1
@@ -2379,6 +2386,7 @@ run_ralph env \
   SELECTED_ID="S1-020" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
+  VERIFY_MODE="promotion" \
   RPH_VERIFY_MODE="quick" \
   RPH_FINAL_VERIFY=1 \
   RPH_FINAL_VERIFY_MODE="promotion" \
@@ -2488,7 +2496,7 @@ run_ralph env \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_VERIFY_MODE="quick" \
-  RPH_PROMOTION_VERIFY_MODE="full" \
+  RPH_PROMOTION_VERIFY_MODE="promotion" \
   RPH_FINAL_VERIFY=0 \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
@@ -2589,6 +2597,7 @@ run_ralph env \
   SELECTED_ID="S1-022" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
+  VERIFY_MODE="promotion" \
   RPH_VERIFY_MODE="quick" \
   RPH_PROMOTION_VERIFY_MODE="full" \
   RPH_FINAL_VERIFY_MODE="promotion" \

@@ -223,7 +223,11 @@ if [[ "$pass" != "1" ]]; then
   exit 5
 fi
 
-if [[ -x "./plans/prd_ref_check.sh" ]]; then
+if [[ "${PRD_REF_CHECK_ENABLED:-1}" == "0" ]]; then
+  msg="PRD ref check skipped: PRD_REF_CHECK_ENABLED=0."
+  echo "WARN: $msg" >&2
+  append_progress_note "$msg" "./plans/prd_pipeline.sh" "Set PRD_REF_CHECK_ENABLED=1 to enforce reference checks."
+elif [[ -x "./plans/prd_ref_check.sh" ]]; then
   ./plans/prd_ref_check.sh "$PRD_FILE"
 else
   msg="PRD ref check skipped: ./plans/prd_ref_check.sh not found or not executable."

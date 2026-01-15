@@ -414,3 +414,4 @@ Summary: Fixed workflow_acceptance backtick parse issue and added verify.sh bash
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/workflow_acceptance.sh; plans/verify.sh; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
 Next: None.
+2026-01-15 - Workflow harness: preflight manifest now writes reliably; moved add_skipped_check/write_artifact_manifest earlier; prd_ref_check skip gate now honors PRD_REF_CHECK_ENABLED; acceptance coverage expanded for manifest failure paths and final verify failure; verify.sh full + workflow_acceptance.sh passed (with dirty tree warning in verify).
