@@ -212,6 +212,21 @@
       ]
     },
     {
+      "id": "WF-2.8",
+      "title": "Ralph MUST write .ralph/artifacts.json for every run and overwrite it per run (no stale manifests). Schema in docs/schemas/artifacts.schema.json.",
+      "enforcement": [
+        "plans/ralph.sh (artifact manifest)",
+        "plans/artifacts_validate.sh"
+      ],
+      "artifacts": [
+        ".ralph/artifacts.json",
+        "docs/schemas/artifacts.schema.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0g, Test 10d)"
+      ]
+    },
+    {
       "id": "WF-3.0",
       "title": "The PRD applies only to Ralph loop execution (implementation stories). Workflow maintenance tasks are not entered into PRD; they are handled via 11 Change Control.",
       "enforcement": [

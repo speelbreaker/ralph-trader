@@ -90,6 +90,7 @@ Observable gate requirement:
 - [WF-2.7] Promotion-grade verify is required to flip passes=true.
   - Ralph MUST capture verify_post mode + verify_mode in state from verify_post.log.
   - update_task.sh MUST reject passes=true unless verify_post shows mode=full and verify_mode=promotion.
+- [WF-2.8] Ralph MUST write `.ralph/artifacts.json` for every run (pass, fail, or blocked), and the manifest MUST be overwritten per run (no stale manifests). The schema is defined in `docs/schemas/artifacts.schema.json`.
 
 ---
 

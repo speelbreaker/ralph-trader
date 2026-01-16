@@ -4,6 +4,9 @@ use soldier_core::execution::{
 };
 use soldier_core::risk::RiskState;
 use soldier_core::venue::InstrumentKind;
+use std::sync::Mutex;
+
+static UNIT_MISMATCH_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn acceptance_option_and_perp_mapping() {
@@ -75,6 +78,7 @@ fn derives_contracts_when_missing_in_order_size() {
 
 #[test]
 fn validates_contracts_if_present() {
+    let _guard = UNIT_MISMATCH_LOCK.lock().expect("unit mismatch lock");
     let index_price = 50_000.0;
     // Linear Future: 1.5 Coin. Multiplier 1.0. Contracts should be 1. (1.5 rounds to 2).
     // Wait, round() is to nearest integer.
@@ -117,6 +121,7 @@ fn validates_contracts_if_present() {
 
 #[test]
 fn reject_zero_index_price_for_usd_instruments() {
+    let _guard = UNIT_MISMATCH_LOCK.lock().expect("unit mismatch lock");
     let perp = OrderSize::new(
         InstrumentKind::Perpetual,
         None,
@@ -131,6 +136,7 @@ fn reject_zero_index_price_for_usd_instruments() {
 
 #[test]
 fn rejects_contract_mismatch_and_increments_counter() {
+    let _guard = UNIT_MISMATCH_LOCK.lock().expect("unit mismatch lock");
     let index_price = 100_000.0;
     let option = OrderSize::new(
         InstrumentKind::Option,
