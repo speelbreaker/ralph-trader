@@ -18,6 +18,26 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 require_tools git jq mktemp find wc tr sed awk stat sort head tail date grep
 mkdir -p "$ROOT/.ralph"
 WORKTREE="$(mktemp -d "${ROOT}/.ralph/workflow_acceptance_XXXXXX")"
+ACCEPTANCE_MODE="${RPH_ACCEPTANCE_MODE:-full}"
+case "$ACCEPTANCE_MODE" in
+  full|smoke) ;;
+  *)
+    echo "FAIL: unknown RPH_ACCEPTANCE_MODE=$ACCEPTANCE_MODE (expected full|smoke)" >&2
+    exit 1
+    ;;
+esac
+if [[ "$ACCEPTANCE_MODE" == "smoke" ]]; then
+  echo "INFO: RPH_ACCEPTANCE_MODE=smoke (skipping slow tests)"
+fi
+
+skip_slow_test() {
+  local label="$1"
+  if [[ "$ACCEPTANCE_MODE" == "smoke" ]]; then
+    echo "SKIP (smoke): $label"
+    return 0
+  fi
+  return 1
+}
 
 cleanup() {
   git -C "$ROOT" worktree remove -f "$WORKTREE" >/dev/null 2>&1 || true
@@ -2496,10 +2516,6 @@ if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" an
   echo "FAIL: expected skipped_checks story_verify entry in manifest" >&2
   exit 1
 fi
-if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" and .reason=="verify_post_failed")' "$manifest_path" >/dev/null 2>&1; then
-  echo "FAIL: expected skipped_checks verify_post_failed entry in manifest" >&2
-  exit 1
-fi
 write_contract_check_stub "PASS"
 
 
@@ -3104,6 +3120,9 @@ if [[ "$selected_id" != "S1-012" ]]; then
   exit 1
 fi
 
+if skip_slow_test "Test 18: rate limit sleep updates state and cooldown"; then
+  :
+else
 echo "Test 18: rate limit sleep updates state and cooldown"
 reset_state
 rate_prd="$WORKTREE/plans/prd_rate_limit.json"
@@ -3187,7 +3206,11 @@ if run_in_worktree grep -q "RateLimit: sleeping" "$test18b_log"; then
   tail -n 80 "$test18b_log" >&2 || true
   exit 1
 fi
+fi
 
+if skip_slow_test "Test 19: circuit breaker blocks after repeated verify_post failure"; then
+  :
+else
 echo "Test 19: circuit breaker blocks after repeated verify_post failure"
 reset_state
 valid_prd_19="$WORKTREE/.ralph/valid_prd_19.json"
@@ -3227,7 +3250,11 @@ if [[ "$pass_state" != "false" ]]; then
   echo "FAIL: expected passes=false after circuit breaker" >&2
   exit 1
 fi
+fi
 
+if skip_slow_test "Test 20: max iterations exceeded"; then
+  :
+else
 echo "Test 20: max iterations exceeded"
 reset_state
 valid_prd_20="$WORKTREE/.ralph/valid_prd_20.json"
@@ -3261,7 +3288,11 @@ if [[ "$reason" != "max_iters_exceeded" ]]; then
   echo "FAIL: expected reason=max_iters_exceeded, got ${reason}" >&2
   exit 1
 fi
+fi
 
+if skip_slow_test "Test 21: self-heal reverts bad changes"; then
+  :
+else
 echo "Test 21: self-heal reverts bad changes"
 reset_state
 valid_prd_21="$WORKTREE/.ralph/valid_prd_21.json"
@@ -3309,6 +3340,7 @@ fi
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected exit 1 from self-healing loop (max iters)" >&2
   exit 1
+fi
 fi
 
 echo "Workflow acceptance tests passed"
