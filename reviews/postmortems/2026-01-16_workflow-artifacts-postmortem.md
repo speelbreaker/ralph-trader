@@ -101,5 +101,5 @@
 ## 11) Apply or it didn't happen
 - What new invariant did we just discover?: Required workflow artifacts must be explicit and enforced.
 - What is the cheapest automated check that enforces it?: workflow acceptance tests 12b/12c.
-- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): contract + workflow acceptance.
+- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): contract
 - What would break if we remove your fix?: Missing artifacts could cause unexplained gate failures and traceability drift.
