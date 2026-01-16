@@ -40,6 +40,7 @@ Read this first. It is the shortest, enforceable workflow summary.
 ### Critical ambiguity guard
 There is also a `./verify.sh` at repo root. **DO NOT edit or reference it** unless explicitly instructed.
 All workflow gating must target **`plans/verify.sh`**.
+If root `./verify.sh` exists, it must remain a thin wrapper that delegates to `plans/verify.sh`.
 
 ### Contract vs workflow contract
 - `CONTRACT.md` = trading engine contract (runtime behavior/safety gates)
@@ -47,9 +48,12 @@ All workflow gating must target **`plans/verify.sh`**.
 Do not mix them. If a workflow rule is being enforced, it must cite `specs/WORKFLOW_CONTRACT.md`.
 
 ### Changes must be self-proving
-Any change to `plans/*` must include:
+Any change to workflow/harness files (see allowlist in `plans/verify.sh:is_workflow_file`) must include:
 - updated/added assertions in `plans/workflow_acceptance.sh` (or a dedicated gate script invoked by it)
 - and a run that passes `./plans/verify.sh`
+- Do not edit `plans/workflow_acceptance.sh` without running `./plans/verify.sh full`.
+- Keep WF-* IDs synchronized across `specs/WORKFLOW_CONTRACT.md` and `plans/workflow_contract_map.json`.
+- Workflow acceptance always runs in CI; locally it may skip when no workflow-critical files changed (WORKFLOW_ACCEPTANCE_POLICY=auto). Force with WORKFLOW_ACCEPTANCE_POLICY=always.
 
 ### Fail-closed default
 If a required script/artifact is missing or invalid, the workflow must produce a deterministic BLOCKED outcome (not a silent pass).

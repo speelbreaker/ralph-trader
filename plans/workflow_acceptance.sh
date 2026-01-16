@@ -87,6 +87,7 @@ add_optional_overlays() {
 
 # Ensure tests run against the working tree versions while keeping the worktree clean.
 OVERLAY_FILES=(
+  "verify.sh"
   ".github/pull_request_template.md"
   "plans/ralph.sh"
   "plans/verify.sh"
@@ -161,6 +162,9 @@ for script in "${scripts_to_chmod[@]}"; do
     chmod +x "$WORKTREE/plans/$script" >/dev/null 2>&1 || true
   fi
 done
+if [[ -f "$WORKTREE/verify.sh" ]]; then
+  chmod +x "$WORKTREE/verify.sh" >/dev/null 2>&1 || true
+fi
 run_in_worktree git update-index --skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
 
 echo "Test 0f: prd_pipeline logs skipped ref check"
@@ -487,6 +491,35 @@ if ! run_in_worktree grep -q "Elevation plan" ".github/pull_request_template.md"
 fi
 if ! run_in_worktree grep -q "Concrete Elevation Plan to reduce Top 3 sinks" ".github/pull_request_template.md"; then
   echo "FAIL: PR template missing elevation plan detail section" >&2
+fi
+
+if ! run_in_worktree awk '
+  /is_workflow_file/ {in_block=1}
+  in_block && $0 ~ /^[[:space:]]*verify\.sh\)/ {has_root=1}
+  in_block && index($0, "plans/verify.sh") {has_verify=1}
+  in_block && index($0, "plans/workflow_acceptance.sh") {has_accept=1}
+  in_block && index($0, "plans/story_verify_allowlist.txt") {has_story=1}
+  in_block && index($0, "specs/WORKFLOW_CONTRACT.md") {has_contract=1}
+  in_block && index($0, "scripts/check_contract_kernel.py") {has_kernel=1}
+  in_block && index($0, "docs/validation_rules.md") {has_rules=1}
+  END { exit (has_root && has_verify && has_accept && has_story && has_contract && has_kernel && has_rules) ? 0 : 1 }
+' "plans/verify.sh"; then
+  echo "FAIL: workflow allowlist must include core workflow files (including root verify.sh)" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -f "verify.sh"; then
+  echo "FAIL: expected root verify.sh wrapper to exist" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "plans/verify.sh" "verify.sh"; then
+  echo "FAIL: root verify.sh must delegate to plans/verify.sh" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -Eq "exec .*plans/verify.sh" "verify.sh"; then
+  echo "FAIL: root verify.sh must exec plans/verify.sh" >&2
   exit 1
 fi
 

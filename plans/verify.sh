@@ -172,8 +172,10 @@ run_logged() {
   fi
 
   if [[ "$VERIFY_LOG_CAPTURE" == "1" ]]; then
+    set +e
     run_with_timeout "$duration" "$@" 2>&1 | tee "$logfile"
     rc="${PIPESTATUS[0]}"
+    set -e
   else
     run_with_timeout "$duration" "$@"
     rc=$?
@@ -185,6 +187,74 @@ run_logged() {
   return "$rc"
 }
 
+is_workflow_file() {
+  case "$1" in
+    AGENTS.md|specs/WORKFLOW_CONTRACT.md|CONTRACT.md|IMPLEMENTATION_PLAN.md) return 0 ;;
+    verify.sh) return 0 ;;
+    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json) return 0 ;;
+    plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
+    plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;
+    plans/story_verify_allowlist.txt) return 0 ;;
+    scripts/build_contract_kernel.py|scripts/check_contract_kernel.py|scripts/contract_kernel_lib.py|scripts/test_contract_kernel.py) return 0 ;;
+    docs/contract_kernel.json|docs/contract_anchors.md|docs/validation_rules.md) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+collect_changed_files() {
+  local base_ref="$1"
+  if ! command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+    {
+      git diff --name-only "$base_ref"...HEAD 2>/dev/null || true
+      git diff --name-only --cached 2>/dev/null || true
+      git diff --name-only 2>/dev/null || true
+    } | sed '/^$/d' | sort -u
+  else
+    warn "Cannot verify BASE_REF=$base_ref; checking only staged/unstaged changes for workflow diffs"
+    {
+      git diff --name-only --cached 2>/dev/null || true
+      git diff --name-only 2>/dev/null || true
+    } | sed '/^$/d' | sort -u
+  fi
+}
+
+should_run_workflow_acceptance() {
+  if is_ci; then
+    return 0
+  fi
+
+  case "$WORKFLOW_ACCEPTANCE_POLICY" in
+    always) return 0 ;;
+    never) return 1 ;;
+    auto) ;;
+    *) warn "Unknown WORKFLOW_ACCEPTANCE_POLICY=$WORKFLOW_ACCEPTANCE_POLICY (expected auto|always|never); defaulting to auto" ;;
+  esac
+
+  if ! command -v git >/dev/null 2>&1; then
+    warn "git not found; cannot detect workflow changes; running workflow acceptance to be safe"
+    return 0
+  fi
+
+  local changed
+  changed="$(collect_changed_files "$BASE_REF")"
+  if [[ -z "$changed" ]]; then
+    return 1
+  fi
+
+  local f
+  while IFS= read -r f; do
+    if is_workflow_file "$f"; then
+      echo "workflow acceptance required: changed workflow file: $f"
+      return 0
+    fi
+  done <<< "$changed"
+
+  return 1
+}
 RUST_FMT_TIMEOUT="${RUST_FMT_TIMEOUT:-10m}"
 RUST_CLIPPY_TIMEOUT="${RUST_CLIPPY_TIMEOUT:-20m}"
 RUST_TEST_TIMEOUT="${RUST_TEST_TIMEOUT:-20m}"
