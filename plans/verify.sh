@@ -192,9 +192,11 @@ run_logged() {
 is_workflow_file() {
   case "$1" in
     AGENTS.md|specs/WORKFLOW_CONTRACT.md|CONTRACT.md|IMPLEMENTATION_PLAN.md) return 0 ;;
+    verify.sh) return 0 ;;
     plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json) return 0 ;;
     plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
     plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;
+    plans/story_verify_allowlist.txt) return 0 ;;
     scripts/build_contract_kernel.py|scripts/check_contract_kernel.py|scripts/contract_kernel_lib.py|scripts/test_contract_kernel.py) return 0 ;;
     docs/contract_kernel.json|docs/contract_anchors.md|docs/validation_rules.md) return 0 ;;
     *) return 1 ;;
