@@ -13,6 +13,7 @@ Rules
   - include a concrete enforcement path (script_check, contract_clarification, or test), and
   - update WORKFLOW_FRICTION.md with the elevation action.
 - Postmortems must include:
+  - Workstream + Contract used (to prevent workflow vs bot mix-ups)
   - "Apply or it didn't happen" (invariant + enforcement + canonical place + removal impact)
   - "What should we add to AGENTS.md?" (1–3 enforceable bullets)
   - "Concrete Elevation Plan" tied to the top 3 sinks

@@ -3,6 +3,8 @@
 ## 0) One-line outcome
 - Outcome: Added a PR postmortem questionnaire and enforcement gate, plus new living workflow docs.
 - Contract/plan requirement satisfied: specs/WORKFLOW_CONTRACT.md WF-2.8/WF-2.9 (postmortem + enforcement).
+- Workstream (Ralph Loop workflow | Stoic Trader bot): Ralph Loop workflow
+- Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md): specs/WORKFLOW_CONTRACT.md
 
 ## 1) Constraint (TOC)
 - Constraint encountered: PR learnings were not captured or enforced.
@@ -12,7 +14,7 @@
 
 ## 2) Evidence & Proof
 - Critical MUSTs touched (CR-IDs or contract anchors): WF-2.8, WF-2.9.
-- Proof (tests/commands + outputs): ./plans/verify.sh (quick) -> VERIFY OK (mode=quick).
+- Proof (tests/commands + outputs): ./plans/verify.sh (quick) -> postmortem check: OK; VERIFY OK (mode=quick); artifacts/verify/20260116_111705/.
 
 ## 3) Guesses / Assumptions
 - Assumption -> Where it should be proven -> Validated? (Y/N): Postmortem gate runs in verify (BASE_REF=origin/main) -> plans/postmortem_check.sh -> Y.

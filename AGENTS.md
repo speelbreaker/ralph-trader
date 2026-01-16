@@ -6,6 +6,7 @@ Read this first. It is the shortest, enforceable workflow summary.
 - Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
 - Verification is mandatory; never weaken gates or tests.
 - No postmortem, no merge: every PR must include a filled postmortem entry under `reviews/postmortems/`.
+- MUST declare the governing contract (workflow vs bot) in the PR postmortem; enforced by postmortem check.
 
 ## Start here (every session)
 - Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.

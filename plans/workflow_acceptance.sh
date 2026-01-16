@@ -437,6 +437,14 @@ if ! run_in_worktree grep -q "What should we add to AGENTS.md?" "reviews/postmor
   echo "FAIL: postmortem template missing AGENTS.md question" >&2
   exit 1
 fi
+if ! run_in_worktree grep -q "Workstream (Ralph Loop workflow | Stoic Trader bot)" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
+  echo "FAIL: postmortem template missing workstream question" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md)" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
+  echo "FAIL: postmortem template missing contract used question" >&2
+  exit 1
+fi
 if ! run_in_worktree grep -q "Concrete Elevation Plan" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
   echo "FAIL: postmortem template missing elevation plan section" >&2
   exit 1

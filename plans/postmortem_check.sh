@@ -133,6 +133,8 @@ validate_postmortem() {
 
   require_field "$file" "Outcome"
   require_field "$file" "Contract/plan requirement satisfied"
+  require_field "$file" "Workstream (Ralph Loop workflow | Stoic Trader bot)"
+  require_field "$file" "Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md)"
 
   require_field "$file" "Constraint encountered"
   require_field "$file" "Exploit (what I did now)"
@@ -257,6 +259,15 @@ for file in $postmortem_changed; do
   canonical_place_lower="$(echo "$canonical_place" | tr '[:upper:]' '[:lower:]')"
   if [[ "$canonical_place_lower" != "contract" && "$canonical_place_lower" != "plan" && "$canonical_place_lower" != "agents" && "$canonical_place_lower" != "skills" && "$canonical_place_lower" != "script" ]]; then
     fail "Canonical place must be one of contract|plan|AGENTS|SKILLS|script in ${file}"
+  fi
+
+  workstream="$(field_value "$file" "Workstream (Ralph Loop workflow | Stoic Trader bot)")"
+  if [[ "$workstream" != "Ralph Loop workflow" && "$workstream" != "Stoic Trader bot" ]]; then
+    fail "Workstream must be 'Ralph Loop workflow' or 'Stoic Trader bot' in ${file}"
+  fi
+  contract_used="$(field_value "$file" "Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md)")"
+  if [[ "$contract_used" != "specs/WORKFLOW_CONTRACT.md" && "$contract_used" != "CONTRACT.md" ]]; then
+    fail "Contract used must be specs/WORKFLOW_CONTRACT.md or CONTRACT.md in ${file}"
   fi
 
 done

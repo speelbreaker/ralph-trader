@@ -3,6 +3,8 @@
 ## 0) One-line outcome
 - Outcome:
 - Contract/plan requirement satisfied:
+- Workstream (Ralph Loop workflow | Stoic Trader bot):
+- Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md):
 
 ## 1) Constraint (TOC)
 - Constraint encountered:
