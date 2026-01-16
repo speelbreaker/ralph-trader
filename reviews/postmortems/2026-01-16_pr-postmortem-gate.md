@@ -27,14 +27,14 @@
 - Repro steps + fix + prevention check/test: None.
 
 ## 6) Conflict & Change Zoning
-- Files/sections changed: plans/verify.sh, plans/postmortem_check.sh, specs/WORKFLOW_CONTRACT.md, plans/workflow_contract_map.json, plans/workflow_acceptance.sh, AGENTS.md, WORKFLOW_FRICTION.md, SKILLS/*, reviews/postmortems/*.
+- Files/sections changed: plans/verify.sh, plans/postmortem_check.sh, specs/WORKFLOW_CONTRACT.md, plans/workflow_contract_map.json, plans/workflow_acceptance.sh, AGENTS.md, WORKFLOW_FRICTION.md, SKILLS/*, reviews/postmortems/*, reviews/REVIEW_CHECKLIST.md.
 - Hot zones discovered: workflow harness + verify gates.
 - What next agent should avoid / coordinate on: Keep postmortem gate and workflow contract mapping in sync.
 
 ## 7) Reuse
-- Patterns/templates created (prompts, scripts, snippets): PR postmortem template + postmortem check script.
-- New "skill" to add/update: none.
-- How to apply it (so it compounds): Use the template for each PR and keep recurring items tied to enforcement paths.
+- Patterns/templates created (prompts, scripts, snippets): PR postmortem template + postmortem check script + review checklist.
+- New "skill" to add/update: post_pr_postmortem, plan.
+- How to apply it (so it compounds): Use the template for each PR, follow the post-PR postmortem skill, and use /plan for elevations.
 
 ## 8) What should we add to AGENTS.md?
 1)
