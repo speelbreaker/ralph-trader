@@ -14,13 +14,13 @@
 
 ## 2) Evidence & Proof
 - Critical MUSTs touched (CR-IDs or contract anchors): WF-1.2, WF-12.8, WF-2.2.
-- Proof (tests/commands + outputs):
+- Proof (tests/commands + outputs): See command/output details below.
   - ./plans/verify.sh full
     - VERIFY OK (mode=full)
-    - artifacts/verify/20260116_170855
+    - artifacts/verify/20260116_172311
 
 ## 3) Guesses / Assumptions
-- Assumption -> Where it should be proven -> Validated? (Y/N):
+- Assumption -> Where it should be proven -> Validated? (Y/N): See list below.
   - specs/WORKFLOW_CONTRACT.md is canonical -> file header + repo guidance -> Y
   - preflight requires update_task/prd_schema_check -> plans/ralph.sh preflight -> Y
   - verify may update docs/contract_coverage.md -> verify output + user approval -> Y
