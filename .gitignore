@@ -4,6 +4,7 @@ plans/logs/
 plans/progress_archive.txt
 artifacts/verify/
 .DS_Store
+__pycache__/
 
 # Local Codex config
 .codex/
