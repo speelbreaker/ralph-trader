@@ -92,6 +92,16 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
    - Do not delete/disable tests to “make green”.
    - Do not weaken fail-closed gates or staleness rules.
 
+6) [WF-2.8] **PR postmortem is mandatory (no postmortem, no merge).**
+   - Every PR MUST include a filled postmortem entry under `reviews/postmortems/` using `PR_POSTMORTEM_TEMPLATE.md`.
+   - `plans/verify.sh` MUST fail if no postmortem entry is changed.
+   - `POSTMORTEM_GATE=0` may disable locally, but is ignored in CI.
+
+7) [WF-2.9] **Recurring friction must be elevated to enforcement.**
+   - If a postmortem marks a recurring issue, the PR MUST include one of: a script check, a contract clarification, or a test.
+   - The postmortem MUST reference the enforcement path (file path updated in the PR).
+   - `WORKFLOW_FRICTION.md` MUST be updated with the next elevation action for recurring issues.
+
 Observable gate requirement:
 - [WF-2.6] plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.
 - [WF-2.7] Promotion-grade verify is required to flip passes=true.
