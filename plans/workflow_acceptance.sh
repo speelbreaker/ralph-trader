@@ -604,6 +604,10 @@ if ! grep -Eq "VERIFY_ARTIFACTS_DIR=.*\\.ralph/verify" "$WORKTREE/plans/ralph.sh
   echo "FAIL: ralph must default VERIFY_ARTIFACTS_DIR under .ralph/verify" >&2
   exit 1
 fi
+if ! grep -Fq 'mktemp -d ".ralph/${prefix}_' "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph blocked artifacts must use mktemp for unique names" >&2
+  exit 1
+fi
 
 bad_scope_patterns="$(run_in_worktree jq -r '.items[].scope.touch[]?, .items[].scope.create[]? | select(endswith("/")) | select(contains("*") | not)' "$WORKTREE/plans/prd.json")"
 if [[ -n "$bad_scope_patterns" ]]; then

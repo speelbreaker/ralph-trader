@@ -903,8 +903,10 @@ write_blocked_artifacts() {
   local needs_human="$5"
   local prefix="${6:-blocked}"
   local block_dir
-  block_dir=".ralph/${prefix}_$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$block_dir"
+  local stamp
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  mkdir -p ".ralph"
+  block_dir="$(mktemp -d ".ralph/${prefix}_${stamp}_XXXXXX")"
   cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true
   if [[ -n "${VERIFY_PRE_LOG_PATH:-}" && -f "$VERIFY_PRE_LOG_PATH" ]]; then
     cp "$VERIFY_PRE_LOG_PATH" "$block_dir/verify_pre.log" || true
