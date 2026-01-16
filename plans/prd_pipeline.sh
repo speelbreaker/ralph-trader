@@ -7,6 +7,7 @@ MAX_REPAIR_PASSES="${MAX_REPAIR_PASSES:-5}"
 MAX_AUDIT_PASSES="${MAX_AUDIT_PASSES:-2}"
 PRD_LINT_JSON="${PRD_LINT_JSON:-.context/prd_lint.json}"
 PRD_PIPELINE_BLOCKED_JSON="${PRD_PIPELINE_BLOCKED_JSON:-.context/prd_pipeline_blocked.json}"
+PROGRESS_FILE="${PROGRESS_FILE:-plans/progress.txt}"
 
 PRD_CUTTER_CMD="${PRD_CUTTER_CMD:-}"
 PRD_CUTTER_ARGS="${PRD_CUTTER_ARGS:-}"
@@ -59,6 +60,32 @@ sha256_file() {
   else
     shasum -a 256 "$file" | awk '{print $1}'
   fi
+}
+
+append_progress_note() {
+  local summary="$1"
+  local commands="${2:-./plans/prd_pipeline.sh}"
+  local next="${3:-}"
+  if [[ -z "$PROGRESS_FILE" ]]; then
+    return 0
+  fi
+  local dir
+  dir="$(dirname "$PROGRESS_FILE")"
+  if [[ -n "$dir" ]]; then
+    mkdir -p "$dir" 2>/dev/null || true
+  fi
+  {
+    echo "Story: workflow-maintenance"
+    echo "Date: $(date -u +%Y-%m-%d)"
+    echo "Summary: $summary"
+    echo "Commands: $commands"
+    echo "Evidence: n/a"
+    if [[ -n "$next" ]]; then
+      echo "Next: $next"
+    fi
+  } >> "$PROGRESS_FILE" 2>/dev/null || {
+    echo "WARN: failed to append progress note to $PROGRESS_FILE" >&2
+  }
 }
 
 write_blocked() {
@@ -196,10 +223,16 @@ if [[ "$pass" != "1" ]]; then
   exit 5
 fi
 
-if [[ -x "./plans/prd_ref_check.sh" ]]; then
+if [[ "${PRD_REF_CHECK_ENABLED:-1}" == "0" ]]; then
+  msg="PRD ref check skipped: PRD_REF_CHECK_ENABLED=0."
+  echo "WARN: $msg" >&2
+  append_progress_note "$msg" "./plans/prd_pipeline.sh" "Set PRD_REF_CHECK_ENABLED=1 to enforce reference checks."
+elif [[ -x "./plans/prd_ref_check.sh" ]]; then
   ./plans/prd_ref_check.sh "$PRD_FILE"
 else
-  echo "WARN: ./plans/prd_ref_check.sh not found or not executable; skipping reference check." >&2
+  msg="PRD ref check skipped: ./plans/prd_ref_check.sh not found or not executable."
+  echo "WARN: $msg" >&2
+  append_progress_note "$msg" "./plans/prd_pipeline.sh" "Add or restore plans/prd_ref_check.sh to enforce reference checks."
 fi
 
 export AUDIT_SCOPE

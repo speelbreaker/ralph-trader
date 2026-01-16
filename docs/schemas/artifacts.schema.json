@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ralph Artifact Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "iter_dir",
+    "head_before",
+    "head_after",
+    "commit_count",
+    "verify_pre_log_path",
+    "verify_post_log_path",
+    "final_verify_log_path",
+    "final_verify_status",
+    "contract_review_path",
+    "contract_check_report_path",
+    "blocked_dir",
+    "blocked_reason",
+    "blocked_details",
+    "skipped_checks",
+    "generated_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "enum": [1] },
+    "run_id": { "type": ["string", "null"] },
+    "iter_dir": { "type": ["string", "null"] },
+    "head_before": { "type": ["string", "null"] },
+    "head_after": { "type": ["string", "null"] },
+    "commit_count": { "type": ["integer", "null"] },
+    "verify_pre_log_path": { "type": ["string", "null"] },
+    "verify_post_log_path": { "type": ["string", "null"] },
+    "final_verify_log_path": { "type": ["string", "null"] },
+    "final_verify_status": { "type": ["string", "null"], "enum": ["PASS", "FAIL", "SKIPPED", "BLOCKED", null] },
+    "contract_review_path": { "type": ["string", "null"] },
+    "contract_check_report_path": { "type": ["string", "null"] },
+    "blocked_dir": { "type": ["string", "null"] },
+    "blocked_reason": { "type": ["string", "null"] },
+    "blocked_details": { "type": ["string", "null"] },
+    "skipped_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reason"],
+        "properties": {
+          "name": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "generated_at": { "type": "string" }
+  }
+}
