@@ -2,6 +2,8 @@
 
 ## 0) One-line outcome
 <!-- What changed + which contract/plan requirement(s) it satisfies. Be concrete. -->
+- Workstream (Ralph Loop workflow | Stoic Trader bot):
+- Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md):
 
 ---
 
