@@ -50,6 +50,8 @@ Do not mix them. If a workflow rule is being enforced, it must cite `specs/WORKF
 Any change to workflow/harness files (see allowlist in `plans/verify.sh:is_workflow_file`) must include:
 - updated/added assertions in `plans/workflow_acceptance.sh` (or a dedicated gate script invoked by it)
 - and a run that passes `./plans/verify.sh`
+- Do not edit `plans/workflow_acceptance.sh` without running `./plans/verify.sh full`.
+- Keep WF-* IDs synchronized across `specs/WORKFLOW_CONTRACT.md` and `plans/workflow_contract_map.json`.
 
 ### Fail-closed default
 If a required script/artifact is missing or invalid, the workflow must produce a deterministic BLOCKED outcome (not a silent pass).

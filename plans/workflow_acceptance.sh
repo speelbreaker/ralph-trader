@@ -31,6 +31,146 @@ run_in_worktree() {
   (cd "$WORKTREE" && "$@")
 }
 
+count_blocked() {
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' | wc -l | tr -d ' '
+}
+
+count_blocked_incomplete() {
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_incomplete_*' | wc -l | tr -d ' '
+}
+
+blocked_dirs_all() {
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' -print 2>/dev/null | sort -u
+}
+
+snapshot_blocked_dirs() {
+  blocked_dirs_all
+}
+
+diff_blocked_dirs() {
+  local before="$1"
+  local after="$2"
+  comm -13 <(printf '%s\n' "$before" | sed '/^$/d' | sort -u) <(printf '%s\n' "$after" | sed '/^$/d' | sort -u)
+}
+
+assert_new_blocked() {
+  local before="$1"
+  local after
+  local new_dirs
+  after="$(snapshot_blocked_dirs)"
+  new_dirs="$(diff_blocked_dirs "$before" "$after")"
+  if [[ -z "$new_dirs" ]]; then
+    echo "FAIL: expected new blocked artifact" >&2
+    return 1
+  fi
+  printf '%s\n' "$new_dirs"
+}
+
+assert_new_blocked_with_reason() {
+  local before="$1"
+  local reason="$2"
+  local new_dirs
+  new_dirs="$(assert_new_blocked "$before")" || return 1
+  if [[ -z "$new_dirs" ]]; then
+    echo "FAIL: expected new blocked artifact for ${reason}" >&2
+    return 1
+  fi
+  local dir
+  while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
+    if [[ -f "$dir/blocked_item.json" ]]; then
+      if [[ "$(run_in_worktree jq -r '.reason' "$dir/blocked_item.json" 2>/dev/null || true)" == "$reason" ]]; then
+        echo "$dir"
+        return 0
+      fi
+    fi
+  done <<< "$new_dirs"
+  echo "FAIL: expected blocked artifact reason=${reason}" >&2
+  return 1
+}
+
+RUN_ID_COUNTER=0
+next_run_id() {
+  RUN_ID_COUNTER=$((RUN_ID_COUNTER + 1))
+  echo "acceptance-run-${RUN_ID_COUNTER}"
+}
+
+assert_manifest_valid() {
+  local manifest="$1"
+  if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest" >/dev/null 2>&1; then
+    echo "FAIL: expected artifact manifest to validate: $manifest" >&2
+    return 1
+  fi
+}
+
+assert_manifest_run_id() {
+  local manifest="$1"
+  local expected="$2"
+  local actual
+  actual="$(run_in_worktree jq -r '.run_id // empty' "$manifest" 2>/dev/null || true)"
+  if [[ -z "$actual" ]]; then
+    echo "FAIL: expected run_id in manifest" >&2
+    return 1
+  fi
+  if [[ -n "$expected" && "$actual" != "$expected" ]]; then
+    echo "FAIL: expected manifest run_id=${expected}, got ${actual}" >&2
+    return 1
+  fi
+}
+
+stat_mtime() {
+  local path="$1"
+  if stat -f '%m' "$path" >/dev/null 2>&1; then
+    stat -f '%m' "$path"
+    return 0
+  fi
+  stat -c '%Y' "$path"
+}
+
+list_blocked_dirs() {
+  local pattern="${1:-blocked_*}"
+  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name "$pattern" -print0 2>/dev/null \
+    | while IFS= read -r -d '' dir; do
+        printf '%s\t%s\n' "$(stat_mtime "$dir")" "$dir"
+      done \
+    | sort -rn \
+    | awk -F '\t' '{print $2}'
+}
+
+latest_blocked_pattern() {
+  local pattern="$1"
+  list_blocked_dirs "$pattern" | head -n 1 || true
+}
+
+latest_blocked() {
+  latest_blocked_pattern "blocked_*"
+}
+
+latest_blocked_with_reason() {
+  local reason="$1"
+  local dir
+  while IFS= read -r dir; do
+    [[ -z "$dir" ]] && continue
+    if [[ -f "$dir/blocked_item.json" ]]; then
+      if [[ "$(run_in_worktree jq -r '.reason' "$dir/blocked_item.json")" == "$reason" ]]; then
+        echo "$dir"
+        return 0
+      fi
+    fi
+  done < <(list_blocked_dirs "blocked_*")
+  return 1
+}
+
+latest_blocked_incomplete() {
+  latest_blocked_pattern "blocked_incomplete_*"
+}
+
+reset_state() {
+  rm -f "$WORKTREE/.ralph/state.json" "$WORKTREE/.ralph/last_failure_path" "$WORKTREE/.ralph/last_good_ref" "$WORKTREE/.ralph/rate_limit.json" 2>/dev/null || true
+  rm -rf "$WORKTREE/.ralph/lock" 2>/dev/null || true
+  rm -rf "$WORKTREE/.ralph/blocked_"* "$WORKTREE/.ralph/blocked_incomplete_"* 2>/dev/null || true
+}
+
 STUB_DIR="$WORKTREE/.ralph/stubs"
 mkdir -p "$STUB_DIR"
 
@@ -226,6 +366,7 @@ JSON
 '
 
 echo "Test 0g: manifest written on preflight block"
+run_id="$(next_run_id)"
 run_in_worktree bash -c '
   set -euo pipefail
   cat > .ralph/artifacts.json <<'"'"'JSON'"'"'
@@ -249,44 +390,46 @@ run_in_worktree bash -c '
   "generated_at": "2026-01-15T00:00:00Z"
 }
 JSON
-  set +e
-  PRD_FILE=".ralph/missing_prd.json" \
-    VERIFY_SH="/bin/true" \
-    RPH_AGENT_CMD="true" \
-    RPH_RATE_LIMIT_ENABLED=0 \
-    ./plans/ralph.sh 1 >/dev/null 2>&1
-  rc=$?
-  set -e
-  if [[ "$rc" -eq 0 ]]; then
-    echo "FAIL: expected non-zero exit for preflight block" >&2
-    exit 1
-  fi
-  manifest=".ralph/artifacts.json"
-  if [[ ! -f "$manifest" ]]; then
-    echo "FAIL: expected manifest for preflight block" >&2
-    exit 1
-  fi
-  ./plans/artifacts_validate.sh "$manifest" >/dev/null 2>&1
-  status="$(jq -r ".final_verify_status" "$manifest")"
-  if [[ "$status" != "BLOCKED" ]]; then
-    echo "FAIL: expected manifest final_verify_status=BLOCKED on preflight block" >&2
-    exit 1
-  fi
-  blocked_reason="$(jq -r ".blocked_reason" "$manifest")"
-  if [[ "$blocked_reason" != "missing_prd" ]]; then
-    echo "FAIL: expected blocked_reason=missing_prd" >&2
-    exit 1
-  fi
-  run_id="$(jq -r ".run_id // empty" "$manifest")"
-  if [[ -z "$run_id" ]]; then
-    echo "FAIL: expected run_id in manifest" >&2
-    exit 1
-  fi
-  if ! jq -e ".skipped_checks[]? | select(.name==\"final_verify\" and .reason==\"preflight_blocked\")" "$manifest" >/dev/null 2>&1; then
-    echo "FAIL: expected final_verify preflight_blocked in skipped_checks" >&2
-    exit 1
-  fi
 '
+set +e
+run_in_worktree env \
+  PRD_FILE=".ralph/missing_prd.json" \
+  VERIFY_SH="/bin/true" \
+  RPH_AGENT_CMD="true" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_RUN_ID="$run_id" \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for preflight block" >&2
+  exit 1
+fi
+manifest=".ralph/artifacts.json"
+if ! run_in_worktree test -f "$manifest"; then
+  echo "FAIL: expected manifest for preflight block" >&2
+  exit 1
+fi
+if ! assert_manifest_valid "$manifest"; then
+  exit 1
+fi
+if ! assert_manifest_run_id "$manifest" "$run_id"; then
+  exit 1
+fi
+status="$(run_in_worktree jq -r ".final_verify_status" "$manifest")"
+if [[ "$status" != "BLOCKED" ]]; then
+  echo "FAIL: expected manifest final_verify_status=BLOCKED on preflight block" >&2
+  exit 1
+fi
+blocked_reason="$(run_in_worktree jq -r ".blocked_reason" "$manifest")"
+if [[ "$blocked_reason" != "missing_prd" ]]; then
+  echo "FAIL: expected blocked_reason=missing_prd" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e ".skipped_checks[]? | select(.name==\"final_verify\" and .reason==\"preflight_blocked\")" "$manifest" >/dev/null 2>&1; then
+  echo "FAIL: expected final_verify preflight_blocked in skipped_checks" >&2
+  exit 1
+fi
 
 run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
 run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
@@ -629,66 +772,6 @@ echo "plans/build_markdown_digest.sh" >> "$exclude_file"
 echo "plans/build_contract_digest.sh" >> "$exclude_file"
 echo "plans/build_plan_digest.sh" >> "$exclude_file"
 echo "plans/prd_slice_prepare.sh" >> "$exclude_file"
-
-count_blocked() {
-  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' | wc -l | tr -d ' '
-}
-
-count_blocked_incomplete() {
-  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_incomplete_*' | wc -l | tr -d ' '
-}
-
-stat_mtime() {
-  local path="$1"
-  if stat -f '%m' "$path" >/dev/null 2>&1; then
-    stat -f '%m' "$path"
-    return 0
-  fi
-  stat -c '%Y' "$path"
-}
-
-list_blocked_dirs() {
-  local pattern="${1:-blocked_*}"
-  find "$WORKTREE/.ralph" -maxdepth 1 -type d -name "$pattern" -print0 2>/dev/null \
-    | while IFS= read -r -d '' dir; do
-        printf '%s\t%s\n' "$(stat_mtime "$dir")" "$dir"
-      done \
-    | sort -rn \
-    | awk -F '\t' '{print $2}'
-}
-
-latest_blocked_pattern() {
-  local pattern="$1"
-  list_blocked_dirs "$pattern" | head -n 1 || true
-}
-
-latest_blocked() {
-  latest_blocked_pattern "blocked_*"
-}
-
-latest_blocked_with_reason() {
-  local reason="$1"
-  local dir
-  while IFS= read -r dir; do
-    [[ -z "$dir" ]] && continue
-    if [[ -f "$dir/blocked_item.json" ]]; then
-      if [[ "$(run_in_worktree jq -r '.reason' "$dir/blocked_item.json")" == "$reason" ]]; then
-        echo "$dir"
-        return 0
-      fi
-    fi
-  done < <(list_blocked_dirs "blocked_*")
-  return 1
-}
-
-latest_blocked_incomplete() {
-  latest_blocked_pattern "blocked_incomplete_*"
-}
-
-reset_state() {
-  rm -f "$WORKTREE/.ralph/state.json" "$WORKTREE/.ralph/last_failure_path" "$WORKTREE/.ralph/last_good_ref" "$WORKTREE/.ralph/rate_limit.json" 2>/dev/null || true
-  rm -rf "$WORKTREE/.ralph/lock" 2>/dev/null || true
-}
 
 write_valid_prd() {
   local path="$1"
@@ -1653,8 +1736,7 @@ run_in_worktree mkdir -p .ralph
 reset_state
 invalid_prd="$WORKTREE/.ralph/invalid_prd.json"
 write_invalid_prd "$invalid_prd"
-before_blocked="$(count_blocked)"
-before_blocked_incomplete="$(count_blocked_incomplete)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env PRD_FILE="$invalid_prd" PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" RPH_DRY_RUN=1 RPH_RATE_LIMIT_ENABLED=0 RPH_SELECTION_MODE=harness ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
@@ -1663,9 +1745,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for invalid PRD" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for invalid PRD" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "invalid_prd_schema" >/dev/null; then
   exit 1
 fi
 
@@ -1673,7 +1753,8 @@ echo "Test 2: attempted pass flip without verify_post is prevented"
 reset_state
 valid_prd_2="$WORKTREE/.ralph/valid_prd_2.json"
 write_valid_prd "$valid_prd_2" "S1-001"
-before_blocked="$(count_blocked)"
+run_id="$(next_run_id)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_2" \
@@ -1687,6 +1768,7 @@ run_ralph env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
+  RPH_RUN_ID="$run_id" \
   ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
 set -e
@@ -1694,9 +1776,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit when verify_post fails" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for verify_post failure" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "verify_post_failed" >/dev/null; then
   exit 1
 fi
 pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_2")"
@@ -1709,8 +1789,10 @@ if ! run_in_worktree test -f "$manifest_path"; then
   echo "FAIL: expected manifest for verify_post failure" >&2
   exit 1
 fi
-if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
-  echo "FAIL: expected manifest to validate for verify_post failure" >&2
+if ! assert_manifest_valid "$manifest_path"; then
+  exit 1
+fi
+if ! assert_manifest_run_id "$manifest_path" "$run_id"; then
   exit 1
 fi
 manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
@@ -1751,7 +1833,7 @@ echo "Test 2b: mark_pass without meaningful change is blocked"
 reset_state
 valid_prd_2b="$WORKTREE/.ralph/valid_prd_2b.json"
 write_valid_prd "$valid_prd_2b" "S1-001"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_in_worktree env \
   PRD_FILE="$valid_prd_2b" \
@@ -1771,14 +1853,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for mark_pass without meaningful change" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for pass_flip_no_touch" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "pass_flip_no_touch")"
-if [[ -z "$latest_block" ]]; then
-  echo "FAIL: expected pass_flip_no_touch blocked artifact" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "pass_flip_no_touch" >/dev/null; then
   exit 1
 fi
 
@@ -1869,7 +1944,7 @@ echo "Test 2e: explore profile forbids mark_pass"
 reset_state
 valid_prd_2e="$WORKTREE/.ralph/valid_prd_2e.json"
 write_valid_prd "$valid_prd_2e" "S1-020"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 test2e_log="$WORKTREE/.ralph/test2e.log"
 run_ralph env \
@@ -1891,16 +1966,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit when mark_pass is forbidden in explore profile" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for mark_pass forbidden" >&2
-  echo "Ralph log tail:" >&2
-  tail -n 120 "$test2e_log" >&2 || true
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "mark_pass_forbidden")"
-if [[ -z "$latest_block" ]]; then
-  echo "FAIL: expected mark_pass_forbidden blocked artifact" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "mark_pass_forbidden" >/dev/null; then
   echo "Ralph log tail:" >&2
   tail -n 120 "$test2e_log" >&2 || true
   exit 1
@@ -1910,7 +1976,7 @@ echo "Test 2f: promote profile requires promotion verify"
 reset_state
 valid_prd_2f="$WORKTREE/.ralph/valid_prd_2f.json"
 write_valid_prd "$valid_prd_2f" "S1-021"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_2f" \
@@ -1927,14 +1993,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit when promote profile runs without promotion verify" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for promote promotion verify requirement" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "profile_requires_promotion_verify")"
-if [[ -z "$latest_block" ]]; then
-  echo "FAIL: expected profile_requires_promotion_verify blocked artifact" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "profile_requires_promotion_verify" >/dev/null; then
   exit 1
 fi
 
@@ -1942,8 +2001,7 @@ echo "Test 3: COMPLETE printed early blocks with blocked_incomplete artifact"
 reset_state
 valid_prd_3="$WORKTREE/.ralph/valid_prd_3.json"
 write_valid_prd "$valid_prd_3" "S1-002"
-before_blocked_incomplete="$(count_blocked_incomplete)"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 test3_log="$WORKTREE/.ralph/test3.log"
 run_ralph env \
@@ -1963,24 +2021,16 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for premature COMPLETE" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for premature COMPLETE" >&2
-  exit 1
-fi
-after_blocked_incomplete="$(count_blocked_incomplete)"
-if [[ "$after_blocked_incomplete" -le "$before_blocked_incomplete" ]]; then
-  echo "FAIL: expected blocked_incomplete_* artifact for premature COMPLETE" >&2
+blocked_dir="$(assert_new_blocked_with_reason "$before_blocked" "incomplete_completion")"
+if [[ -z "$blocked_dir" ]]; then
   echo "Blocked dirs:" >&2
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' -print >&2
   echo "Ralph log tail:" >&2
   tail -n 120 "$test3_log" >&2 || true
   exit 1
 fi
-latest_block="$(latest_blocked_incomplete)"
-reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
-if [[ "$reason" != "incomplete_completion" ]]; then
-  echo "FAIL: expected incomplete_completion reason in blocked artifact" >&2
+if [[ "$blocked_dir" != *"blocked_incomplete_"* ]]; then
+  echo "FAIL: expected blocked_incomplete_* artifact for premature COMPLETE" >&2
   exit 1
 fi
 
@@ -1988,8 +2038,7 @@ echo "Test 3b: COMPLETE mention does not trigger blocked_incomplete"
 reset_state
 valid_prd_3b="$WORKTREE/.ralph/valid_prd_3b.json"
 write_valid_prd "$valid_prd_3b" "S1-002"
-before_blocked="$(count_blocked)"
-before_blocked_incomplete="$(count_blocked_incomplete)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 test3b_log="$WORKTREE/.ralph/test3b.log"
 run_ralph env \
@@ -2015,21 +2064,19 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for max iters when no completion" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
+after_blocked="$(snapshot_blocked_dirs)"
+new_dirs="$(diff_blocked_dirs "$before_blocked" "$after_blocked")"
+if [[ -z "$new_dirs" ]]; then
   echo "FAIL: expected blocked artifact for max iters" >&2
   exit 1
 fi
-after_blocked_incomplete="$(count_blocked_incomplete)"
-if [[ "$after_blocked_incomplete" -gt "$before_blocked_incomplete" ]]; then
+if printf '%s\n' "$new_dirs" | grep -q 'blocked_incomplete_'; then
   echo "FAIL: did not expect blocked_incomplete artifact for COMPLETE mention" >&2
   echo "Ralph log tail:" >&2
   tail -n 120 "$test3b_log" >&2 || true
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "max_iters_exceeded" || true)"
-if [[ -z "$latest_block" ]]; then
-  echo "FAIL: expected max_iters_exceeded blocked artifact" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "max_iters_exceeded" >/dev/null; then
   echo "Ralph log tail:" >&2
   tail -n 120 "$test3b_log" >&2 || true
   exit 1
@@ -2039,7 +2086,7 @@ echo "Test 4: invalid selection writes verify_pre.log (best effort)"
 reset_state
 valid_prd_4="$WORKTREE/.ralph/valid_prd_4.json"
 write_valid_prd "$valid_prd_4" "S1-003"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_4" \
@@ -2058,12 +2105,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for invalid selection" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for invalid selection" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "invalid_selection")"
+latest_block="$(assert_new_blocked_with_reason "$before_blocked" "invalid_selection")"
 if [[ -z "$latest_block" ]]; then
   echo "FAIL: could not locate blocked artifact for invalid selection" >&2
   exit 1
@@ -2082,7 +2124,7 @@ reset_state
 valid_prd_5="$WORKTREE/.ralph/valid_prd_5.json"
 write_valid_prd "$valid_prd_5" "S1-004"
 mkdir -p "$WORKTREE/.ralph/lock"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_5" \
@@ -2096,19 +2138,8 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit when lock is held" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for lock held" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "lock_held")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "lock_held" >/dev/null; then
   echo "FAIL: could not locate blocked artifact for lock_held" >&2
-  exit 1
-fi
-reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
-if [[ "$reason" != "lock_held" ]]; then
-  echo "FAIL: expected lock_held reason in blocked artifact" >&2
   exit 1
 fi
 
@@ -2184,7 +2215,7 @@ for cmd in bash git jq date dirname mkdir tee cp sed awk head tail sort tr stat;
   fi
   ln -s "$cmd_path" "$no_timeout_bin/$cmd"
 done
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_in_worktree env \
   PATH="$no_timeout_bin" \
@@ -2199,13 +2230,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected preflight to block without timeout/python3" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for missing_timeout_or_python3" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "missing_timeout_or_python3")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "missing_timeout_or_python3" >/dev/null; then
   echo "FAIL: expected missing_timeout_or_python3 blocked artifact" >&2
   exit 1
 fi
@@ -2392,6 +2417,7 @@ reset_state
 valid_prd_9="$WORKTREE/.ralph/valid_prd_9.json"
 write_valid_prd "$valid_prd_9" "S1-008"
 write_contract_check_stub "FAIL"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_9" \
@@ -2423,8 +2449,7 @@ if [[ "$pass_state" != "false" ]]; then
   echo "FAIL: expected passes=false when decision=FAIL" >&2
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "contract_review_failed")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "contract_review_failed" >/dev/null; then
   echo "FAIL: expected blocked artifact for contract_review_failed" >&2
   exit 1
 fi
@@ -2493,6 +2518,7 @@ reset_state
 valid_prd_10b="$WORKTREE/.ralph/valid_prd_10b.json"
 write_valid_prd "$valid_prd_10b" "S1-020"
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+run_id="$(next_run_id)"
 set +e
 test10b_log="$WORKTREE/.ralph/test10b.log"
 run_ralph env \
@@ -2511,6 +2537,7 @@ run_ralph env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
+  RPH_RUN_ID="$run_id" \
   GIT_AUTHOR_NAME="workflow-acceptance" \
   GIT_AUTHOR_EMAIL="workflow@local" \
   GIT_COMMITTER_NAME="workflow-acceptance" \
@@ -2551,8 +2578,7 @@ if ! run_in_worktree test -f "$manifest_path"; then
   echo "FAIL: expected artifact manifest at $manifest_path" >&2
   exit 1
 fi
-if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
-  echo "FAIL: expected artifact manifest to validate" >&2
+if ! assert_manifest_valid "$manifest_path"; then
   exit 1
 fi
 schema_version="$(run_in_worktree jq -r '.schema_version' "$manifest_path")"
@@ -2560,9 +2586,7 @@ if [[ "$schema_version" != "1" ]]; then
   echo "FAIL: expected schema_version=1" >&2
   exit 1
 fi
-run_id="$(run_in_worktree jq -r '.run_id // empty' "$manifest_path")"
-if [[ -z "$run_id" ]]; then
-  echo "FAIL: expected run_id in manifest" >&2
+if ! assert_manifest_run_id "$manifest_path" "$run_id"; then
   exit 1
 fi
 manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
@@ -2602,6 +2626,7 @@ reset_state
 valid_prd_10c="$WORKTREE/.ralph/valid_prd_10c.json"
 write_valid_prd "$valid_prd_10c" "S1-021"
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+run_id="$(next_run_id)"
 set +e
 test10c_log="$WORKTREE/.ralph/test10c.log"
 run_ralph env \
@@ -2618,6 +2643,7 @@ run_ralph env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
+  RPH_RUN_ID="$run_id" \
   GIT_AUTHOR_NAME="workflow-acceptance" \
   GIT_AUTHOR_EMAIL="workflow@local" \
   GIT_COMMITTER_NAME="workflow-acceptance" \
@@ -2631,8 +2657,10 @@ if [[ "$rc" -ne 0 ]]; then
   exit 1
 fi
 manifest_path=".ralph/artifacts.json"
-if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
-  echo "FAIL: expected artifact manifest to validate for final verify disabled" >&2
+if ! assert_manifest_valid "$manifest_path"; then
+  exit 1
+fi
+if ! assert_manifest_run_id "$manifest_path" "$run_id"; then
   exit 1
 fi
 manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
@@ -2655,7 +2683,7 @@ run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@l
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
 set +e
 test10c_log="$WORKTREE/.ralph/test10c.log"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 run_ralph env \
   PRD_FILE="$valid_prd_10c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
@@ -2682,15 +2710,7 @@ if [[ "$rc" -eq 0 ]]; then
   tail -n 120 "$test10c_log" >&2 || true
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for update_task failure" >&2
-  echo "Ralph log tail:" >&2
-  tail -n 120 "$test10c_log" >&2 || true
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "update_task_failed")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "update_task_failed" >/dev/null; then
   echo "FAIL: expected update_task_failed blocked artifact" >&2
   echo "Ralph log tail:" >&2
   tail -n 120 "$test10c_log" >&2 || true
@@ -2704,6 +2724,7 @@ reset_state
 valid_prd_10d="$WORKTREE/.ralph/valid_prd_10d.json"
 write_valid_prd "$valid_prd_10d" "S1-022"
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+run_id="$(next_run_id)"
 set +e
 test10d_log="$WORKTREE/.ralph/test10d.log"
 run_ralph env \
@@ -2721,6 +2742,7 @@ run_ralph env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
+  RPH_RUN_ID="$run_id" \
   GIT_AUTHOR_NAME="workflow-acceptance" \
   GIT_AUTHOR_EMAIL="workflow@local" \
   GIT_COMMITTER_NAME="workflow-acceptance" \
@@ -2734,8 +2756,10 @@ if [[ "$rc" -eq 0 ]]; then
   exit 1
 fi
 manifest_path=".ralph/artifacts.json"
-if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
-  echo "FAIL: expected artifact manifest to validate for final verify failure" >&2
+if ! assert_manifest_valid "$manifest_path"; then
+  exit 1
+fi
+if ! assert_manifest_run_id "$manifest_path" "$run_id"; then
   exit 1
 fi
 manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
@@ -2807,7 +2831,7 @@ fi
 echo "Test 13: missing PRD file stops preflight"
 reset_state
 missing_prd="$WORKTREE/.ralph/missing_prd.json"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$missing_prd" \
@@ -2821,14 +2845,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for missing PRD file" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for missing PRD file" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "missing_prd")"
-if [[ -z "$latest_block" ]]; then
-  echo "FAIL: expected missing_prd blocked artifact" >&2
+if ! assert_new_blocked_with_reason "$before_blocked" "missing_prd" >/dev/null; then
   exit 1
 fi
 
@@ -2836,6 +2853,8 @@ echo "Test 14: verify_pre failure stops before implementation"
 reset_state
 valid_prd_13="$WORKTREE/.ralph/valid_prd_13.json"
 write_valid_prd "$valid_prd_13" "S1-010"
+run_id="$(next_run_id)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_13" \
@@ -2848,6 +2867,7 @@ run_ralph env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
+  RPH_RUN_ID="$run_id" \
   ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
 set -e
@@ -2855,8 +2875,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for verify_pre failure" >&2
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "verify_pre_failed")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "verify_pre_failed" >/dev/null; then
   echo "FAIL: expected verify_pre_failed blocked artifact" >&2
   exit 1
 fi
@@ -2865,8 +2884,10 @@ if ! run_in_worktree test -f "$manifest_path"; then
   echo "FAIL: expected manifest for verify_pre failure" >&2
   exit 1
 fi
-if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2>&1; then
-  echo "FAIL: expected manifest to validate on verify_pre failure" >&2
+if ! assert_manifest_valid "$manifest_path"; then
+  exit 1
+fi
+if ! assert_manifest_run_id "$manifest_path" "$run_id"; then
   exit 1
 fi
 manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
@@ -2957,6 +2978,7 @@ echo "Test 15: needs_human_decision=true blocks execution"
 reset_state
 valid_prd_14="$WORKTREE/.ralph/valid_prd_14.json"
 write_valid_prd "$valid_prd_14" "S1-010"
+before_blocked="$(snapshot_blocked_dirs)"
 # Modify to set needs_human_decision=true
 _tmp=$(mktemp)
 run_in_worktree jq '.items[0].needs_human_decision = true | .items[0].human_blocker = {"why":"test","question":"?","options":["A"],"recommended":"A","unblock_steps":["fix"]}' "$valid_prd_14" > "$_tmp" && mv "$_tmp" "$valid_prd_14"
@@ -2974,8 +2996,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for needs_human_decision=true" >&2
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "needs_human_decision")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "needs_human_decision" >/dev/null; then
   echo "FAIL: expected blocked artifact for needs_human_decision" >&2
   exit 1
 fi
@@ -2995,6 +3016,7 @@ run_in_worktree git add "tests/test_dummy.rs"
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "add dummy test" >/dev/null 2>&1
 start_sha="$(run_in_worktree git rev-parse HEAD)"
 
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 test16_log="$WORKTREE/.ralph/test16.log"
 run_ralph env \
@@ -3013,15 +3035,9 @@ if [[ "$rc" -ne 9 ]]; then
   tail -n 120 "$test16_log" >&2 || true
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "cheating_detected" || true)"
+latest_block="$(assert_new_blocked_with_reason "$before_blocked" "cheating_detected" || true)"
 if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for cheating_detected" >&2
-  tail -n 120 "$test16_log" >&2 || true
-  exit 1
-fi
-reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
-if [[ "$reason" != "cheating_detected" ]]; then
-  echo "FAIL: expected reason=cheating_detected, got ${reason}" >&2
   tail -n 120 "$test16_log" >&2 || true
   exit 1
 fi
@@ -3049,7 +3065,7 @@ echo "Test 16b: harness tamper blocks before processing"
 reset_state
 valid_prd_16b="$WORKTREE/.ralph/valid_prd_16b.json"
 write_valid_prd "$valid_prd_16b" "S1-011"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 test16b_log="$WORKTREE/.ralph/test16b.log"
 run_in_worktree env \
@@ -3069,13 +3085,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for harness tamper" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for harness tamper" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "harness_sha_mismatch")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "harness_sha_mismatch" >/dev/null; then
   echo "FAIL: expected blocked artifact for harness_sha_mismatch" >&2
   tail -n 120 "$test16b_log" >&2 || true
   exit 1
@@ -3088,7 +3098,7 @@ echo "Test 16c: .ralph tamper blocks before processing"
 reset_state
 valid_prd_16c="$WORKTREE/.ralph/valid_prd_16c.json"
 write_valid_prd "$valid_prd_16c" "S1-012"
-before_blocked="$(count_blocked)"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 test16c_log="$WORKTREE/.ralph/test16c.log"
 run_in_worktree env \
@@ -3108,13 +3118,7 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for .ralph tamper" >&2
   exit 1
 fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for .ralph tamper" >&2
-  exit 1
-fi
-latest_block="$(latest_blocked_with_reason "ralph_dir_modified")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "ralph_dir_modified" >/dev/null; then
   echo "FAIL: expected blocked artifact for ralph_dir_modified" >&2
   tail -n 120 "$test16c_log" >&2 || true
   exit 1
@@ -3286,6 +3290,7 @@ echo "Test 19: circuit breaker blocks after repeated verify_post failure"
 reset_state
 valid_prd_19="$WORKTREE/.ralph/valid_prd_19.json"
 write_valid_prd "$valid_prd_19" "S1-015"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_19" \
@@ -3306,14 +3311,8 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for circuit breaker" >&2
   exit 1
 fi
-latest_block="$(latest_blocked_with_reason "circuit_breaker")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "circuit_breaker" >/dev/null; then
   echo "FAIL: expected blocked artifact for circuit_breaker" >&2
-  exit 1
-fi
-reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
-if [[ "$reason" != "circuit_breaker" ]]; then
-  echo "FAIL: expected reason=circuit_breaker, got ${reason}" >&2
   exit 1
 fi
 pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_19")"
@@ -3328,6 +3327,7 @@ valid_prd_20="$WORKTREE/.ralph/valid_prd_20.json"
 write_valid_prd "$valid_prd_20" "S1-012"
 _tmp=$(mktemp)
 run_in_worktree jq '.items[0].scope.touch += ["acceptance_tick.txt"]' "$valid_prd_20" > "$_tmp" && mv "$_tmp" "$valid_prd_20"
+before_blocked="$(snapshot_blocked_dirs)"
 set +e
 run_ralph env \
   PRD_FILE="$valid_prd_20" \
@@ -3345,14 +3345,8 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected non-zero exit for max iters exceeded" >&2
   exit 1
 fi
-latest_block="$(latest_blocked_pattern "blocked_max_iters_*")"
-if [[ -z "$latest_block" ]]; then
+if ! assert_new_blocked_with_reason "$before_blocked" "max_iters_exceeded" >/dev/null; then
   echo "FAIL: expected blocked artifact for max_iters_exceeded" >&2
-  exit 1
-fi
-reason="$(run_in_worktree jq -r '.reason' "$latest_block/blocked_item.json")"
-if [[ "$reason" != "max_iters_exceeded" ]]; then
-  echo "FAIL: expected reason=max_iters_exceeded, got ${reason}" >&2
   exit 1
 fi
 
