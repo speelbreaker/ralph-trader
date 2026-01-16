@@ -6,6 +6,7 @@ Read this first. It is the shortest, enforceable workflow summary.
 - Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
 - Verification is mandatory; never weaken gates or tests.
 - Contract kernel use is derived-only; it never overrides CONTRACT.md and must be validated before use.
+- Workflow rule changes in `specs/WORKFLOW_CONTRACT.md` must update `plans/workflow_contract_map.json` in the same change.
 
 ## Start here (every session)
 - Read `docs/contract_kernel.json` (if present and validated), `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
@@ -75,3 +76,4 @@ If a required script/artifact is missing or invalid, the workflow must produce a
 ## Don'ts
 - Never use skip-permissions.
 - Never delete/disable tests or weaken fail-closed gates.
+- Avoid introducing shared global state in tests without serialization or reset helpers.
