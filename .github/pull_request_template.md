@@ -1,51 +1,149 @@
-# PR Postmortem (Agent-Filled)
-
-Copy the questionnaire from `reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md` and add a filled entry under `reviews/postmortems/`.
+# PR Summary
 
 ## 0) One-line outcome
-- Outcome:
-- Contract/plan requirement satisfied:
+<!-- What changed + which contract/plan requirement(s) it satisfies. Be concrete. -->
 
-## 1) Constraint (TOC)
-- Constraint encountered:
-- Exploit (what I did now):
-- Subordinate (workflow changes needed):
-- Elevate (permanent fix proposal):
+---
 
-## 2) Evidence & Proof
-- Critical MUSTs touched (CR-IDs or contract anchors):
-- Proof (tests/commands + outputs):
+# Evidence & Proof (Required)
 
-## 3) Guesses / Assumptions
-- Assumption -> Where it should be proven -> Validated? (Y/N):
+## 1) Requirements touched
+<!-- List Contract anchors or CR-IDs touched. -->
+- CR / Anchor:
+- CR / Anchor:
 
-## 4) Friction Log
-- Top 3 time/token sinks:
-  1)
-  2)
-  3)
+## 2) Proof (commands + key outputs)
+<!-- Paste the exact commands you ran and 1–3 key lines of output per command.
+     If artifacts exist (.ralph/artifacts.json, logs), include paths. -->
+- Command:
+  - Key output:
+  - Artifact/log path:
+- Command:
+  - Key output:
+  - Artifact/log path:
 
-## 5) Failure modes hit
-- Repro steps + fix + prevention check/test:
+---
 
-## 6) Conflict & Change Zoning
-- Files/sections changed:
-- Hot zones discovered:
-- What next agent should avoid / coordinate on:
+# TOC Postmortem (Required)
 
-## 7) Reuse
-- Patterns/templates created (prompts, scripts, snippets):
-- New "skill" to add/update:
-- How to apply it (so it compounds):
+## 3) Constraint (TOC)
+**Constraint encountered:**  
+<!-- e.g. nondeterministic tests, contract/map drift risk, slow verify loop, merge conflicts -->
 
-## 8) Enforcement Path (Required if recurring)
-- Recurring issue? (Y/N):
-- Enforcement type (script_check | contract_clarification | test | none):
-- Enforcement target (path added/updated in this PR):
-- WORKFLOW_FRICTION.md updated? (Y/N):
+**Exploit (what I did now):**  
+<!-- Immediate mitigation applied in this PR -->
 
-## 9) Apply or it didn't happen
-- What new invariant did we just discover?:
-- What is the cheapest automated check that enforces it?:
-- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script):
-- What would break if we remove your fix?:
+**Subordinate (workflow changes needed):**  
+<!-- Changes other steps/agents should make to support the exploit -->
+
+**Elevate (permanent fix proposal):**  
+<!-- The real fix that removes the constraint. No hand-waving. -->
+
+---
+
+# Assumptions & Risk
+
+## 4) Guesses / Assumptions (must be explicit)
+<!-- Format: Assumption -> Where it should be proven -> Validated? (Y/N) -->
+- Assumption -> Proof location -> Validated?
+- Assumption -> Proof location -> Validated?
+
+## 5) Split-brain / drift check
+<!-- Answer YES/NO + details -->
+- Did this PR introduce/modify duplicated rules or second sources of truth? (YES/NO)
+- If YES: list where and how it’s resolved.
+
+---
+
+# Friction Telemetry (Required)
+
+## 6) Top 3 time/token sinks
+<!-- Rank them. Be specific (which script/test/step). -->
+1)
+2)
+3)
+
+## 7) Failure modes hit (if any)
+<!-- Repro steps + fix + prevention check/test -->
+- Failure:
+- Repro:
+- Fix:
+- Prevention:
+
+---
+
+# Change Zoning (Merge-Conflict Control)
+
+## 8) Files/sections changed
+<!-- Bullet list -->
+- 
+- 
+
+## 9) Hot zones discovered
+<!-- Files/sections that are conflict magnets -->
+- 
+- 
+
+## 10) Coordination note (what next agent should avoid / coordinate on)
+- 
+
+---
+
+# Compounding Improvements (New Questions)
+
+## 11) What should we add to `AGENTS.md`?
+<!-- Propose 1–3 bullets max.
+     Each bullet MUST include: trigger condition + failure mode prevented + enforcement location (script/test/checklist). -->
+- **Rule:**  
+  **Trigger:**  
+  **Prevents:**  
+  **Enforce:**  
+
+- **Rule:**  
+  **Trigger:**  
+  **Prevents:**  
+  **Enforce:**  
+
+## 12) Concrete Elevation Plan to reduce Top 3 sinks
+<!-- Provide: 1 Elevation + 2 subordinate cheap wins.
+     Each MUST include: Owner + Effort (S/M/L) + Expected gain + Proof of completion. -->
+### Elevate (permanent fix)
+- **Change:**  
+- **Owner:**  
+- **Effort:** S / M / L  
+- **Expected gain:**  
+- **Proof of completion:**  
+
+### Subordinate (cheap wins)
+1)
+- **Change:**  
+- **Owner:**  
+- **Effort:** S / M / L  
+- **Expected gain:**  
+- **Proof of completion:**  
+
+2)
+- **Change:**  
+- **Owner:**  
+- **Effort:** S / M / L  
+- **Expected gain:**  
+- **Proof of completion:**  
+
+---
+
+# Reuse
+
+## 13) Reusable patterns/templates created
+<!-- Prompts, scripts, snippets, helpers -->
+- 
+
+## 14) Skill updates
+<!-- If this PR revealed a repeatable procedure, name the skill to add/update (SKILLS/*.md). -->
+- Proposed skill:
+- Why it’s worth codifying (failure cost / recurrence):
+
+Two ruthless rules to adopt with this template
+
+No Evidence, No Merge: if section “Proof” is empty or vague, PR doesn’t ship.
+
+No Compounding, No Merge: if sections 11–12 are empty, you’re not improving the system—just moving tickets.

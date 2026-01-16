@@ -19,9 +19,9 @@
 
 ## 4) Friction Log
 - Top 3 time/token sinks:
-  1) Designing a structured, enforceable postmortem format.
-  2) Wiring gates into verify + workflow acceptance without breaking harness.
-  3) Updating workflow contract map entries.
+  1) Nondeterministic tests from shared global counters.
+  2) Long workflow acceptance runtime for non-workflow changes.
+  3) Rerunning full verify for targeted fixes.
 
 ## 5) Failure modes hit
 - Repro steps + fix + prevention check/test: None.
@@ -36,14 +36,50 @@
 - New "skill" to add/update: none.
 - How to apply it (so it compounds): Use the template for each PR and keep recurring items tied to enforcement paths.
 
-## 8) Enforcement Path (Required if recurring)
+## 8) What should we add to AGENTS.md?
+1)
+- Rule: If specs/WORKFLOW_CONTRACT.md changes, plans/workflow_contract_map.json MUST change in the same PR.
+- Trigger: Any edit to specs/WORKFLOW_CONTRACT.md.
+- Prevents: Contract/map drift breaking the traceability gate.
+- Enforce: plans/verify.sh paired-change check.
+2)
+- Rule: Tests MUST not depend on shared global state without a reset helper or explicit serialization marker.
+- Trigger: Tests that use global counters or shared mutable state.
+- Prevents: Cross-test increments causing nondeterministic failures.
+- Enforce: Test helper + review checklist.
+
+## 9) Concrete Elevation Plan to reduce Top 3 sinks
+
+### Elevate (permanent fix)
+- Change: Replace global AtomicU64 counter with per-test state or a reset helper.
+- Owner: workflow
+- Effort: M
+- Expected gain: Remove serialization and flake risk.
+- Proof of completion: Tests pass without serialization; repeated runs stable.
+
+### Subordinate (cheap wins)
+1)
+- Change: Make workflow_acceptance.sh conditional on workflow file changes.
+- Owner: workflow
+- Effort: S
+- Expected gain: Shorter runs for non-workflow PRs.
+- Proof of completion: Acceptance script skips when no workflow diffs and logs reason.
+
+2)
+- Change: Add a targeted test-first path for dispatch_map tests before full verify.
+- Owner: execution
+- Effort: S
+- Expected gain: Fewer full reruns for small fixes.
+- Proof of completion: Verify logs show targeted tests before full run.
+
+## 10) Enforcement Path (Required if recurring)
 - Recurring issue? (Y/N): N
 - Enforcement type (script_check | contract_clarification | test | none): none
 - Enforcement target (path added/updated in this PR): none
 - WORKFLOW_FRICTION.md updated? (Y/N): N
 
-## 9) Apply or it didn't happen
-- What new invariant did we just discover?: Every PR must include a structured postmortem entry that is validated by the gate (not just a template mention).
+## 11) Apply or it didn't happen
+- What new invariant did we just discover?: Postmortems must include AGENTS.md proposals and a concrete elevation plan tied to top sinks.
 - What is the cheapest automated check that enforces it?: plans/postmortem_check.sh (run via plans/verify.sh).
-- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): contract.
-- What would break if we remove your fix?: PRs could merge without postmortems and recurring issues would not be elevated to enforcement.
+- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): contract
+- What would break if we remove your fix?: PRs could merge without compounding changes or enforceable learning.

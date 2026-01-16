@@ -208,7 +208,8 @@
       ],
       "artifacts": [
         "reviews/postmortems/",
-        "plans/postmortem_check.sh"
+        "plans/postmortem_check.sh",
+        ".github/pull_request_template.md"
       ],
       "tests": [
         "plans/workflow_acceptance.sh (postmortem gate check)"

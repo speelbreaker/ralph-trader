@@ -12,4 +12,7 @@ Rules
 - If a recurring issue is marked "Y", the PR must also:
   - include a concrete enforcement path (script_check, contract_clarification, or test), and
   - update WORKFLOW_FRICTION.md with the elevation action.
-- Postmortems must include the "Apply or it didn't happen" section (invariant + enforcement + canonical place + removal impact).
+- Postmortems must include:
+  - "Apply or it didn't happen" (invariant + enforcement + canonical place + removal impact)
+  - "What should we add to AGENTS.md?" (1–3 enforceable bullets)
+  - "Concrete Elevation Plan" tied to the top 3 sinks

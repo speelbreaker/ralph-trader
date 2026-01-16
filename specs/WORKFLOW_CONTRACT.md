@@ -95,6 +95,8 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 6) [WF-2.8] **PR postmortem is mandatory (no postmortem, no merge).**
    - Every PR MUST include a filled postmortem entry under `reviews/postmortems/` using `PR_POSTMORTEM_TEMPLATE.md`.
    - `plans/verify.sh` MUST fail if no postmortem entry is changed.
+   - Postmortems MUST include: "Apply or it didn't happen", "What should we add to AGENTS.md?", and a "Concrete Elevation Plan" tied to the top 3 sinks.
+   - PR descriptions MUST include "AGENTS.md updates proposed" and "Elevation plan" sections via `.github/pull_request_template.md`; reviewers must accept or explicitly reject with a reason.
    - `POSTMORTEM_GATE=0` may disable locally, but is ignored in CI.
 
 7) [WF-2.9] **Recurring friction must be elevated to enforcement.**

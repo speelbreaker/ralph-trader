@@ -99,6 +99,35 @@ require_numbered() {
   fi
 }
 
+section_content() {
+  local file="$1"
+  local pattern="$2"
+  awk -v pattern="$pattern" '
+    $0 ~ "^## " && $0 ~ pattern {in_section=1; next}
+    in_section && $0 ~ "^## " {exit}
+    in_section {print}
+  ' "$file"
+}
+
+require_count_between() {
+  local count="$1"
+  local min="$2"
+  local max="$3"
+  local label="$4"
+  if (( count < min || count > max )); then
+    fail "${label} count must be between ${min} and ${max}"
+  fi
+}
+
+require_count_at_least() {
+  local count="$1"
+  local min="$2"
+  local label="$3"
+  if (( count < min )); then
+    fail "${label} count must be at least ${min}"
+  fi
+}
+
 validate_postmortem() {
   local file="$1"
 
@@ -128,6 +157,50 @@ validate_postmortem() {
   require_field "$file" "Patterns/templates created (prompts, scripts, snippets)"
   require_field "$file" "New \"skill\" to add/update"
   require_field "$file" "How to apply it (so it compounds)"
+
+  local agents_section
+  agents_section="$(section_content "$file" "What should we add to AGENTS\\.md\\?")"
+  if [[ -z "$agents_section" ]]; then
+    fail "Missing AGENTS.md proposals section in ${file}"
+  fi
+  local rules_count
+  rules_count="$(echo "$agents_section" | grep -c '^- Rule:' || true)"
+  require_count_between "$rules_count" 1 3 "AGENTS.md Rule"
+  local rules_with_must_should
+  rules_with_must_should="$(echo "$agents_section" | grep -cE '^- Rule: .*(MUST|SHOULD)([^A-Za-z]|$)' || true)"
+  if (( rules_with_must_should < rules_count )); then
+    fail "Each AGENTS.md Rule must include MUST/SHOULD in ${file}"
+  fi
+  local trigger_count
+  local prevents_count
+  local enforce_count
+  trigger_count="$(echo "$agents_section" | grep -c '^- Trigger:' || true)"
+  prevents_count="$(echo "$agents_section" | grep -c '^- Prevents:' || true)"
+  enforce_count="$(echo "$agents_section" | grep -c '^- Enforce:' || true)"
+  if (( trigger_count < rules_count || prevents_count < rules_count || enforce_count < rules_count )); then
+    fail "Each AGENTS.md Rule must include Trigger/Prevents/Enforce in ${file}"
+  fi
+
+  local plan_section
+  plan_section="$(section_content "$file" "Concrete Elevation Plan")"
+  if [[ -z "$plan_section" ]]; then
+    fail "Missing Concrete Elevation Plan section in ${file}"
+  fi
+  local change_count
+  local owner_count
+  local effort_count
+  local expected_count
+  local proof_count
+  change_count="$(echo "$plan_section" | grep -c '^- Change:' || true)"
+  owner_count="$(echo "$plan_section" | grep -c '^- Owner:' || true)"
+  effort_count="$(echo "$plan_section" | grep -cE '^- Effort: (S|M|L)' || true)"
+  expected_count="$(echo "$plan_section" | grep -c '^- Expected gain:' || true)"
+  proof_count="$(echo "$plan_section" | grep -c '^- Proof of completion:' || true)"
+  require_count_at_least "$change_count" 3 "Elevation plan Change"
+  require_count_at_least "$owner_count" 3 "Elevation plan Owner"
+  require_count_at_least "$effort_count" 3 "Elevation plan Effort"
+  require_count_at_least "$expected_count" 3 "Elevation plan Expected gain"
+  require_count_at_least "$proof_count" 3 "Elevation plan Proof"
 
   require_field "$file" "Recurring issue? (Y/N)"
   require_field "$file" "Enforcement type (script_check | contract_clarification | test | none)"

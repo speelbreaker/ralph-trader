@@ -6,15 +6,15 @@ Purpose
 
 How to use
 - Keep the Active list to the top 3 constraints only.
-- When a constraint recurs, add/refresh the entry and point to the enforcement path.
-- Move resolved items to Resolved with the date and a short note.
+- Rank by TOC impact (1 = highest constraint).
+- Each entry must include Constraint, Exploit, Elevate, and Next action.
 
 ## Active (Top 3)
-| Date | Constraint | Impact | Recurrence count | Next elevation action (script_check | contract_clarification | test) | Target path | Owner |
+| Rank | Constraint | Exploit (what we do now) | Elevate (permanent fix) | Next action | Owner | Proof target |
 |---|---|---|---|---|---|---|
-| YYYY-MM-DD | | | 0 | | | |
-| YYYY-MM-DD | | | 0 | | | |
-| YYYY-MM-DD | | | 0 | | | |
+| 1 |  |  |  |  |  |  |
+| 2 |  |  |  |  |  |  |
+| 3 |  |  |  |  |  |  |
 
 ## Resolved
 | Date resolved | Constraint | Resolution | Evidence |
