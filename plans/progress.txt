@@ -416,3 +416,9 @@ Evidence: plans/workflow_acceptance.sh; plans/verify.sh; .ralph/workflow_accepta
 Next: None.
 2026-01-15 - Workflow harness: preflight manifest now writes reliably; moved add_skipped_check/write_artifact_manifest earlier; prd_ref_check skip gate now honors PRD_REF_CHECK_ENABLED; acceptance coverage expanded for manifest failure paths and final verify failure; verify.sh full + workflow_acceptance.sh passed (with dirty tree warning in verify).
 2026-01-15 - Cleared artifacts manifest at Ralph startup and seeded acceptance to prove stale PASS is overwritten on preflight block; workflow_acceptance + verify full passed (verify warned dirty tree).
+Story: workflow-maintenance
+Date: 2026-01-15
+Summary: Documented artifact manifest overwrite rule in workflow contract + map; serialized unit mismatch tests in dispatch_map to avoid counter races; reran workflow acceptance and verify full.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: specs/WORKFLOW_CONTRACT.md; plans/workflow_contract_map.json; crates/soldier_core/tests/test_dispatch_map.rs; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: None.
