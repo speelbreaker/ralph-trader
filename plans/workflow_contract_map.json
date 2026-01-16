@@ -200,6 +200,37 @@
       ]
     },
     {
+      "id": "WF-2.8",
+      "title": "6) PR postmortem is mandatory (no postmortem, no merge).",
+      "enforcement": [
+        "plans/postmortem_check.sh",
+        "plans/verify.sh"
+      ],
+      "artifacts": [
+        "reviews/postmortems/",
+        "plans/postmortem_check.sh",
+        ".github/pull_request_template.md"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (postmortem gate check)"
+      ]
+    },
+    {
+      "id": "WF-2.9",
+      "title": "7) Recurring friction must be elevated to enforcement.",
+      "enforcement": [
+        "plans/postmortem_check.sh",
+        "WORKFLOW_FRICTION.md"
+      ],
+      "artifacts": [
+        "WORKFLOW_FRICTION.md",
+        "reviews/postmortems/"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (postmortem gate check)"
+      ]
+    },
+    {
       "id": "WF-2.6",
       "title": "plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.",
       "enforcement": [

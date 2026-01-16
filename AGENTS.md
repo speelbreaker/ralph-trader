@@ -5,16 +5,15 @@ Read this first. It is the shortest, enforceable workflow summary.
 ## Non-negotiables
 - Contract alignment is mandatory; if conflict, STOP and output `<promise>BLOCKED_CONTRACT_CONFLICT</promise>` with the violated section.
 - Verification is mandatory; never weaken gates or tests.
-- Contract kernel use is derived-only; it never overrides CONTRACT.md and must be validated before use.
-- Workflow rule changes in `specs/WORKFLOW_CONTRACT.md` must update `plans/workflow_contract_map.json` in the same change.
+- No postmortem, no merge: every PR must include a filled postmortem entry under `reviews/postmortems/`.
+- MUST declare the governing contract (workflow vs bot) in the PR postmortem; enforced by postmortem check.
 
 ## Start here (every session)
-- Read `docs/contract_kernel.json` (if present and validated), `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
-- If the kernel is missing, stale, invalid, or any rule is ambiguous/conflicting, read full `CONTRACT.md` before proceeding.
-- If acting as Story Cutter or Contract Arbiter, read full `CONTRACT.md` first.
-- If using the kernel, run `python3 scripts/check_contract_kernel.py` and stop on failure.
+- Read `CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
 - If running the Ralph loop, read `plans/prd.json` and `plans/progress.txt`.
 - Read `docs/skills/workflow.md`.
+- Read `WORKFLOW_FRICTION.md` and the relevant files under `SKILLS/`.
+- Use `reviews/REVIEW_CHECKLIST.md` when reviewing PRs.
 - If running the Ralph loop, run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
 
 ## Ralph loop only (PRD iterations)
@@ -48,11 +47,9 @@ All workflow gating must target **`plans/verify.sh`**.
 Do not mix them. If a workflow rule is being enforced, it must cite `specs/WORKFLOW_CONTRACT.md`.
 
 ### Changes must be self-proving
-Any change to workflow/harness files (see allowlist in `plans/verify.sh:is_workflow_file`) must include:
+Any change to `plans/*` must include:
 - updated/added assertions in `plans/workflow_acceptance.sh` (or a dedicated gate script invoked by it)
 - and a run that passes `./plans/verify.sh`
-- Do not edit `plans/workflow_acceptance.sh` without running `./plans/verify.sh full`.
-- Keep WF-* IDs synchronized across `specs/WORKFLOW_CONTRACT.md` and `plans/workflow_contract_map.json`.
 
 ### Fail-closed default
 If a required script/artifact is missing or invalid, the workflow must produce a deterministic BLOCKED outcome (not a silent pass).
@@ -63,11 +60,15 @@ If a required script/artifact is missing or invalid, the workflow must produce a
 - If pausing mid-story, fill `plans/pause.md`.
 - Append to `plans/progress.txt`; include Assumptions/Open questions when applicable.
 - Update `docs/skills/workflow.md` only when a new repeated pattern is discovered (manual judgment).
+- Add a PR postmortem entry using `reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md`.
+- If a recurring issue is flagged, update `WORKFLOW_FRICTION.md` with the elevation action.
 
 ## Repo map
 - `crates/` - Rust execution + risk (`soldier_core/`, `soldier_infra/`).
 - `plans/` - harness (PRD, progress, verify, ralph).
 - `docs/codebase/` - codebase maps.
+- `SKILLS/` - one file per workflow skill (audit, patch-only edits, diff-first review).
+- `reviews/postmortems/` - PR postmortem entries (agent-filled).
 
 ## Sentinel outputs
 - When blocked: `<promise>BLOCKED_CI_COMMANDS</promise>`
@@ -76,4 +77,3 @@ If a required script/artifact is missing or invalid, the workflow must produce a
 ## Don'ts
 - Never use skip-permissions.
 - Never delete/disable tests or weaken fail-closed gates.
-- Avoid introducing shared global state in tests without serialization or reset helpers.
