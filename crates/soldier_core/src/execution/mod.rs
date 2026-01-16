@@ -4,7 +4,8 @@ pub mod order_size;
 pub mod quantize;
 
 pub use dispatch_map::{
-    DeribitOrderAmount, DispatchReject, DispatchRejectReason, map_order_size_to_deribit_amount,
+    DeribitOrderAmount, DispatchMetrics, DispatchReject, DispatchRejectReason,
+    map_order_size_to_deribit_amount, map_order_size_to_deribit_amount_with_metrics,
     order_intent_reject_unit_mismatch_total,
 };
 pub use label::{

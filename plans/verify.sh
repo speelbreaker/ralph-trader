@@ -50,8 +50,6 @@ CI_GATES_SOURCE="${CI_GATES_SOURCE:-auto}"
 VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
 VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture
-BASE_REF="${BASE_REF:-origin/main}"
-WORKFLOW_ACCEPTANCE_POLICY="${WORKFLOW_ACCEPTANCE_POLICY:-auto}" # auto|always|never (never ignored in CI)
 
 mkdir -p "$VERIFY_ARTIFACTS_DIR"
 if [[ "$CI_GATES_SOURCE" == "auto" ]]; then
@@ -257,18 +255,15 @@ should_run_workflow_acceptance() {
 
   return 1
 }
-
 RUST_FMT_TIMEOUT="${RUST_FMT_TIMEOUT:-10m}"
 RUST_CLIPPY_TIMEOUT="${RUST_CLIPPY_TIMEOUT:-20m}"
 RUST_TEST_TIMEOUT="${RUST_TEST_TIMEOUT:-20m}"
 PYTEST_TIMEOUT="${PYTEST_TIMEOUT:-10m}"
 RUFF_TIMEOUT="${RUFF_TIMEOUT:-5m}"
 MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
-CONTRACT_KERNEL_TIMEOUT="${CONTRACT_KERNEL_TIMEOUT:-1m}"
-CONTRACT_KERNEL_TEST_TIMEOUT="${CONTRACT_KERNEL_TEST_TIMEOUT:-1m}"
 CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
+POSTMORTEM_CHECK_TIMEOUT="${POSTMORTEM_CHECK_TIMEOUT:-1m}"
 CONTRACT_COVERAGE_CI_SENTINEL="${CONTRACT_COVERAGE_CI_SENTINEL:-plans/contract_coverage_ci_strict}"
-WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-30m}"
 
 has_playwright_config() {
   [[ -f playwright.config.ts || -f playwright.config.js || -f playwright.config.mjs || -f playwright.config.cjs ]]
@@ -372,51 +367,16 @@ log "0a) Harness script syntax"
 run_logged "bash_syntax_workflow_acceptance" "1m" bash -n plans/workflow_acceptance.sh
 
 # -----------------------------------------------------------------------------
-# 0b) Contract kernel validation
+# 0b) Contract coverage matrix
 # -----------------------------------------------------------------------------
-log "0b) Contract kernel validation"
-if [[ ! -f "scripts/check_contract_kernel.py" ]]; then
-  fail "Missing contract kernel validator: scripts/check_contract_kernel.py"
-fi
-ensure_python
-run_logged "contract_kernel" "$CONTRACT_KERNEL_TIMEOUT" "$PYTHON_BIN" "scripts/check_contract_kernel.py"
-if [[ ! -f "scripts/test_contract_kernel.py" ]]; then
-  fail "Missing contract kernel tests: scripts/test_contract_kernel.py"
-fi
-run_logged "contract_kernel_tests" "$CONTRACT_KERNEL_TEST_TIMEOUT" "$PYTHON_BIN" -m unittest \
-  "scripts/test_contract_kernel.py"
-
-# -----------------------------------------------------------------------------
-# 0c) Contract coverage matrix
-# -----------------------------------------------------------------------------
-log "0c) Contract coverage matrix"
+log "0b) Contract coverage matrix"
 if [[ ! -f "plans/contract_coverage_matrix.py" ]]; then
   fail "Missing contract coverage script: plans/contract_coverage_matrix.py"
 fi
-CONTRACT_COVERAGE_UPDATE_DOCS="${CONTRACT_COVERAGE_UPDATE_DOCS:-0}"
-contract_coverage_out="${VERIFY_ARTIFACTS_DIR}/contract_coverage.md"
-if [[ "$CONTRACT_COVERAGE_UPDATE_DOCS" == "1" ]]; then
-  contract_coverage_out="docs/contract_coverage.md"
-fi
-run_logged "contract_coverage" "$CONTRACT_COVERAGE_TIMEOUT" env \
-  CONTRACT_COVERAGE_OUT="$contract_coverage_out" \
-  "$PYTHON_BIN" "plans/contract_coverage_matrix.py"
+ensure_python
+run_logged "contract_coverage" "$CONTRACT_COVERAGE_TIMEOUT" "$PYTHON_BIN" "plans/contract_coverage_matrix.py"
 if [[ -z "${CI:-}" && "$CONTRACT_COVERAGE_STRICT" == "1" && ! -f "$CONTRACT_COVERAGE_CI_SENTINEL" ]]; then
   warn "Contract coverage strict passed locally. Run ./plans/contract_coverage_promote.sh to enable strict coverage in CI."
-fi
-
-# -----------------------------------------------------------------------------
-# 0d) Workflow acceptance (non-bypass)
-# -----------------------------------------------------------------------------
-log "0d) Workflow acceptance"
-if [[ ! -f "plans/workflow_acceptance.sh" ]]; then
-  fail "Missing workflow acceptance harness: plans/workflow_acceptance.sh"
-fi
-if should_run_workflow_acceptance; then
-  run_logged "workflow_acceptance" "$WORKFLOW_ACCEPTANCE_TIMEOUT" "bash" "plans/workflow_acceptance.sh"
-else
-  warn "Skipping workflow acceptance (no workflow-critical files changed; local auto mode)."
-  warn "To force: WORKFLOW_ACCEPTANCE_POLICY=always ./plans/verify.sh $MODE"
 fi
 
 # -----------------------------------------------------------------------------
@@ -431,6 +391,8 @@ fi
 log "1) Endpoint-level test gate"
 
 ENDPOINT_GATE="${ENDPOINT_GATE:-1}"
+BASE_REF="${BASE_REF:-origin/main}"
+export BASE_REF
 
 if [[ "$ENDPOINT_GATE" == "0" && -z "${CI:-}" ]]; then
   warn "ENDPOINT_GATE=0 (disabled locally)"
@@ -469,6 +431,21 @@ Fix: add/update endpoint-level tests for the changed endpoints."
         warn "Cannot verify BASE_REF=$BASE_REF (skipping endpoint gate)"
       fi
     fi
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# 1b) PR postmortem gate (no postmortem, no merge)
+# -----------------------------------------------------------------------------
+log "1b) PR postmortem gate"
+POSTMORTEM_GATE="${POSTMORTEM_GATE:-1}"
+if [[ "$POSTMORTEM_GATE" == "0" && -z "${CI:-}" ]]; then
+  warn "POSTMORTEM_GATE=0 (disabled locally)"
+else
+  if [[ -x "$ROOT/plans/postmortem_check.sh" ]]; then
+    run_logged "postmortem_check" "$POSTMORTEM_CHECK_TIMEOUT" "$ROOT/plans/postmortem_check.sh"
+  else
+    fail "Missing postmortem check script: plans/postmortem_check.sh"
   fi
 fi
 

@@ -7,7 +7,29 @@ use super::OrderSize;
 
 const UNIT_MISMATCH_EPSILON: f64 = 1e-9;
 
-static ORDER_INTENT_REJECT_UNIT_MISMATCH_TOTAL: AtomicU64 = AtomicU64::new(0);
+pub struct DispatchMetrics {
+    unit_mismatch_total: AtomicU64,
+}
+
+impl DispatchMetrics {
+    pub const fn new() -> Self {
+        Self {
+            unit_mismatch_total: AtomicU64::new(0),
+        }
+    }
+
+    pub fn unit_mismatch_total(&self) -> u64 {
+        self.unit_mismatch_total.load(Ordering::Relaxed)
+    }
+}
+
+impl Default for DispatchMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+static DISPATCH_METRICS: DispatchMetrics = DispatchMetrics::new();
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DeribitOrderAmount {
@@ -33,8 +55,24 @@ pub fn map_order_size_to_deribit_amount(
     contract_multiplier: Option<f64>,
     index_price: f64,
 ) -> Result<DeribitOrderAmount, DispatchReject> {
+    map_order_size_to_deribit_amount_with_metrics(
+        &DISPATCH_METRICS,
+        instrument_kind,
+        order_size,
+        contract_multiplier,
+        index_price,
+    )
+}
+
+pub fn map_order_size_to_deribit_amount_with_metrics(
+    metrics: &DispatchMetrics,
+    instrument_kind: InstrumentKind,
+    order_size: &OrderSize,
+    contract_multiplier: Option<f64>,
+    index_price: f64,
+) -> Result<DeribitOrderAmount, DispatchReject> {
     if order_size.qty_coin.is_some() && order_size.qty_usd.is_some() {
-        return reject_unit_mismatch("both_qty");
+        return reject_unit_mismatch(metrics, "both_qty");
     }
 
     let (canonical_amount, derived_qty_coin) = match instrument_kind {
@@ -44,7 +82,7 @@ pub fn map_order_size_to_deribit_amount(
         }
         InstrumentKind::Perpetual | InstrumentKind::InverseFuture => {
             if index_price <= 0.0 {
-                return reject_unit_mismatch("invalid_index_price");
+                return reject_unit_mismatch(metrics, "invalid_index_price");
             }
             let amount = order_size.qty_usd;
             let derived_qty_coin = amount.map(|qty_usd| qty_usd / index_price);
@@ -54,7 +92,7 @@ pub fn map_order_size_to_deribit_amount(
 
     let canonical_amount = match canonical_amount {
         Some(amount) => amount,
-        None => return reject_unit_mismatch("missing_canonical"),
+        None => return reject_unit_mismatch(metrics, "missing_canonical"),
     };
 
     // Derive or Validate contracts
@@ -71,11 +109,11 @@ pub fn map_order_size_to_deribit_amount(
     if let Some(contracts) = order_size.contracts {
         let multiplier = match contract_multiplier {
             Some(value) => value,
-            None => return reject_unit_mismatch("missing_multiplier_for_validation"),
+            None => return reject_unit_mismatch(metrics, "missing_multiplier_for_validation"),
         };
         let expected = contracts as f64 * multiplier;
         if !approx_eq(canonical_amount, expected, UNIT_MISMATCH_EPSILON) {
-            return reject_unit_mismatch("contracts_mismatch");
+            return reject_unit_mismatch(metrics, "contracts_mismatch");
         }
     }
 
@@ -87,15 +125,18 @@ pub fn map_order_size_to_deribit_amount(
 }
 
 pub fn order_intent_reject_unit_mismatch_total() -> u64 {
-    ORDER_INTENT_REJECT_UNIT_MISMATCH_TOTAL.load(Ordering::Relaxed)
+    DISPATCH_METRICS.unit_mismatch_total()
 }
 
 fn approx_eq(lhs: f64, rhs: f64, epsilon: f64) -> bool {
     (lhs - rhs).abs() <= epsilon
 }
 
-fn reject_unit_mismatch(reason: &str) -> Result<DeribitOrderAmount, DispatchReject> {
-    ORDER_INTENT_REJECT_UNIT_MISMATCH_TOTAL.fetch_add(1, Ordering::Relaxed);
+fn reject_unit_mismatch(
+    metrics: &DispatchMetrics,
+    reason: &str,
+) -> Result<DeribitOrderAmount, DispatchReject> {
+    metrics.unit_mismatch_total.fetch_add(1, Ordering::Relaxed);
     eprintln!("order_intent_reject_unit_mismatch reason={}", reason);
     Err(DispatchReject {
         risk_state: RiskState::Degraded,

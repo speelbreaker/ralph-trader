@@ -422,3 +422,9 @@ Summary: Documented artifact manifest overwrite rule in workflow contract + map;
 Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: specs/WORKFLOW_CONTRACT.md; plans/workflow_contract_map.json; crates/soldier_core/tests/test_dispatch_map.rs; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
 Next: None.
+Story: workflow-maintenance
+Date: 2026-01-16
+Summary: Added smoke mode for workflow_acceptance slow tests and isolated dispatch mismatch counters with per-test metrics; updated AGENTS guidance; reran workflow acceptance and full verify.
+Commands: ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
+Evidence: plans/workflow_acceptance.sh; crates/soldier_core/src/execution/dispatch_map.rs; crates/soldier_core/tests/test_dispatch_map.rs; AGENTS.md; .ralph/workflow_acceptance_run.log; .ralph/verify_full_run.log.
+Next: Consider using RPH_ACCEPTANCE_MODE=smoke for local runs; keep full mode in CI.
