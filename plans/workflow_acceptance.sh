@@ -1546,7 +1546,10 @@ echo "Test 0: contract_check resolves contract refs without SIGPIPE"
 reset_state
 contract_test_root="$WORKTREE/.ralph/contract_check_ref_ok"
 iter_dir="$contract_test_root/iter_1"
-run_in_worktree mkdir -p "$iter_dir"
+run_in_worktree mkdir -p "$iter_dir" "$contract_test_root/plans" "$contract_test_root/.ralph"
+run_in_worktree bash -c "cd \"$contract_test_root\" && git init -q"
+run_in_worktree bash -c "cd \"$contract_test_root\" && echo \"base\" > README.md && git add README.md && git -c user.name=\"workflow-acceptance\" -c user.email=\"workflow@local\" commit -m \"base\" >/dev/null"
+run_in_worktree bash -c "cd \"$contract_test_root\" && echo \"update\" >> README.md && git add README.md && git -c user.name=\"workflow-acceptance\" -c user.email=\"workflow@local\" commit -m \"update\" >/dev/null"
 cat > "$contract_test_root/CONTRACT.md" <<'EOF'
 # Contract
 ## 1.0 Instrument Units
@@ -1596,14 +1599,8 @@ JSON
 cat > "$iter_dir/selected.json" <<'JSON'
 {"selected_id":"S1-008"}
 JSON
-run_in_worktree bash -c '
-  set -euo pipefail
-  echo "acceptance seed $(date +%s)" > acceptance_contract_check.txt
-  git add acceptance_contract_check.txt
-  git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: contract_check seed" >/dev/null 2>&1
-'
-run_in_worktree git rev-parse HEAD~1 > "$iter_dir/head_before.txt"
-run_in_worktree git rev-parse HEAD > "$iter_dir/head_after.txt"
+run_in_worktree bash -c "cd \"$contract_test_root\" && git rev-parse HEAD~1 > \"$iter_dir/head_before.txt\""
+run_in_worktree bash -c "cd \"$contract_test_root\" && git rev-parse HEAD > \"$iter_dir/head_after.txt\""
 cp "$contract_test_root/prd.json" "$iter_dir/prd_before.json"
 cp "$contract_test_root/prd.json" "$iter_dir/prd_after.json"
 cat > "$iter_dir/diff.patch" <<'EOF'
@@ -1615,17 +1612,20 @@ index 0000000..1111111 100644
 +test
 EOF
 echo "VERIFY_SH_SHA=stub" > "$iter_dir/verify_post.log"
-cat > "$WORKTREE/.ralph/state.json" <<'JSON'
+cat > "$contract_test_root/.ralph/state.json" <<'JSON'
 {"last_verify_post_rc":0}
 JSON
-cp "$ROOT/plans/contract_check.sh" "$WORKTREE/plans/contract_check.sh"
-chmod +x "$WORKTREE/plans/contract_check.sh"
+cp "$ROOT/plans/contract_check.sh" "$contract_test_root/plans/contract_check.sh"
+cp "$ROOT/plans/contract_review_validate.sh" "$contract_test_root/plans/contract_review_validate.sh"
+chmod +x "$contract_test_root/plans/contract_check.sh" "$contract_test_root/plans/contract_review_validate.sh"
 set +e
 run_in_worktree env \
   CONTRACT_REVIEW_OUT="$iter_dir/contract_review.json" \
   CONTRACT_FILE="$contract_test_root/CONTRACT.md" \
   PRD_FILE="$contract_test_root/prd.json" \
-  ./plans/contract_check.sh "$iter_dir/contract_review.json" >/dev/null 2>&1
+  RPH_STATE_FILE="$contract_test_root/.ralph/state.json" \
+  CONTRACT_REVIEW_SCHEMA="$ROOT/docs/schemas/contract_review.schema.json" \
+  bash -c "cd \"$contract_test_root\" && ./plans/contract_check.sh \"$iter_dir/contract_review.json\"" >/dev/null 2>&1
 rc=$?
 set -e
 if [[ "$rc" -ne 0 ]]; then
