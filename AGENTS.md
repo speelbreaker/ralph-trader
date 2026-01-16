@@ -12,6 +12,7 @@ Read this first. It is the shortest, enforceable workflow summary.
 - If running the Ralph loop, read `plans/prd.json` and `plans/progress.txt`.
 - Read `docs/skills/workflow.md`.
 - Read `WORKFLOW_FRICTION.md` and the relevant files under `SKILLS/`.
+- Use `reviews/REVIEW_CHECKLIST.md` when reviewing PRs.
 - If running the Ralph loop, run `./plans/init.sh` (if present) then `./plans/verify.sh <mode>`.
 
 ## Ralph loop only (PRD iterations)

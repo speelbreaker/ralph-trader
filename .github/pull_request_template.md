@@ -91,7 +91,7 @@
 
 # Compounding Improvements (New Questions)
 
-## 11) What should we add to `AGENTS.md`?
+## 11) AGENTS.md updates proposed (What should we add to `AGENTS.md`?)
 <!-- Propose 1–3 bullets max.
      Each bullet MUST include: trigger condition + failure mode prevented + enforcement location (script/test/checklist). -->
 - **Rule:**  
@@ -104,7 +104,7 @@
   **Prevents:**  
   **Enforce:**  
 
-## 12) Concrete Elevation Plan to reduce Top 3 sinks
+## 12) Elevation plan (Concrete Elevation Plan to reduce Top 3 sinks)
 <!-- Provide: 1 Elevation + 2 subordinate cheap wins.
      Each MUST include: Owner + Effort (S/M/L) + Expected gain + Proof of completion. -->
 ### Elevate (permanent fix)

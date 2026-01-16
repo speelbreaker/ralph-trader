@@ -465,12 +465,20 @@ if ! run_in_worktree test -f ".github/pull_request_template.md"; then
   echo "FAIL: missing .github/pull_request_template.md" >&2
   exit 1
 fi
+if ! run_in_worktree grep -q "AGENTS.md updates proposed" ".github/pull_request_template.md"; then
+  echo "FAIL: PR template missing AGENTS.md updates proposed section" >&2
+  exit 1
+fi
 if ! run_in_worktree grep -q "What should we add to `AGENTS.md`?" ".github/pull_request_template.md"; then
   echo "FAIL: PR template missing AGENTS.md section" >&2
   exit 1
 fi
-if ! run_in_worktree grep -q "Concrete Elevation Plan to reduce Top 3 sinks" ".github/pull_request_template.md"; then
+if ! run_in_worktree grep -q "Elevation plan" ".github/pull_request_template.md"; then
   echo "FAIL: PR template missing elevation plan section" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "Concrete Elevation Plan to reduce Top 3 sinks" ".github/pull_request_template.md"; then
+  echo "FAIL: PR template missing elevation plan detail section" >&2
   exit 1
 fi
 
