@@ -14,7 +14,7 @@
 
 ## 2) Evidence & Proof
 - Critical MUSTs touched (CR-IDs or contract anchors): WF-2.8 (postmortem required), WF-2.2 (verification)
-- Proof (tests/commands + outputs):
+- Proof (tests/commands + outputs): ./plans/verify.sh (mode=quick), artifacts/verify/20260116_180705
   - ./plans/verify.sh (mode=quick)
     - VERIFY_SH_SHA=dace58729e64364469fa91168add7476f0d96983ebb6a17b4b08664e2d5ca23b
     - postmortem check: no changes detected
