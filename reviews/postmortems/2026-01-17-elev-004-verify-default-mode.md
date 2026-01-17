@@ -14,7 +14,7 @@
 
 ## 2) Evidence & Proof
 - Critical MUSTs touched (CR-IDs or contract anchors): WF-5.5 (verify gates), WF-12.1 (workflow acceptance coverage)
-- Proof (tests/commands + outputs):
+- Proof (tests/commands + outputs): ./plans/verify.sh full (see artifacts/verify/20260117_075230/)
   - ./plans/verify.sh full
     - VERIFY_SH_SHA=53f3f0c4e1a9cc61a45b7fcff35559befd437d332b80d212a8862448e1fefbe9
     - mode=full verify_mode=none root=/Users/admin/conductor/workspaces/ralph/yangon
@@ -22,8 +22,7 @@
     - Artifacts: artifacts/verify/20260117_075230/
 
 ## 3) Guesses / Assumptions
-- Assumption: CI sets CI=1 for verify.sh runs -> CI workflow config -> Validated? N
-- Assumption: No CI job relies on implicit quick mode without args -> CI workflow config -> Validated? N
+- Assumption -> Where it should be proven -> Validated? (Y/N): CI sets CI=1; no CI job relies on implicit quick mode -> CI workflow config -> N
 
 ## 4) Friction Log
 - Top 3 time/token sinks:
