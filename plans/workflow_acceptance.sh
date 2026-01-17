@@ -91,6 +91,7 @@ OVERLAY_FILES=(
   ".github/pull_request_template.md"
   "plans/ralph.sh"
   "plans/verify.sh"
+  "plans/workflow_verify.sh"
   "plans/update_task.sh"
   "plans/prd.json"
   "plans/prd_schema_check.sh"
@@ -137,6 +138,7 @@ done
 scripts_to_chmod=(
   "ralph.sh"
   "verify.sh"
+  "workflow_verify.sh"
   "update_task.sh"
   "prd_schema_check.sh"
   "prd_lint.sh"
@@ -409,6 +411,21 @@ if ! run_in_worktree grep -q "bash -n plans/workflow_acceptance.sh" "plans/verif
   exit 1
 fi
 
+if ! run_in_worktree grep -q "should_run_workflow_acceptance" "plans/verify.sh"; then
+  echo "FAIL: verify must call should_run_workflow_acceptance" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "run_logged \"workflow_acceptance\"" "plans/verify.sh"; then
+  echo "FAIL: verify must run workflow_acceptance.sh under run_logged" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "workflow acceptance skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit a workflow acceptance skip message" >&2
+  exit 1
+fi
+
 if ! run_in_worktree grep -q "PATH_CONVENTION" "plans/prd_lint.sh"; then
   echo "FAIL: prd_lint must flag path convention drift" >&2
   exit 1
@@ -481,7 +498,7 @@ if ! run_in_worktree grep -q "AGENTS.md updates proposed" ".github/pull_request_
   echo "FAIL: PR template missing AGENTS.md updates proposed section" >&2
   exit 1
 fi
-if ! run_in_worktree grep -q "What should we add to `AGENTS.md`?" ".github/pull_request_template.md"; then
+if ! run_in_worktree grep -q 'What should we add to `AGENTS.md`?' ".github/pull_request_template.md"; then
   echo "FAIL: PR template missing AGENTS.md section" >&2
   exit 1
 fi
@@ -498,13 +515,29 @@ if ! run_in_worktree awk '
   in_block && $0 ~ /^[[:space:]]*verify\.sh\)/ {has_root=1}
   in_block && index($0, "plans/verify.sh") {has_verify=1}
   in_block && index($0, "plans/workflow_acceptance.sh") {has_accept=1}
+  in_block && index($0, "plans/workflow_verify.sh") {has_workflow_verify=1}
   in_block && index($0, "plans/story_verify_allowlist.txt") {has_story=1}
   in_block && index($0, "specs/WORKFLOW_CONTRACT.md") {has_contract=1}
   in_block && index($0, "scripts/check_contract_kernel.py") {has_kernel=1}
   in_block && index($0, "docs/validation_rules.md") {has_rules=1}
-  END { exit (has_root && has_verify && has_accept && has_story && has_contract && has_kernel && has_rules) ? 0 : 1 }
+  END { exit (has_root && has_verify && has_accept && has_workflow_verify && has_story && has_contract && has_kernel && has_rules) ? 0 : 1 }
 ' "plans/verify.sh"; then
   echo "FAIL: workflow allowlist must include core workflow files (including root verify.sh)" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -x "plans/workflow_verify.sh"; then
+  echo "FAIL: expected plans/workflow_verify.sh to exist and be executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "workflow_acceptance.sh" "plans/workflow_verify.sh"; then
+  echo "FAIL: workflow_verify must invoke workflow_acceptance.sh" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "RUN_REPO_VERIFY" "plans/workflow_verify.sh"; then
+  echo "FAIL: workflow_verify must support RUN_REPO_VERIFY override" >&2
   exit 1
 fi
 

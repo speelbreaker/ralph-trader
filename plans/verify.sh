@@ -50,6 +50,7 @@ CI_GATES_SOURCE="${CI_GATES_SOURCE:-auto}"
 VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
 VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture
+WORKFLOW_ACCEPTANCE_POLICY="${WORKFLOW_ACCEPTANCE_POLICY:-auto}"
 
 mkdir -p "$VERIFY_ARTIFACTS_DIR"
 if [[ "$CI_GATES_SOURCE" == "auto" ]]; then
@@ -192,6 +193,7 @@ is_workflow_file() {
     AGENTS.md|specs/WORKFLOW_CONTRACT.md|CONTRACT.md|IMPLEMENTATION_PLAN.md) return 0 ;;
     verify.sh) return 0 ;;
     plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json) return 0 ;;
+    plans/workflow_verify.sh) return 0 ;;
     plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
     plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;
     plans/story_verify_allowlist.txt) return 0 ;;
@@ -263,6 +265,7 @@ RUFF_TIMEOUT="${RUFF_TIMEOUT:-5m}"
 MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
 CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
 POSTMORTEM_CHECK_TIMEOUT="${POSTMORTEM_CHECK_TIMEOUT:-1m}"
+WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-20m}"
 CONTRACT_COVERAGE_CI_SENTINEL="${CONTRACT_COVERAGE_CI_SENTINEL:-plans/contract_coverage_ci_strict}"
 
 has_playwright_config() {
@@ -688,6 +691,18 @@ if [[ "$E2E" == "1" ]]; then
 
   capture_e2e_artifacts
   echo "✓ e2e gate passed"
+fi
+
+if should_run_workflow_acceptance; then
+  log "6) Workflow acceptance"
+  run_logged "workflow_acceptance" "$WORKFLOW_ACCEPTANCE_TIMEOUT" ./plans/workflow_acceptance.sh
+  echo "✓ workflow acceptance passed"
+else
+  if [[ "${CI:-}" == "" && "${WORKFLOW_ACCEPTANCE_POLICY}" == "never" ]]; then
+    echo "info: workflow acceptance skipped (policy=never)"
+  else
+    echo "info: workflow acceptance skipped (no workflow file changes detected)"
+  fi
 fi
 
 log "VERIFY OK (mode=$MODE)"

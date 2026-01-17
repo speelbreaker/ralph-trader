@@ -379,6 +379,7 @@ Workflow acceptance policy (local throughput, CI non-bypass):
 - verify.sh MUST always run workflow acceptance in CI.
 - Local override: WORKFLOW_ACCEPTANCE_POLICY=auto|always|never (never ignored in CI).
 - The workflow-critical allowlist is defined in plans/verify.sh:is_workflow_file and is authoritative.
+- For workflow maintenance work, run ./plans/workflow_verify.sh locally; CI still runs ./plans/verify.sh full.
 
 ### 5.6 Story verify requirement gate [WF-5.6]
 
