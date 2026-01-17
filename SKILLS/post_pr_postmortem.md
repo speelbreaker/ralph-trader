@@ -1,98 +1,109 @@
-# SKILL: Post-PR Postmortem (TOC + Evidence + Compounding)
+# SKILL: Post-PR Postmortem (Human-Readable + Reproducible Proof)
 
-## Purpose
-Produce a deterministic, auditable PR postmortem that:
-1) proves contract/plan compliance (evidence),
-2) identifies the constraint (TOC),
-3) converts learnings into enforceable workflow upgrades (AGENTS.md + elevation plan).
+Use this every time. It is written for a human reviewer first, with proof kept compact at the end.
 
-## Inputs
-- PR diff (or list of changed files)
-- CONTRACT.md (canonical) and/or CR-ID list
-- IMPLEMENTATION_PLAN.md (if relevant)
-- Verification outputs/log paths (plans/verify.sh, workflow_acceptance.sh, artifacts.json, etc.)
+0) What shipped (2-5 lines)
+Feature/behavior:
+Why now / user value:
+Scope boundary (what's not included):
 
-## Output
-Fill the PR template sections 0–14 with:
-- concrete commands + key output lines,
-- contract anchors/CR-IDs,
-- 1–3 AGENTS.md bullets (trigger + prevents + enforce),
-- elevation plan (1 permanent fix + 2 cheap wins) tied to top sinks.
+1) The big problem I fought (TOC constraint)
+Constraint (pick ONE): <what dominated risk or cycle time>
+How it showed up: (symptoms in this PR)
+What I did this time (band-aid / exploit):
+What the next agent should do by default (subordinate):
+Permanent fix proposal (elevate): (ties to plan in section 4)
 
-## Non-Negotiables
-- NO vague proof. "Passed" must include command + 1–3 key lines + artifact/log path.
-- NO new systems. If proposing tooling, it must directly reduce an identified sink or prevent a failure mode.
-- NO more than 3 AGENTS.md bullets. Each must be enforceable (script/test/checklist).
-- If you changed a contract/map pair (or similar coupled artifacts), explicitly call it out in "split-brain/drift check".
+2) Where the time & tokens went (top sinks)
+Rank the top 3. Be concrete (script/test/step), not vibes.
 
-## Procedure
-### Step 1 — Requirements Index (local to this PR)
-1. Identify the MUST/SHALL requirements touched.
-2. Record them as CR-IDs or contract anchors (Section/Heading + anchor/line if available).
-3. If you can’t cite: mark UNPROVEN and do not claim compliance.
+Sink: <script/test/loop>
+Why it ate time/tokens:
+What would have prevented it: (links to AGENTS.md bullet or fix plan item)
 
-### Step 2 — Evidence Pack
-1. List the exact verification commands you ran.
-2. For each, capture:
-   - command line,
-   - 1–3 key output lines (not full logs),
-   - artifact/log file path(s).
-3. If you reran tests: state why (what changed).
+Sink: ...
 
-### Step 3 — Constraint (TOC)
-1. Name ONE constraint that dominated cycle time or risk.
-2. Exploit: what you did in this PR to mitigate (band-aid is OK).
-3. Subordinate: what the workflow/other agents must do next time.
-4. Elevate: permanent fix that removes the constraint.
+Sink: ...
 
-### Step 4 — Assumptions
-List every assumption that affected design decisions:
-- Assumption -> where it should be proven -> validated? (Y/N)
+Quick telemetry (rough is OK):
+Biggest tool/token spender: <e.g., test reruns / log spelunking / refactors>
+# reruns / iterations: <n> + why
 
-### Step 5 — Friction Telemetry
-Rank top 3 sinks:
-- name the script/test/step,
-- say why it consumed time/tokens,
-- link it to the Elevate/Subordinate plan.
+3) How the next agent avoids my pain
+This is the "do this next time" playbook (short, actionable).
 
-### Step 6 — Failure Modes
-If anything failed:
-- repro steps,
-- root cause,
-- fix,
-- prevention (a check/test/gate).
+Do this first:
+Avoid this trap:
+If X happens, do Y:
+Hot spots / merge conflict zones: <files/sections likely to collide>
+Split-brain / drift check (only if relevant):
+If you changed coupled artifacts (contract/map/config pairs): list them and confirm they're consistent.
 
-### Step 7 — Merge Conflict Control (Change Zoning)
-1. List changed files.
-2. Identify hot zones (files/sections likely to collide).
-3. State what future agents should avoid or coordinate on.
+4) Fix plan (proposal) tied to the sinks
+You must propose fixes for what cost the most time/tokens.
 
-### Step 8 — Compounding Improvements (the money step)
-#### 8a) AGENTS.md bullets (1–3)
-For each bullet:
-- Rule (MUST/SHOULD),
-- Trigger condition,
-- Failure mode prevented,
-- Where enforced (script/test/checklist).
+4a) Elevation plan (exactly 1 permanent + 2 quick wins)
+Permanent fix (Elevation):
+What:
+Owner:
+Effort: S/M/L
+Expected gain: (time saved, risk reduced, fewer reruns)
+Proof it's done: (objective evidence: new gate/test, CI check name, command output, artifact)
 
-#### 8b) Elevation plan (tie to sinks)
-Provide:
-- 1 Elevation (permanent fix),
-- 2 Subordinate cheap wins,
-Each with:
-- Owner,
-- Effort (S/M/L),
-- Expected gain,
-- Proof of completion (what objective evidence shows it’s done).
+Quick win #1 (Cheap Subordinate):
+Owner / Effort / Gain / Proof
 
-## Stop Conditions
-Mark the PR as BLOCKED if any are true:
-- You can’t cite the requirement you claim to satisfy.
-- You introduced a second source of truth or duplicated rule without consolidation.
-- Evidence is missing for required verifications.
-- The “Compounding Improvements” section is empty or non-enforceable.
+Quick win #2 (Cheap Subordinate):
+Owner / Effort / Gain / Proof
 
-## Quality Bar (what “good” looks like)
-- Someone unfamiliar with the PR can reproduce proof in <5 minutes.
-- Next agent can avoid your failure mode using a single AGENTS.md bullet.
-- Your elevation plan clearly reduces the top sinks, not random “nice to haves”.
+4b) AGENTS.md additions (max 3, enforceable)
+Each bullet must be a rule with a trigger + prevention + enforcement.
+
+MUST/SHOULD: <rule>
+Trigger: <when it applies>
+Prevents: <failure mode>
+Enforced by: <script/test/gate/checklist path>
+
+(Optional #2) ...
+
+(Optional #3) ...
+
+5) Product/feature next steps (opportunities)
+This is not workflow. It's how we improve the feature itself.
+
+Opportunity #1: <improvement>
+Why it matters (perf/UX/correctness/maintainability)
+Smallest next step (what to implement next)
+
+Opportunity #2: ...
+
+Opportunity #3: ...
+
+(Keep this focused: 2-5 bullets. No giant roadmap.)
+
+6) Contract & proof (compact, but real)
+Requirements touched (CR-IDs / anchors):
+✅ <CR-ID / anchor> -> Proof: <evidence item name/link below>
+⚠️ <CR-ID / anchor> -> UNPROVEN: why / what evidence is missing
+
+Evidence (no "passed" without this):
+Command: ...
+Key lines:
+...
+...
+Logs/artifacts: path/or/link
+(repeat per command)
+
+7) Stop-condition check (PASS or BLOCKED)
+Mark BLOCKED if any are true:
+- A claimed requirement has no cite (CR-ID/anchor) or is UNPROVEN
+- Evidence missing (no command + key lines + log/artifact path)
+- You introduced a second source of truth / duplicated rule
+- AGENTS.md section is empty or not enforceable
+
+Status: PASS / BLOCKED - <one line why>
+
+Tiny reminder (keep, don't expand)
+Max 3 AGENTS.md bullets. Each must be enforceable.
+No new tooling unless it kills a listed sink or prevents a failure mode.
+Proof = command + 1-3 key lines + artifact/log path.
