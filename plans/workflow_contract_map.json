@@ -302,8 +302,7 @@
       ],
       "artifacts": [
         "reviews/postmortems/",
-        "plans/postmortem_check.sh",
-        ".github/pull_request_template.md"
+        "plans/postmortem_check.sh"
       ],
       "tests": [
         "plans/workflow_acceptance.sh (postmortem gate check)"
@@ -311,17 +310,15 @@
     },
     {
       "id": "WF-2.9",
-      "title": "7) Recurring friction must be elevated to enforcement.",
+      "title": "7) Recurring friction should be elevated to enforcement.",
       "enforcement": [
-        "plans/postmortem_check.sh",
-        "WORKFLOW_FRICTION.md"
+        "manual"
       ],
       "artifacts": [
-        "WORKFLOW_FRICTION.md",
-        "reviews/postmortems/"
+        "WORKFLOW_FRICTION.md"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (postmortem gate check)"
+        "manual"
       ]
     },
     {

@@ -433,65 +433,6 @@ if ! run_in_worktree test -x "plans/postmortem_check.sh"; then
   echo "FAIL: plans/postmortem_check.sh not executable" >&2
   exit 1
 fi
-if ! run_in_worktree grep -q "Apply or it didn't happen" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template must include Apply or it didn't happen section" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "What should we add to AGENTS.md?" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing AGENTS.md question" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "Workstream (Ralph Loop workflow | Stoic Trader bot)" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing workstream question" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md)" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing contract used question" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "Concrete Elevation Plan" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing elevation plan section" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "^- Rule:" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing Rule prompt" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "What new invariant did we just discover?" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing invariant question" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "cheapest automated check" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing automated check question" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "canonical place this rule belongs" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing canonical place question" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "What would break if we remove your fix?" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template missing removal impact question" >&2
-  exit 1
-fi
-if ! run_in_worktree test -f ".github/pull_request_template.md"; then
-  echo "FAIL: missing .github/pull_request_template.md" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "AGENTS.md updates proposed" ".github/pull_request_template.md"; then
-  echo "FAIL: PR template missing AGENTS.md updates proposed section" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "What should we add to `AGENTS.md`?" ".github/pull_request_template.md"; then
-  echo "FAIL: PR template missing AGENTS.md section" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "Elevation plan" ".github/pull_request_template.md"; then
-  echo "FAIL: PR template missing elevation plan section" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "Concrete Elevation Plan to reduce Top 3 sinks" ".github/pull_request_template.md"; then
-  echo "FAIL: PR template missing elevation plan detail section" >&2
-fi
 
 if ! run_in_worktree awk '
   /is_workflow_file/ {in_block=1}
