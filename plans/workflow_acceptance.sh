@@ -2813,6 +2813,46 @@ if [[ "$rc" -eq 0 ]]; then
   exit 1
 fi
 
+check_required_workflow_artifacts() {
+  local missing=0
+  local f
+  local required=(
+    "plans/prd.json"
+    "plans/ralph.sh"
+    "plans/verify.sh"
+    "plans/progress.txt"
+    "plans/update_task.sh"
+    "plans/prd_schema_check.sh"
+    "plans/story_verify_allowlist.txt"
+    "docs/schemas/contract_review.schema.json"
+    "plans/workflow_contract_gate.sh"
+    "plans/workflow_acceptance.sh"
+    "plans/workflow_contract_map.json"
+  )
+  for f in "${required[@]}"; do
+    if [[ ! -f "$WORKTREE/$f" ]]; then
+      echo "FAIL: required workflow artifact missing: $f" >&2
+      missing=1
+    fi
+  done
+  return "$missing"
+}
+
+echo "Test 12b: required workflow artifacts are present"
+check_required_workflow_artifacts
+
+echo "Test 12c: missing required workflow artifact fails fast"
+set +e
+mv "$WORKTREE/plans/workflow_contract_map.json" "$WORKTREE/.ralph/workflow_contract_map.tmp"
+check_required_workflow_artifacts
+rc=$?
+set -e
+mv "$WORKTREE/.ralph/workflow_contract_map.tmp" "$WORKTREE/plans/workflow_contract_map.json"
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected missing artifact to fail" >&2
+  exit 1
+fi
+
 echo "Test 13: missing PRD file stops preflight"
 reset_state
 missing_prd="$WORKTREE/.ralph/missing_prd.json"
