@@ -3,8 +3,8 @@
 ## 0) One-line outcome
 - Outcome: Added workflow acceptance runner controls (list/only/resume/fast), fast prechecks, and state/status tracking with new contract + map coverage.
 - Contract/plan requirement satisfied: WF-11.1 change control + WF-13.* workflow acceptance runner requirements.
-- Workstream (Ralph Loop workflow | Stoic Trader bot): Ralph Loop workflow.
-- Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md): specs/WORKFLOW_CONTRACT.md.
+- Workstream (Ralph Loop workflow | Stoic Trader bot): Ralph Loop workflow
+- Contract used (specs/WORKFLOW_CONTRACT.md | CONTRACT.md): specs/WORKFLOW_CONTRACT.md
 
 ## 1) Constraint (TOC)
 - Constraint encountered: Long workflow acceptance runs surfaced cheap mistakes late.
@@ -95,5 +95,5 @@
 ## 11) Apply or it didn't happen
 - What new invariant did we just discover?: Harness scripts must remain bash 3.2-compatible on macOS.
 - What is the cheapest automated check that enforces it?: grep for mapfile/readarray in plans/*.sh.
-- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): AGENTS + workflow acceptance test.
+- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): AGENTS
 - What would break if we remove your fix?: Local verify would fail on macOS before workflow acceptance runs.

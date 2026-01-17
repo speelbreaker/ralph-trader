@@ -372,6 +372,7 @@ add_optional_overlays() {
 # Ensure tests run against the working tree versions while keeping the worktree clean.
 OVERLAY_FILES=(
   "verify.sh"
+  "AGENTS.md"
   ".github/pull_request_template.md"
   "plans/ralph.sh"
   "plans/verify.sh"
@@ -851,6 +852,23 @@ if ! run_in_worktree grep -q "Elevation plan" ".github/pull_request_template.md"
 fi
 if ! run_in_worktree grep -q "Concrete Elevation Plan to reduce Top 3 sinks" ".github/pull_request_template.md"; then
   echo "FAIL: PR template missing elevation plan detail section" >&2
+fi
+
+if ! run_in_worktree grep -Fq "MUST keep fast precheck set limited to schema/self-dep/shellcheck/traceability" "AGENTS.md"; then
+  echo "FAIL: AGENTS.md missing fast precheck constraint" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "SHOULD keep workflow_acceptance test IDs stable and listable" "AGENTS.md"; then
+  echo "FAIL: AGENTS.md missing workflow_acceptance test ID stability guidance" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "MUST avoid bash 4+ builtins (mapfile/readarray) in harness scripts" "AGENTS.md"; then
+  echo "FAIL: AGENTS.md missing bash 4+ builtin restriction" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "Top time/token sinks (fix focus)" "AGENTS.md"; then
+  echo "FAIL: AGENTS.md missing top time/token sinks section" >&2
+  exit 1
 fi
 
 if ! run_in_worktree awk '
