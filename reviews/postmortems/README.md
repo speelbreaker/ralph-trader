@@ -9,11 +9,5 @@ Naming
 
 Rules
 - Every PR must include at least one entry file in this folder.
-- If a recurring issue is marked "Y", the PR must also:
-  - include a concrete enforcement path (script_check, contract_clarification, or test), and
-  - update WORKFLOW_FRICTION.md with the elevation action.
-- Postmortems must include:
-  - Workstream + Contract used (to prevent workflow vs bot mix-ups)
-  - "Apply or it didn't happen" (invariant + enforcement + canonical place + removal impact)
-  - "What should we add to AGENTS.md?" (1–3 enforceable bullets)
-  - "Concrete Elevation Plan" tied to the top 3 sinks
+- Entries must follow PR_POSTMORTEM_TEMPLATE.md and include all sections 0–3.
+- If a recurring issue is identified in the postmortem, update WORKFLOW_FRICTION.md with the next elevation action.

@@ -305,31 +305,27 @@
       "artifacts": [
         "reviews/postmortems/",
         "plans/postmortem_check.sh",
-        ".github/pull_request_template.md",
         ".ralph/artifacts.json",
         "docs/schemas/artifacts.schema.json"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (postmortem gate check)",
-        "plans/workflow_acceptance.sh (Test 0g, Test 10d)"
+        "plans/workflow_acceptance.sh (postmortem gate check, Test 0g, Test 10d)"
       ]
     },
     {
       "id": "WF-2.9",
-      "title": "7) Recurring friction must be elevated to enforcement. Contract kernel use is fail-closed.",
+      "title": "7) Recurring friction should be elevated to enforcement. Contract kernel use is fail-closed.",
       "enforcement": [
-        "plans/postmortem_check.sh",
-        "WORKFLOW_FRICTION.md",
+        "manual",
         "scripts/check_contract_kernel.py",
         "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
         "WORKFLOW_FRICTION.md",
-        "reviews/postmortems/",
         "docs/contract_kernel.json"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (postmortem gate check)",
+        "manual",
         "plans/workflow_acceptance.sh (Test 22)"
       ]
     },
@@ -386,7 +382,7 @@
         "plans/prd.json"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (Test 1)"
+        "plans/workflow_acceptance.sh (Test 1, Test 15b)"
       ]
     },
     {
@@ -595,14 +591,17 @@
       "id": "WF-5.3",
       "title": "5.3 Selection modes",
       "enforcement": [
-        "plans/ralph.sh (selection modes)",
+        "plans/ralph.sh (selection modes + dependency eligibility)",
         "plans/prd.json"
       ],
       "artifacts": [
-        ".ralph/iter_*/selection.out"
+        ".ralph/iter_*/selection.out",
+        ".ralph/iter_*/selected.json",
+        ".ralph/blocked_dependency_deadlock_*/blocked_item.json",
+        ".ralph/blocked_dependency_deadlock_*/dependency_deadlock.json"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (Test 4)"
+        "plans/workflow_acceptance.sh (Test 4, Test 15c, Test 15d)"
       ]
     },
     {

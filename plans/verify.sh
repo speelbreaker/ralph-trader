@@ -7,11 +7,12 @@
 #   green state for the selected verification level?"
 #
 # Usage:
-#   ./plans/verify.sh [quick|full]
+#   ./plans/verify.sh [quick|full|promotion]
+#   (no arg defaults to full when CI=1, quick otherwise)
 #
 # Philosophy:
 #   - quick: fast gate set for local iteration (subset of full).
-#   - full: CI-grade gates (default for Ralph/CI).
+#   - full: CI-grade gates (default in CI or when explicitly selected).
 #   - promotion: optional release gate checks (e.g., F1 cert) ONLY when explicitly enabled.
 #
 # Logging/timeouts:
@@ -39,7 +40,14 @@ else
 fi
 echo "VERIFY_SH_SHA=$VERIFY_SH_SHA"
 
-MODE="${1:-quick}"                 # quick | full | promotion
+MODE="${1:-}"                      # quick | full | promotion (default inferred)
+if [[ -z "$MODE" ]]; then
+  if [[ -n "${CI:-}" ]]; then
+    MODE="full"
+  else
+    MODE="quick"
+  fi
+fi
 # Allow "promotion" as a mode alias (full + VERIFY_MODE=promotion)
 if [[ "$MODE" == "promotion" ]]; then
   MODE="full"

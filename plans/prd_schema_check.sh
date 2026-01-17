@@ -49,6 +49,35 @@ errors="$(
     def missing_fields($obj; $fields):
       [$fields[] as $f | select($obj | has($f) | not) | $f];
 
+    def check_dependencies($it; $ids; $by_id):
+      ($it.id // "<no id>") as $id
+      | (
+          if ($it.dependencies|type)!="array" then [err($id; "dependencies must be array")]
+          elif ([ $it.dependencies[] | select(type!="string") ] | length) > 0 then [err($id; "dependencies must be array of strings")]
+          else [] end
+        )
+      + (
+          if ($it.dependencies|type)=="array" then
+            ([$it.dependencies[] | select(. == $it.id)] | length > 0) as $self
+            | if $self then [err($id; "dependency cannot include self")] else [] end
+          else [] end
+        )
+      + (
+          if ($it.dependencies|type)=="array" then
+            ($it.dependencies
+              | map(select(($ids | index(.)) == null))
+              | map(err($id; "dependency id not found: " + .)))
+          else [] end
+        )
+      + (
+          if ($it.dependencies|type)=="array" then
+            ($it.dependencies
+              | map(select(($ids | index(.)) != null))
+              | map(select((($by_id[.] // {}) | .slice // -1) > ($it.slice // -1)))
+              | map(. as $dep | err($id; "dependency slice higher than item: \($dep) (dep_slice=\((($by_id[$dep] // {}) | .slice // -1)), item_slice=\($it.slice // -1))")))
+          else [] end
+        );
+
     def check_top:
       (if (has("project") and has("source") and has("rules") and has("items") and (.items|type=="array")) then [] else ["<top>: missing project/source/rules/items or items not array"] end)
       + (if (.source|has("implementation_plan_path")) then [] else ["<top>: missing source.implementation_plan_path"] end)
@@ -58,7 +87,7 @@ errors="$(
       + (if ((.rules|has("no_prd_rewrite")) and (.rules.no_prd_rewrite==true)) then [] else ["<top>: rules.no_prd_rewrite must be true"] end)
       + (if ((.rules|has("passes_only_flips_after_verify_green")) and (.rules.passes_only_flips_after_verify_green==true)) then [] else ["<top>: rules.passes_only_flips_after_verify_green must be true"] end);
 
-    def check_item($it):
+    def check_item($it; $ids; $by_id):
       ($it.id // "<no id>") as $id
       | (missing_fields($it; [
           "id","priority","phase","slice","slice_ref","story_ref","category","description",
@@ -118,9 +147,13 @@ errors="$(
       )
       + (
         if ($it.risk|type)!="string" or ($it.risk|test("^(low|med|high)$")|not) then [err($id; "risk must be low|med|high")] else [] end
-      );
+      )
+      + (check_dependencies($it; $ids; $by_id));
 
-    (check_top + ((.items | if type=="array" then . else [] end) | map(check_item(.)) | add // [])) | .[]
+    (.items | if type=="array" then . else [] end) as $items
+    | ($items | map(.id)) as $ids
+    | ($items | map({key:.id, value:.}) | from_entries) as $by_id
+    | (check_top + ($items | map(check_item(. ; $ids; $by_id)) | add // [])) | .[]
   ' "$PRD_FILE"
 )"
 
