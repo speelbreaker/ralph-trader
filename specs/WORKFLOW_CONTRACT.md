@@ -51,12 +51,18 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 - [WF-1.4] `plans/ralph.sh` — execution harness (iterative loop)
 - [WF-1.5] `plans/verify.sh` — verification gate (CI must run this)
 - [WF-1.6] `plans/progress.txt` — append-only shift handoff log
+- [WF-1.8] `plans/update_task.sh` — safe PRD mutation helper (required; preflight enforces)
+- [WF-1.9] `plans/prd_schema_check.sh` — PRD schema gate
+- [WF-1.10] `plans/story_verify_allowlist.txt` — allowed verify commands list
+- [WF-1.11] `docs/schemas/contract_review.schema.json` — contract review schema
+- [WF-1.12] `plans/workflow_contract_gate.sh` — workflow rule traceability gate
+- [WF-1.13] `plans/workflow_acceptance.sh` — workflow acceptance tests
+- [WF-1.14] `plans/workflow_contract_map.json` — workflow rule enforcement map
 
 ### 1.3 Optional but recommended
 - `plans/bootstrap.sh` — one-time harness scaffolding
 - `plans/init.sh` — idempotent “get runnable baseline” script
 - `plans/rotate_progress.py` — portability-safe progress rotation
-- `plans/update_task.sh` — safe PRD mutation helper (avoid manual JSON edits)
 - `plans/profile.sh` — optional profile helper to export Ralph env presets
 - `.ralph/` — iteration artifacts directory created by Ralph
 - `docs/codebase/*` — lightweight codebase map (stack/architecture/structure/testing/integrations/conventions/concerns)

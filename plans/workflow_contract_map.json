@@ -129,6 +129,100 @@
       ]
     },
     {
+      "id": "WF-1.8",
+      "title": "plans/update_task.sh  safe PRD mutation helper (required; preflight enforces)",
+      "enforcement": [
+        "plans/ralph.sh (preflight)"
+      ],
+      "artifacts": [
+        "plans/update_task.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
+      "id": "WF-1.9",
+      "title": "plans/prd_schema_check.sh  PRD schema gate",
+      "enforcement": [
+        "plans/ralph.sh (preflight)"
+      ],
+      "artifacts": [
+        "plans/prd_schema_check.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
+      "id": "WF-1.10",
+      "title": "plans/story_verify_allowlist.txt  allowed verify commands list",
+      "enforcement": [
+        "plans/ralph.sh (story verify allowlist gate)"
+      ],
+      "artifacts": [
+        "plans/story_verify_allowlist.txt"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
+      "id": "WF-1.11",
+      "title": "docs/schemas/contract_review.schema.json  contract review schema",
+      "enforcement": [
+        "plans/contract_review_validate.sh"
+      ],
+      "artifacts": [
+        "docs/schemas/contract_review.schema.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 11)",
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
+      "id": "WF-1.12",
+      "title": "plans/workflow_contract_gate.sh  workflow rule traceability gate",
+      "enforcement": [
+        "plans/workflow_contract_gate.sh"
+      ],
+      "artifacts": [
+        "plans/workflow_contract_gate.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12)",
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
+      "id": "WF-1.13",
+      "title": "plans/workflow_acceptance.sh  workflow acceptance tests",
+      "enforcement": [
+        "plans/verify.sh (workflow acceptance policy)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
+      "id": "WF-1.14",
+      "title": "plans/workflow_contract_map.json  workflow rule enforcement map",
+      "enforcement": [
+        "plans/workflow_contract_gate.sh"
+      ],
+      "artifacts": [
+        "plans/workflow_contract_map.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12)",
+        "plans/workflow_acceptance.sh (Test 12b/12c)"
+      ]
+    },
+    {
       "id": "WF-2.1",
       "title": "1) Contract alignment is mandatory.",
       "enforcement": [
