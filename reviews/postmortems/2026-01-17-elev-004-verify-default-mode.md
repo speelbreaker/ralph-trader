@@ -90,5 +90,5 @@
 ## 11) Apply or it didn't happen
 - What new invariant did we just discover?: Verify default mode must match CI-grade expectations when no args are provided.
 - What is the cheapest automated check that enforces it?: Workflow acceptance assertion on verify.sh mode parsing.
-- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): script (plans/workflow_acceptance.sh) + AGENTS checklist.
+- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): script
 - What would break if we remove your fix?: CI could silently run quick mode by default, reducing coverage.
