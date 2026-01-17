@@ -91,6 +91,7 @@ OVERLAY_FILES=(
   ".github/pull_request_template.md"
   "plans/ralph.sh"
   "plans/verify.sh"
+  "plans/workflow_verify.sh"
   "plans/update_task.sh"
   "plans/prd.json"
   "plans/prd_schema_check.sh"
@@ -137,6 +138,7 @@ done
 scripts_to_chmod=(
   "ralph.sh"
   "verify.sh"
+  "workflow_verify.sh"
   "update_task.sh"
   "prd_schema_check.sh"
   "prd_lint.sh"
@@ -409,6 +411,21 @@ if ! run_in_worktree grep -q "bash -n plans/workflow_acceptance.sh" "plans/verif
   exit 1
 fi
 
+if ! run_in_worktree grep -q "should_run_workflow_acceptance" "plans/verify.sh"; then
+  echo "FAIL: verify must call should_run_workflow_acceptance" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "run_logged \"workflow_acceptance\"" "plans/verify.sh"; then
+  echo "FAIL: verify must run workflow_acceptance.sh under run_logged" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "workflow acceptance skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit a workflow acceptance skip message" >&2
+  exit 1
+fi
+
 if ! run_in_worktree grep -q "PATH_CONVENTION" "plans/prd_lint.sh"; then
   echo "FAIL: prd_lint must flag path convention drift" >&2
   exit 1
@@ -429,6 +446,31 @@ if ! run_in_worktree grep -q "postmortem_check.sh" "plans/verify.sh"; then
   exit 1
 fi
 
+if ! run_in_worktree grep -q "VERIFY_CONSOLE" "plans/verify.sh"; then
+  echo "FAIL: verify must support VERIFY_CONSOLE quiet/verbose modes" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "VERIFY_FAIL_TAIL_LINES" "plans/verify.sh"; then
+  echo "FAIL: verify must define VERIFY_FAIL_TAIL_LINES for quiet failure tail" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "VERIFY_FAIL_SUMMARY_LINES" "plans/verify.sh"; then
+  echo "FAIL: verify must define VERIFY_FAIL_SUMMARY_LINES for quiet failure summary" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "emit_fail_excerpt" "plans/verify.sh"; then
+  echo "FAIL: verify must emit log tail + summary on quiet failures" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "error:|FAIL|FAILED|panicked" "plans/verify.sh"; then
+  echo "FAIL: verify must grep failure summary patterns in quiet mode" >&2
+  exit 1
+fi
+
 if ! run_in_worktree test -x "plans/postmortem_check.sh"; then
   echo "FAIL: plans/postmortem_check.sh not executable" >&2
   exit 1
@@ -439,13 +481,29 @@ if ! run_in_worktree awk '
   in_block && $0 ~ /^[[:space:]]*verify\.sh\)/ {has_root=1}
   in_block && index($0, "plans/verify.sh") {has_verify=1}
   in_block && index($0, "plans/workflow_acceptance.sh") {has_accept=1}
+  in_block && index($0, "plans/workflow_verify.sh") {has_workflow_verify=1}
   in_block && index($0, "plans/story_verify_allowlist.txt") {has_story=1}
   in_block && index($0, "specs/WORKFLOW_CONTRACT.md") {has_contract=1}
   in_block && index($0, "scripts/check_contract_kernel.py") {has_kernel=1}
   in_block && index($0, "docs/validation_rules.md") {has_rules=1}
-  END { exit (has_root && has_verify && has_accept && has_story && has_contract && has_kernel && has_rules) ? 0 : 1 }
+  END { exit (has_root && has_verify && has_accept && has_workflow_verify && has_story && has_contract && has_kernel && has_rules) ? 0 : 1 }
 ' "plans/verify.sh"; then
   echo "FAIL: workflow allowlist must include core workflow files (including root verify.sh)" >&2
+  exit 1
+fi
+
+if ! run_in_worktree test -x "plans/workflow_verify.sh"; then
+  echo "FAIL: expected plans/workflow_verify.sh to exist and be executable" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "workflow_acceptance.sh" "plans/workflow_verify.sh"; then
+  echo "FAIL: workflow_verify must invoke workflow_acceptance.sh" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "RUN_REPO_VERIFY" "plans/workflow_verify.sh"; then
+  echo "FAIL: workflow_verify must support RUN_REPO_VERIFY override" >&2
   exit 1
 fi
 
@@ -3230,7 +3288,15 @@ if [[ "$rc" -ne 0 ]]; then
   tail -n 120 "$test18_log" >&2 || true
   exit 1
 fi
-if ! run_in_worktree grep -q "RateLimit: sleeping" "$test18_log"; then
+rate_limit_logged=0
+if run_in_worktree grep -q "RateLimit: sleeping" "$test18_log"; then
+  rate_limit_logged=1
+fi
+latest_log="$(run_in_worktree bash -c 'ls -t plans/logs/ralph.*.log 2>/dev/null | head -n 1')"
+if [[ -n "$latest_log" ]] && run_in_worktree grep -q "RateLimit: sleeping" "$latest_log"; then
+  rate_limit_logged=1
+fi
+if [[ "$rate_limit_logged" -ne 1 ]]; then
   echo "FAIL: expected rate limit sleep log" >&2
   echo "Ralph log tail:" >&2
   tail -n 80 "$test18_log" >&2 || true
