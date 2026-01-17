@@ -446,6 +446,31 @@ if ! run_in_worktree grep -q "postmortem_check.sh" "plans/verify.sh"; then
   exit 1
 fi
 
+if ! run_in_worktree grep -q "VERIFY_CONSOLE" "plans/verify.sh"; then
+  echo "FAIL: verify must support VERIFY_CONSOLE quiet/verbose modes" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "VERIFY_FAIL_TAIL_LINES" "plans/verify.sh"; then
+  echo "FAIL: verify must define VERIFY_FAIL_TAIL_LINES for quiet failure tail" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "VERIFY_FAIL_SUMMARY_LINES" "plans/verify.sh"; then
+  echo "FAIL: verify must define VERIFY_FAIL_SUMMARY_LINES for quiet failure summary" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "emit_fail_excerpt" "plans/verify.sh"; then
+  echo "FAIL: verify must emit log tail + summary on quiet failures" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "error:|FAIL|FAILED|panicked" "plans/verify.sh"; then
+  echo "FAIL: verify must grep failure summary patterns in quiet mode" >&2
+  exit 1
+fi
+
 if ! run_in_worktree test -x "plans/postmortem_check.sh"; then
   echo "FAIL: plans/postmortem_check.sh not executable" >&2
   exit 1

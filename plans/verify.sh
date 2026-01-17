@@ -18,6 +18,9 @@
 #   - VERIFY_RUN_ID=YYYYmmdd_HHMMSS (auto if unset)
 #   - VERIFY_ARTIFACTS_DIR=artifacts/verify/<run_id>
 #   - VERIFY_LOG_CAPTURE=1 (set 0 to disable per-step logs)
+#   - VERIFY_CONSOLE=auto|quiet|verbose (auto => quiet in CI, verbose locally)
+#   - VERIFY_FAIL_TAIL_LINES=80 (lines of log tail to print on failure in quiet mode)
+#   - VERIFY_FAIL_SUMMARY_LINES=20 (grep summary lines to print on failure in quiet mode)
 #   - ENABLE_TIMEOUTS=1 (set 0 to disable; uses timeout/gtimeout if available)
 #
 # CI alignment:
@@ -49,7 +52,7 @@ cd "$ROOT"
 CI_GATES_SOURCE="${CI_GATES_SOURCE:-auto}"
 VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
-VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture
+VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture in verbose mode
 WORKFLOW_ACCEPTANCE_POLICY="${WORKFLOW_ACCEPTANCE_POLICY:-auto}"
 
 mkdir -p "$VERIFY_ARTIFACTS_DIR"
@@ -81,6 +84,22 @@ log()  { echo -e "\n${GREEN}=== $* ===${NC}"; }
 warn() { echo -e "${YELLOW}WARN: $*${NC}" >&2; }
 fail() { echo -e "${RED}FAIL: $*${NC}" >&2; exit 1; }
 is_ci(){ [[ -n "${CI:-}" ]]; }
+
+VERIFY_CONSOLE="${VERIFY_CONSOLE:-auto}"
+case "$VERIFY_CONSOLE" in
+  auto)
+    if is_ci; then
+      VERIFY_CONSOLE="quiet"
+    else
+      VERIFY_CONSOLE="verbose"
+    fi
+    ;;
+  quiet|verbose) ;;
+  *)
+    warn "Unknown VERIFY_CONSOLE=$VERIFY_CONSOLE (expected auto|quiet|verbose); defaulting to verbose"
+    VERIFY_CONSOLE="verbose"
+    ;;
+esac
 
 need() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
@@ -160,6 +179,29 @@ run_with_timeout() {
   "$TIMEOUT_BIN" "$duration" "$@"
 }
 
+emit_fail_excerpt() {
+  local name="$1"
+  local logfile="$2"
+  local tail_lines="${VERIFY_FAIL_TAIL_LINES:-80}"
+  local summary_lines="${VERIFY_FAIL_SUMMARY_LINES:-20}"
+  local summary=""
+
+  if [[ ! -f "$logfile" ]]; then
+    warn "Logfile missing for ${name} (${logfile})"
+    return 0
+  fi
+
+  echo "---- ${name} failure tail (last ${tail_lines} lines) ----"
+  tail -n "$tail_lines" "$logfile" || true
+  echo "---- ${name} failure summary (grep error:|FAIL|FAILED|panicked) ----"
+  summary="$(grep -nE "error:|FAIL|FAILED|panicked" "$logfile" || true)"
+  if [[ -n "$summary" ]]; then
+    echo "$summary" | tail -n "$summary_lines" || true
+  else
+    echo "(no summary matches)"
+  fi
+}
+
 run_logged() {
   local name="$1"
   local duration="$2"
@@ -172,14 +214,25 @@ run_logged() {
     TIMEOUT_WARNED=1
   fi
 
-  if [[ "$VERIFY_LOG_CAPTURE" == "1" ]]; then
-    set +e
-    run_with_timeout "$duration" "$@" 2>&1 | tee "$logfile"
-    rc="${PIPESTATUS[0]}"
-    set -e
+  if [[ "$VERIFY_CONSOLE" == "verbose" ]]; then
+    if [[ "$VERIFY_LOG_CAPTURE" == "1" ]]; then
+      set +e
+      run_with_timeout "$duration" "$@" 2>&1 | tee "$logfile"
+      rc="${PIPESTATUS[0]}"
+      set -e
+    else
+      run_with_timeout "$duration" "$@"
+      rc=$?
+    fi
   else
-    run_with_timeout "$duration" "$@"
+    # Quiet console: always capture logs to artifacts for debugging.
+    set +e
+    run_with_timeout "$duration" "$@" > "$logfile" 2>&1
     rc=$?
+    set -e
+    if [[ "$rc" != "0" ]]; then
+      emit_fail_excerpt "$name" "$logfile"
+    fi
   fi
 
   if [[ "$rc" == "124" || "$rc" == "137" ]]; then
