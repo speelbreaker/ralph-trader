@@ -925,9 +925,7 @@
       "evidence": [
         "cargo test -p soldier_core --test test_post_only_guard output"
       ],
-      "dependencies": [
-        "S3-001"
-      ],
+      "dependencies": [],
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
@@ -1107,9 +1105,7 @@
       "evidence": [
         "cargo test -p soldier_core --test test_tlsm output"
       ],
-      "dependencies": [
-        "S4-001"
-      ],
+      "dependencies": [],
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
@@ -1163,9 +1159,7 @@
       "evidence": [
         "cargo test -p soldier_infra --test test_trade_id_registry output"
       ],
-      "dependencies": [
-        "S4-002"
-      ],
+      "dependencies": [],
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,

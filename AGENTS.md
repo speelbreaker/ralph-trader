@@ -52,6 +52,7 @@ Any change to workflow/harness files (see allowlist in `plans/verify.sh:is_workf
 - updated/added assertions in `plans/workflow_acceptance.sh` (or a dedicated gate script invoked by it)
 - and a run that passes `./plans/verify.sh`
 - Do not edit `plans/workflow_acceptance.sh` without running `./plans/verify.sh full`.
+- MUST update workflow acceptance coverage when changing `plans/verify.sh` mode defaults.
 - Keep WF-* IDs synchronized across `specs/WORKFLOW_CONTRACT.md` and `plans/workflow_contract_map.json`.
 - Workflow acceptance always runs in CI; locally it may skip when no workflow-critical files changed (WORKFLOW_ACCEPTANCE_POLICY=auto). Force with WORKFLOW_ACCEPTANCE_POLICY=always.
 

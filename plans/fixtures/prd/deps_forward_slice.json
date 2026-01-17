@@ -1,0 +1,65 @@
+{
+  "project": "WorkflowAcceptance",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-001",
+      "priority": 10,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "S1.1",
+      "category": "workflow",
+      "description": "depends on higher slice",
+      "contract_refs": ["specs/WORKFLOW_CONTRACT.md §3.5"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md Phase 1"],
+      "scope": {
+        "touch": ["plans/prd_schema_check.sh"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["e1"],
+      "dependencies": ["S2-001"],
+      "est_size": "XS",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    },
+    {
+      "id": "S2-001",
+      "priority": 5,
+      "phase": 1,
+      "slice": 2,
+      "slice_ref": "Slice 2",
+      "story_ref": "S2.1",
+      "category": "workflow",
+      "description": "higher slice dependency",
+      "contract_refs": ["specs/WORKFLOW_CONTRACT.md §3.5"],
+      "plan_refs": ["IMPLEMENTATION_PLAN.md Phase 1"],
+      "scope": {
+        "touch": ["plans/prd_schema_check.sh"],
+        "avoid": []
+      },
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh"],
+      "evidence": ["e1"],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}

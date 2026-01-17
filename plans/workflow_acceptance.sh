@@ -64,6 +64,7 @@ copy_worktree_file() {
   local src="$ROOT/$rel"
   local dest="$WORKTREE/$rel"
   require_file "$src"
+  mkdir -p "$(dirname "$dest")"
   if ! cp "$src" "$dest"; then
     echo "FAIL: failed to copy $src to $dest" >&2
     exit 1
@@ -111,6 +112,9 @@ OVERLAY_FILES=(
   "plans/postmortem_check.sh"
   "plans/workflow_contract_gate.sh"
   "plans/workflow_contract_map.json"
+  "plans/fixtures/prd/deps_order_same_slice.json"
+  "plans/fixtures/prd/deps_cycle_same_slice.json"
+  "plans/fixtures/prd/deps_forward_slice.json"
   "specs/WORKFLOW_CONTRACT.md"
   "docs/schemas/artifacts.schema.json"
 )
@@ -443,6 +447,20 @@ fi
 
 if ! run_in_worktree grep -q "postmortem_check.sh" "plans/verify.sh"; then
   echo "FAIL: verify must run postmortem check gate" >&2
+  exit 1
+fi
+
+if ! run_in_worktree awk '
+  NR<=120 {
+    if (!mode && index($0, "MODE=\"${1:-}\"")) mode=NR
+    if (mode && !empty && index($0, "-z \"$MODE\"")) empty=NR
+    if (empty && !ci && index($0, "CI:-")) ci=NR
+    if (ci && !full && index($0, "MODE=\"full\"")) full=NR
+    if (full && !quick && index($0, "MODE=\"quick\"")) quick=NR
+  }
+  END {exit (mode && empty && ci && full && quick) ? 0 : 1}
+' "plans/verify.sh"; then
+  echo "FAIL: verify must infer default mode from CI when no arg provided" >&2
   exit 1
 fi
 
@@ -3028,6 +3046,75 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 
+echo "Test 15b: dependency schema rejects forward-slice dependency"
+set +e
+run_in_worktree ./plans/prd_schema_check.sh "plans/fixtures/prd/deps_forward_slice.json" >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected schema check to fail for forward-slice dependency" >&2
+  exit 1
+fi
+
+echo "Test 15c: dependency ordering respects same-slice deps"
+reset_state
+snapshot_worktree_if_dirty
+test15c_log="$WORKTREE/.ralph/test15c.log"
+set +e
+run_in_worktree env \
+  PRD_FILE="$WORKTREE/plans/fixtures/prd/deps_order_same_slice.json" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_SELECTION_MODE=harness \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  ./plans/ralph.sh 1 >"$test15c_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected dry-run selection to succeed for dependency order test" >&2
+  tail -n 120 "$test15c_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir for dependency order test" >&2
+  exit 1
+fi
+selected_id="$(run_in_worktree jq -r '.selected_id // empty' "$WORKTREE/$iter_dir/selected.json")"
+if [[ "$selected_id" != "S1-001" ]]; then
+  echo "FAIL: expected S1-001 selected before dependency, got ${selected_id}" >&2
+  exit 1
+fi
+
+echo "Test 15d: dependency cycle blocks selection"
+reset_state
+snapshot_worktree_if_dirty
+test15d_log="$WORKTREE/.ralph/test15d.log"
+set +e
+run_in_worktree env \
+  PRD_FILE="$WORKTREE/plans/fixtures/prd/deps_cycle_same_slice.json" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_SELECTION_MODE=harness \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  ./plans/ralph.sh 1 >"$test15d_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for dependency cycle" >&2
+  tail -n 120 "$test15d_log" >&2 || true
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "dependency_deadlock")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for dependency_deadlock" >&2
+  exit 1
+fi
+if [[ ! -f "$latest_block/dependency_deadlock.json" ]]; then
+  echo "FAIL: expected dependency_deadlock.json in blocked artifact" >&2
+  exit 1
+fi
+
 echo "Test 16: cheating detected (deleted test file)"
 reset_state
 valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
@@ -3305,6 +3392,9 @@ if [[ -n "$latest_log" ]] && run_in_worktree grep -q "RateLimit: sleeping" "$lat
 fi
 if [[ "$rate_limit_logged" -ne 1 ]]; then
   echo "WARN: expected rate limit sleep log (state last_sleep_seconds=${rate_limit_sleep})" >&2
+  echo "State selection_mode: $(run_in_worktree jq -r '.selection_mode // \"unknown\"' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)" >&2
+  echo "State rate_limit: $(run_in_worktree jq -c '.rate_limit // {}' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)" >&2
+  echo "Rate limit file: $(run_in_worktree cat "$rate_limit_file" 2>/dev/null || true)" >&2
   echo "Ralph log tail:" >&2
   tail -n 80 "$test18_log" >&2 || true
 fi

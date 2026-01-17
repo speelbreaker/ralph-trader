@@ -189,6 +189,8 @@ evidence (string[]) — concrete artifacts
 
 dependencies (string[])
 
+Dependencies must reference existing item ids, must not include self, and must not point to a higher slice.
+
 est_size (XS|S|M) — M should be split
 
 risk (low|med|high)
@@ -310,7 +312,7 @@ Ralph supports two selection modes:
 
 RPH_SELECTION_MODE=harness (default):
 
-selects highest priority passes=false in ACTIVE_SLICE
+selects highest priority eligible item (passes=false) in ACTIVE_SLICE, where eligible means all dependencies exist and have passes=true
 
 RPH_SELECTION_MODE=agent:
 
@@ -325,7 +327,11 @@ passes=false
 
 slice == ACTIVE_SLICE
 
+dependencies satisfied (eligible=true)
+
 invalid selection → block and stop
+
+If ACTIVE_SLICE contains no eligible items, Ralph MUST stop non-zero and write a dependency-deadlock blocked artifact under .ralph/blocked_dependency_deadlock_*.
 
 ### 5.4 Hard stop on human decision [WF-5.4]
 
@@ -620,6 +626,8 @@ Slice gating / blocked behavior [WF-12.4]
 
 [ ] With any passes=false item in slice N, Ralph never selects an item from slice > N (observable via .ralph/iter_*/selected.json).
 [ ] If the selected story has needs_human_decision=true, Ralph stops immediately and writes .ralph/blocked_*/blocked_item.json.
+[ ] If B depends on A within the same slice, Ralph selects A before B even if B has higher priority.
+[ ] A dependency cycle within ACTIVE_SLICE blocks with a dependency-deadlock artifact.
 
 Completion semantics (no fail-open) [WF-12.5]
 

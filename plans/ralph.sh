@@ -887,6 +887,93 @@ item_by_id() {
   ' "$PRD_FILE"
 }
 
+dependency_analysis_for_slice() {
+  local slice="$1"
+  jq -c --argjson s "$slice" '
+    (.items // []) as $items
+    | ($items | map({key:.id, value:.}) | from_entries) as $by_id
+    | [$items[] | select(.passes==false and .slice==$s)
+      | . as $it
+      | ($it.dependencies // []) as $deps
+      | {
+          id: $it.id,
+          priority: ($it.priority // 0),
+          description: ($it.description // ""),
+          needs_human_decision: ($it.needs_human_decision // false),
+          unsatisfied_dependencies: (
+            $deps | map(
+              . as $dep_id
+              | if ($by_id | has($dep_id) | not) then {id:$dep_id,status:"missing_dependency_id"}
+                else
+                  ($by_id[$dep_id]) as $dep
+                  | if ($dep.passes == true) then empty
+                    elif ($dep.needs_human_decision == true) then {id:$dep_id,status:"blocked_by_human_decision"}
+                    else {id:$dep_id,status:"unsatisfied_not_passed"}
+                    end
+                end
+            )
+          )
+        }
+      | . + {eligible: ((.unsatisfied_dependencies | length) == 0)}
+    ]
+  ' "$PRD_FILE"
+}
+
+eligible_count_from_analysis() {
+  local analysis="$1"
+  jq -r '[.[] | select(.eligible==true)] | length' <<<"$analysis"
+}
+
+missing_dependency_count_from_analysis() {
+  local analysis="$1"
+  jq -r '[.[] | .unsatisfied_dependencies[]? | select(.status=="missing_dependency_id")] | length' <<<"$analysis"
+}
+
+select_eligible_id_from_analysis() {
+  local analysis="$1"
+  jq -r '[.[] | select(.eligible==true)] | sort_by(.priority) | reverse | .[0].id // empty' <<<"$analysis"
+}
+
+eligible_lines_from_analysis() {
+  local analysis="$1"
+  jq -r '.[] | select(.eligible==true) | "\(.id) - \(.description)"' <<<"$analysis"
+}
+
+dependency_info_from_analysis() {
+  local analysis="$1"
+  local id="$2"
+  jq -c --arg id "$id" '(.[] | select(.id==$id)) // empty' <<<"$analysis"
+}
+
+write_dependency_block() {
+  local reason="$1"
+  local slice="$2"
+  local analysis_json="$3"
+  local details="$4"
+  local prefix="${5:-blocked_dependency_deadlock}"
+  local block_dir
+  block_dir="$(write_blocked_artifacts "$reason" "dependency" 0 "$details" false "$prefix")"
+  if command -v jq >/dev/null 2>&1; then
+    jq -n \
+      --arg reason "$reason" \
+      --argjson active_slice "$slice" \
+      --argjson candidates "$analysis_json" \
+      '{
+        reason: $reason,
+        active_slice: $active_slice,
+        eligible_count: ($candidates | map(select(.eligible==true)) | length),
+        candidates: ($candidates | map({
+          id,
+          priority,
+          needs_human_decision,
+          eligible,
+          unsatisfied_dependencies
+        }))
+      }' > "$block_dir/dependency_deadlock.json"
+  fi
+  echo "$block_dir"
+}
+
 all_items_passed() {
   jq -e '
     def items:
@@ -1757,13 +1844,33 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   NEXT_PRIORITY=0
   NEXT_DESC=""
   NEXT_NEEDS_HUMAN=false
+  NEXT_ELIGIBLE="false"
+  NEXT_UNSAT="[]"
+
+  DEP_ANALYSIS_JSON="$(dependency_analysis_for_slice "$ACTIVE_SLICE")"
+  MISSING_DEP_COUNT="$(missing_dependency_count_from_analysis "$DEP_ANALYSIS_JSON")"
+  ELIGIBLE_COUNT="$(eligible_count_from_analysis "$DEP_ANALYSIS_JSON")"
+  if ! [[ "$MISSING_DEP_COUNT" =~ ^[0-9]+$ ]]; then MISSING_DEP_COUNT=0; fi
+  if ! [[ "$ELIGIBLE_COUNT" =~ ^[0-9]+$ ]]; then ELIGIBLE_COUNT=0; fi
+
+  if (( MISSING_DEP_COUNT > 0 )); then
+    BLOCK_DIR="$(write_dependency_block "missing_dependency_id" "$ACTIVE_SLICE" "$DEP_ANALYSIS_JSON" "missing dependency id(s) in active slice candidates")"
+    attempt_blocked_verify_pre "$BLOCK_DIR"
+    echo "<promise>BLOCKED_MISSING_DEPENDENCY_ID</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked dependency: missing dependency id(s) in active slice" | tee -a "$LOG_FILE"
+    exit 1
+  fi
+
+  if (( ELIGIBLE_COUNT == 0 )); then
+    BLOCK_DIR="$(write_dependency_block "dependency_deadlock" "$ACTIVE_SLICE" "$DEP_ANALYSIS_JSON" "no eligible items in active slice")"
+    attempt_blocked_verify_pre "$BLOCK_DIR"
+    echo "<promise>BLOCKED_DEPENDENCY_DEADLOCK</promise>" | tee -a "$LOG_FILE"
+    echo "Blocked dependency deadlock: no eligible items in active slice" | tee -a "$LOG_FILE"
+    exit 1
+  fi
 
   if [[ "$RPH_SELECTION_MODE" == "agent" ]]; then
-    CANDIDATE_LINES="$(jq -r --argjson s "$ACTIVE_SLICE" '
-      def items:
-      (.items // []);
-      items[] | select(.passes==false and .slice==$s) | "\(.id) - \(.description)"
-    ' "$PRD_FILE")"
+    CANDIDATE_LINES="$(eligible_lines_from_analysis "$DEP_ANALYSIS_JSON")"
 
     IFS= read -r -d '' SEL_PROMPT <<PROMPT || true
 @${PRD_FILE} @${PROGRESS_FILE}
@@ -1821,10 +1928,24 @@ PROMPT
       NEXT_ITEM_JSON="$(item_by_id "$NEXT_ID")"
     fi
   else
-    NEXT_ITEM_JSON="$(select_next_item "$ACTIVE_SLICE")"
-    if [[ -n "$NEXT_ITEM_JSON" ]]; then
-      NEXT_ID="$(jq -r '.id // empty' <<<"$NEXT_ITEM_JSON")"
+    NEXT_ID="$(select_eligible_id_from_analysis "$DEP_ANALYSIS_JSON")"
+    if [[ -n "$NEXT_ID" ]]; then
+      NEXT_ITEM_JSON="$(item_by_id "$NEXT_ID")"
     fi
+  fi
+
+  if [[ -n "$NEXT_ID" ]]; then
+    NEXT_INFO="$(dependency_info_from_analysis "$DEP_ANALYSIS_JSON" "$NEXT_ID")"
+    if [[ -n "$NEXT_INFO" ]]; then
+      NEXT_ELIGIBLE="$(jq -r '.eligible // false' <<<"$NEXT_INFO")"
+      NEXT_UNSAT="$(jq -c '.unsatisfied_dependencies // []' <<<"$NEXT_INFO")"
+    fi
+  fi
+  if [[ "$NEXT_ELIGIBLE" != "true" && "$NEXT_ELIGIBLE" != "false" ]]; then
+    NEXT_ELIGIBLE="false"
+  fi
+  if [[ -z "$NEXT_UNSAT" ]]; then
+    NEXT_UNSAT="[]"
   fi
 
   if [[ -n "$NEXT_ITEM_JSON" ]]; then
@@ -1839,7 +1960,9 @@ PROMPT
     --arg selected_id "$NEXT_ID" \
     --arg selected_description "$NEXT_DESC" \
     --argjson needs_human_decision "$NEXT_NEEDS_HUMAN" \
-    '{active_slice: $active_slice, selection_mode: $selection_mode, selected_id: $selected_id, selected_description: $selected_description, needs_human_decision: $needs_human_decision}' \
+    --argjson eligible "$NEXT_ELIGIBLE" \
+    --argjson unsatisfied_dependencies "$NEXT_UNSAT" \
+    '{active_slice: $active_slice, selection_mode: $selection_mode, selected_id: $selected_id, selected_description: $selected_description, needs_human_decision: $needs_human_decision, eligible: $eligible, unsatisfied_dependencies: $unsatisfied_dependencies}' \
     > "${ITER_DIR}/selected.json"
   printf '%s\n' "$NEXT_ITEM_JSON" > "${ITER_DIR}/selected_item.json"
 
@@ -1864,7 +1987,7 @@ PROMPT
   if [[ "$RPH_SELECTION_MODE" == "agent" ]]; then
     SEL_SLICE="$(jq -r '.slice // empty' <<<"$NEXT_ITEM_JSON")"
     SEL_PASSES="$(jq -r 'if has("passes") then .passes else "" end' <<<"$NEXT_ITEM_JSON")"
-    if [[ -z "$NEXT_ID" || -z "$NEXT_ITEM_JSON" || "$SEL_PASSES" != "false" || "$SEL_SLICE" != "$ACTIVE_SLICE" ]]; then
+    if [[ -z "$NEXT_ID" || -z "$NEXT_ITEM_JSON" || "$SEL_PASSES" != "false" || "$SEL_SLICE" != "$ACTIVE_SLICE" || "$NEXT_ELIGIBLE" != "true" ]]; then
       BLOCK_DIR="$(write_blocked_artifacts "invalid_selection" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEXT_NEEDS_HUMAN")"
       attempt_blocked_verify_pre "$BLOCK_DIR"
       echo "<promise>BLOCKED_INVALID_SELECTION</promise>" | tee -a "$LOG_FILE"
