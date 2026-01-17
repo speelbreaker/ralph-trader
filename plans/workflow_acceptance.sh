@@ -1,6 +1,290 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+DEFAULT_STATE_FILE="/tmp/workflow_acceptance.state"
+DEFAULT_STATUS_FILE="/tmp/workflow_acceptance.status"
+
+ONLY_ID=""
+FROM_ID=""
+UNTIL_ID=""
+RESUME=0
+FAST=0
+LIST=0
+STATE_FILE="$DEFAULT_STATE_FILE"
+STATUS_FILE="$DEFAULT_STATUS_FILE"
+REQUIRE_SHELLCHECK=0
+START_INDEX=1
+END_INDEX=0
+TEST_COUNTER=0
+CURRENT_TEST_START=0
+CURRENT_TEST_ID=""
+CURRENT_TEST_DESC=""
+ALL_TEST_IDS=()
+
+usage() {
+  cat <<'EOF'
+Usage: ./plans/workflow_acceptance.sh [options]
+
+Options:
+  --list                 List tests and exit
+  --fast                 Run fast prechecks only
+  --only <id>            Run a single test id (overrides other selectors)
+  --from <id>            Start running at id (inclusive)
+  --until <id>           Stop after id (inclusive)
+  --resume               Resume from the test after the last completed id in state file
+  --state-file <path>    State file path (default /tmp/workflow_acceptance.state)
+  --status-file <path>   Status file path (default /tmp/workflow_acceptance.status)
+  --require-shellcheck   Fail if shellcheck is not installed
+EOF
+}
+
+list_tests() {
+  sed -nE 's/^[[:space:]]*if[[:space:]]+test_start[[:space:]]+"([^"]+)"[[:space:]]+"([^"]+)".*/\1\t\2/p' "$SCRIPT_PATH"
+}
+
+collect_test_ids() {
+  ALL_TEST_IDS=()
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    ALL_TEST_IDS+=("$id")
+  done < <(sed -nE 's/^[[:space:]]*if[[:space:]]+test_start[[:space:]]+"([^"]+)".*/\1/p' "$SCRIPT_PATH")
+  if (( ${#ALL_TEST_IDS[@]} == 0 )); then
+    echo "FAIL: no tests registered (test_start markers missing)" >&2
+    exit 1
+  fi
+}
+
+index_first_of() {
+  local needle="$1"
+  local i
+  for i in "${!ALL_TEST_IDS[@]}"; do
+    if [[ "${ALL_TEST_IDS[$i]}" == "$needle" ]]; then
+      echo $((i + 1))
+      return 0
+    fi
+  done
+  return 1
+}
+
+index_last_of() {
+  local needle="$1"
+  local i
+  for ((i=${#ALL_TEST_IDS[@]}-1; i>=0; i--)); do
+    if [[ "${ALL_TEST_IDS[$i]}" == "$needle" ]]; then
+      echo $((i + 1))
+      return 0
+    fi
+  done
+  return 1
+}
+
+now_secs() {
+  date +%s
+}
+
+ensure_parent_dir() {
+  local path="$1"
+  local dir
+  dir="$(dirname "$path")"
+  mkdir -p "$dir" >/dev/null 2>&1 || true
+}
+
+write_status() {
+  local id="$1"
+  local desc="$2"
+  ensure_parent_dir "$STATUS_FILE"
+  printf '%s\t%s\n' "$id" "$desc" > "$STATUS_FILE"
+}
+
+mark_done() {
+  local id="$1"
+  ensure_parent_dir "$STATE_FILE"
+  printf '%s\n' "$id" > "$STATE_FILE"
+}
+
+test_start() {
+  local id="$1"
+  local desc="$2"
+  local fast="${3:-0}"
+  TEST_COUNTER=$((TEST_COUNTER + 1))
+  if [[ -n "$ONLY_ID" ]]; then
+    if [[ "$id" != "$ONLY_ID" ]]; then
+      return 1
+    fi
+  else
+    if (( TEST_COUNTER < START_INDEX || TEST_COUNTER > END_INDEX )); then
+      return 1
+    fi
+    if (( FAST == 1 && fast == 0 )); then
+      return 1
+    fi
+  fi
+  CURRENT_TEST_ID="$id"
+  CURRENT_TEST_DESC="$desc"
+  CURRENT_TEST_START="$(now_secs)"
+  echo "Test ${id}: ${desc}"
+  write_status "$id" "$desc"
+  return 0
+}
+
+test_pass() {
+  local id="$1"
+  local end
+  end="$(now_secs)"
+  local duration=$((end - CURRENT_TEST_START))
+  mark_done "$id"
+  echo "PASS ${id} (${duration}s)"
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --list)
+        LIST=1
+        shift
+        ;;
+      --fast)
+        FAST=1
+        shift
+        ;;
+      --only)
+        ONLY_ID="${2:-}"
+        if [[ -z "$ONLY_ID" ]]; then
+          echo "FAIL: --only requires an id" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --from)
+        FROM_ID="${2:-}"
+        if [[ -z "$FROM_ID" ]]; then
+          echo "FAIL: --from requires an id" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --until)
+        UNTIL_ID="${2:-}"
+        if [[ -z "$UNTIL_ID" ]]; then
+          echo "FAIL: --until requires an id" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --resume)
+        RESUME=1
+        shift
+        ;;
+      --state-file)
+        STATE_FILE="${2:-}"
+        if [[ -z "$STATE_FILE" ]]; then
+          echo "FAIL: --state-file requires a path" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --status-file)
+        STATUS_FILE="${2:-}"
+        if [[ -z "$STATUS_FILE" ]]; then
+          echo "FAIL: --status-file requires a path" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --require-shellcheck)
+        REQUIRE_SHELLCHECK=1
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "FAIL: unknown option: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+parse_args "$@"
+
+if (( LIST == 1 )); then
+  list_tests
+  exit 0
+fi
+
+collect_test_ids
+
+if [[ -n "$ONLY_ID" ]]; then
+  if ! index_first_of "$ONLY_ID" >/dev/null; then
+    echo "FAIL: --only id not found: $ONLY_ID" >&2
+    exit 1
+  fi
+fi
+
+if [[ -n "$FROM_ID" ]]; then
+  if ! START_INDEX="$(index_first_of "$FROM_ID")"; then
+    echo "FAIL: --from id not found: $FROM_ID" >&2
+    exit 1
+  fi
+fi
+
+END_INDEX="${#ALL_TEST_IDS[@]}"
+if [[ -n "$UNTIL_ID" ]]; then
+  if ! END_INDEX="$(index_last_of "$UNTIL_ID")"; then
+    echo "FAIL: --until id not found: $UNTIL_ID" >&2
+    exit 1
+  fi
+fi
+
+if (( RESUME == 1 )); then
+  if [[ -f "$STATE_FILE" ]]; then
+    last_done="$(head -n 1 "$STATE_FILE" | tr -d '[:space:]')"
+    if [[ -n "$last_done" ]]; then
+      if resume_index="$(index_last_of "$last_done")"; then
+        START_INDEX=$((resume_index + 1))
+      else
+        echo "WARN: resume state id not found (${last_done}); running full range" >&2
+      fi
+    else
+      echo "WARN: resume state file empty; running full range" >&2
+    fi
+  else
+    echo "WARN: resume state file missing; running full range" >&2
+  fi
+fi
+
+if (( START_INDEX > END_INDEX )); then
+  echo "No tests selected (range ${START_INDEX}-${END_INDEX})." >&2
+  exit 0
+fi
+
+mode_parts=()
+if [[ -n "$ONLY_ID" ]]; then
+  mode_parts+=("only:${ONLY_ID}")
+fi
+if (( FAST == 1 )); then
+  mode_parts+=("fast")
+fi
+if (( RESUME == 1 )); then
+  mode_parts+=("resume")
+fi
+if [[ -n "$FROM_ID" ]]; then
+  mode_parts+=("from:${FROM_ID}")
+fi
+if [[ -n "$UNTIL_ID" ]]; then
+  mode_parts+=("until:${UNTIL_ID}")
+fi
+if (( ${#mode_parts[@]} == 0 )); then
+  mode_parts+=("full")
+fi
+echo "Workflow acceptance mode: ${mode_parts[*]}"
+echo "State file: ${STATE_FILE}"
+echo "Status file: ${STATUS_FILE}"
+
 require_tools() {
   local missing=0
   for tool in "$@"; do
@@ -121,14 +405,16 @@ OPTIONAL_OVERLAY_FILES=(
 MISSING_OVERLAY_FILES=()
 add_optional_overlays "${OPTIONAL_OVERLAY_FILES[@]}"
 
-echo "Test 0e: optional overlay files are skipped when missing"
-if (( ${#MISSING_OVERLAY_FILES[@]} > 0 )); then
-  for overlay in "${MISSING_OVERLAY_FILES[@]}"; do
-    if printf '%s\n' "${OVERLAY_FILES[@]}" | grep -Fxq "$overlay"; then
-      echo "FAIL: optional overlay listed despite missing: $overlay" >&2
-      exit 1
-    fi
-  done
+if test_start "0e" "optional overlay files are skipped when missing"; then
+  if (( ${#MISSING_OVERLAY_FILES[@]} > 0 )); then
+    for overlay in "${MISSING_OVERLAY_FILES[@]}"; do
+      if printf '%s\n' "${OVERLAY_FILES[@]}" | grep -Fxq "$overlay"; then
+        echo "FAIL: optional overlay listed despite missing: $overlay" >&2
+        exit 1
+      fi
+    done
+  fi
+  test_pass "0e"
 fi
 
 run_in_worktree git update-index --no-skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
@@ -169,8 +455,8 @@ if [[ -f "$WORKTREE/verify.sh" ]]; then
 fi
 run_in_worktree git update-index --skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
 
-echo "Test 0f: prd_pipeline logs skipped ref check"
-run_in_worktree bash -c '
+if test_start "0f" "prd_pipeline logs skipped ref check"; then
+  run_in_worktree bash -c '
   set -euo pipefail
   tmpdir=".ralph/prd_pipeline_skip"
   mkdir -p "$tmpdir"
@@ -224,9 +510,11 @@ JSON
     exit 1
   fi
 '
+  test_pass "0f"
+fi
 
-echo "Test 0g: manifest written on preflight block"
-run_in_worktree bash -c '
+if test_start "0g" "manifest written on preflight block"; then
+  run_in_worktree bash -c '
   set -euo pipefail
   cat > .ralph/artifacts.json <<'"'"'JSON'"'"'
 {
@@ -287,18 +575,48 @@ JSON
     exit 1
   fi
 '
-
-run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
-run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
-if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
-  run_in_worktree ./plans/prd_ref_check.sh "plans/prd.json" >/dev/null 2>&1
-else
-  echo "WARN: prd_ref_check.sh missing; skipping ref check"
+  test_pass "0g"
 fi
-run_in_worktree mkdir -p ".ralph"
-cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
-export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
-if ! run_in_worktree bash -c '
+
+if test_start "0h" "real PRD schema check (plans/prd.json)" 1; then
+  run_in_worktree ./plans/prd_schema_check.sh "plans/prd.json" >/dev/null 2>&1
+  test_pass "0h"
+fi
+
+if test_start "0i" "PRD self-dependency check" 1; then
+  if run_in_worktree jq -e '.items[] | select((.dependencies // []) | index(.id))' plans/prd.json >/dev/null 2>&1; then
+    echo "FAIL: PRD self-dependency detected:" >&2
+    run_in_worktree jq -r '.items[] | select((.dependencies // []) | index(.id)) | .id' plans/prd.json >&2
+    exit 1
+  fi
+  test_pass "0i"
+fi
+
+if test_start "0j" "shell safety checks (bash -n, shellcheck optional)" 1; then
+  bash -n "$ROOT/plans/workflow_acceptance.sh"
+  if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck "$ROOT/plans/workflow_acceptance.sh"
+  else
+    if (( REQUIRE_SHELLCHECK == 1 )); then
+      echo "FAIL: shellcheck not installed (required)" >&2
+      exit 1
+    fi
+    echo "SKIP: shellcheck not installed"
+  fi
+  test_pass "0j"
+fi
+
+if test_start "0k" "workflow preflight checks"; then
+  run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
+  if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
+    run_in_worktree ./plans/prd_ref_check.sh "plans/prd.json" >/dev/null 2>&1
+  else
+    echo "WARN: prd_ref_check.sh missing; skipping ref check"
+  fi
+  run_in_worktree mkdir -p ".ralph"
+  cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
+  export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
+  if ! run_in_worktree bash -c '
   allowlist="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
   if [[ ! -f "$allowlist" ]]; then
     echo "FAIL: story verify allowlist missing: $allowlist" >&2
@@ -316,10 +634,10 @@ if ! run_in_worktree bash -c '
     exit 1
   fi
 '; then
-  exit 1
-fi
+    exit 1
+  fi
 
-if ! run_in_worktree bash -c '
+  if ! run_in_worktree bash -c '
   last=-1
   while IFS= read -r slice; do
     if [[ "$slice" -lt "$last" ]]; then
@@ -329,10 +647,10 @@ if ! run_in_worktree bash -c '
     last="$slice"
   done < <(jq -r ".items[].slice" plans/prd.json)
 '; then
-  exit 1
-fi
+    exit 1
+  fi
 
-if ! run_in_worktree bash -c '
+  if ! run_in_worktree bash -c '
   set -euo pipefail
   bad="$(jq -r '"'"'
     .items as $items
@@ -353,30 +671,30 @@ if ! run_in_worktree bash -c '
     exit 1
   fi
 '; then
-  exit 1
-fi
+    exit 1
+  fi
 
-if ! run_in_worktree test -x "plans/run_prd_auditor.sh"; then
-  echo "FAIL: plans/run_prd_auditor.sh not executable" >&2
-  exit 1
-fi
+  if ! run_in_worktree test -x "plans/run_prd_auditor.sh"; then
+    echo "FAIL: plans/run_prd_auditor.sh not executable" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree test -x "plans/prd_autofix.sh"; then
-  echo "FAIL: plans/prd_autofix.sh not executable" >&2
-  exit 1
-fi
+  if ! run_in_worktree test -x "plans/prd_autofix.sh"; then
+    echo "FAIL: plans/prd_autofix.sh not executable" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree test -x "plans/contract_coverage_matrix.py"; then
-  echo "FAIL: plans/contract_coverage_matrix.py not executable" >&2
-  exit 1
-fi
+  if ! run_in_worktree test -x "plans/contract_coverage_matrix.py"; then
+    echo "FAIL: plans/contract_coverage_matrix.py not executable" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree test -x "plans/contract_coverage_promote.sh"; then
-  echo "FAIL: plans/contract_coverage_promote.sh not executable" >&2
-  exit 1
-fi
+  if ! run_in_worktree test -x "plans/contract_coverage_promote.sh"; then
+    echo "FAIL: plans/contract_coverage_promote.sh not executable" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree awk '
+  if ! run_in_worktree awk '
   /Stage A/ {in_stage=1}
   in_stage && /Stage B/ {exit}
   in_stage && /prd_lint.sh/ && lint==0 {lint=NR}
@@ -386,99 +704,99 @@ if ! run_in_worktree awk '
     if (lint > cutter) exit 1
   }
 ' "plans/prd_pipeline.sh"; then
-  echo "FAIL: prd_pipeline Stage A must run lint before PRD_CUTTER" >&2
-  exit 1
-fi
+    echo "FAIL: prd_pipeline Stage A must run lint before PRD_CUTTER" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree awk '/PRD_AUTOFIX/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
-  echo "FAIL: prd_pipeline must support PRD_AUTOFIX in Stage A" >&2
-  exit 1
-fi
+  if ! run_in_worktree awk '/PRD_AUTOFIX/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
+    echo "FAIL: prd_pipeline must support PRD_AUTOFIX in Stage A" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree awk '/NO_PROGRESS/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
-  echo "FAIL: prd_pipeline must block on no-progress cutter runs" >&2
-  exit 1
-fi
+  if ! run_in_worktree awk '/NO_PROGRESS/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
+    echo "FAIL: prd_pipeline must block on no-progress cutter runs" >&2
+    exit 1
+  fi
 
-contract_norm_pattern=$'sed \'s/[*`_]/'
-if ! run_in_worktree grep -Fq "$contract_norm_pattern" "plans/contract_check.sh"; then
-  echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
-  exit 1
-fi
+  contract_norm_pattern=$'sed \'s/[*`_]/'
+  if ! run_in_worktree grep -Fq "$contract_norm_pattern" "plans/contract_check.sh"; then
+    echo "FAIL: contract_check must normalize markdown markers in contract text" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "bash -n plans/workflow_acceptance.sh" "plans/verify.sh"; then
-  echo "FAIL: verify must syntax-check workflow_acceptance.sh" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "bash -n plans/workflow_acceptance.sh" "plans/verify.sh"; then
+    echo "FAIL: verify must syntax-check workflow_acceptance.sh" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "should_run_workflow_acceptance" "plans/verify.sh"; then
-  echo "FAIL: verify must call should_run_workflow_acceptance" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "should_run_workflow_acceptance" "plans/verify.sh"; then
+    echo "FAIL: verify must call should_run_workflow_acceptance" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "run_logged \"workflow_acceptance\"" "plans/verify.sh"; then
-  echo "FAIL: verify must run workflow_acceptance.sh under run_logged" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "run_logged \"workflow_acceptance\"" "plans/verify.sh"; then
+    echo "FAIL: verify must run workflow_acceptance.sh under run_logged" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "workflow acceptance skipped" "plans/verify.sh"; then
-  echo "FAIL: verify must emit a workflow acceptance skip message" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "workflow acceptance skipped" "plans/verify.sh"; then
+    echo "FAIL: verify must emit a workflow acceptance skip message" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "PATH_CONVENTION" "plans/prd_lint.sh"; then
-  echo "FAIL: prd_lint must flag path convention drift" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "PATH_CONVENTION" "plans/prd_lint.sh"; then
+    echo "FAIL: prd_lint must flag path convention drift" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "contract_coverage_matrix.py" "plans/verify.sh"; then
-  echo "FAIL: verify must run contract coverage matrix" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "contract_coverage_matrix.py" "plans/verify.sh"; then
+    echo "FAIL: verify must run contract coverage matrix" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "contract_coverage_ci_strict" "plans/verify.sh"; then
-  echo "FAIL: verify must gate CI strict coverage via sentinel file" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "contract_coverage_ci_strict" "plans/verify.sh"; then
+    echo "FAIL: verify must gate CI strict coverage via sentinel file" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "postmortem_check.sh" "plans/verify.sh"; then
-  echo "FAIL: verify must run postmortem check gate" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "postmortem_check.sh" "plans/verify.sh"; then
+    echo "FAIL: verify must run postmortem check gate" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "VERIFY_CONSOLE" "plans/verify.sh"; then
-  echo "FAIL: verify must support VERIFY_CONSOLE quiet/verbose modes" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "VERIFY_CONSOLE" "plans/verify.sh"; then
+    echo "FAIL: verify must support VERIFY_CONSOLE quiet/verbose modes" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "VERIFY_FAIL_TAIL_LINES" "plans/verify.sh"; then
-  echo "FAIL: verify must define VERIFY_FAIL_TAIL_LINES for quiet failure tail" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "VERIFY_FAIL_TAIL_LINES" "plans/verify.sh"; then
+    echo "FAIL: verify must define VERIFY_FAIL_TAIL_LINES for quiet failure tail" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "VERIFY_FAIL_SUMMARY_LINES" "plans/verify.sh"; then
-  echo "FAIL: verify must define VERIFY_FAIL_SUMMARY_LINES for quiet failure summary" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "VERIFY_FAIL_SUMMARY_LINES" "plans/verify.sh"; then
+    echo "FAIL: verify must define VERIFY_FAIL_SUMMARY_LINES for quiet failure summary" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "emit_fail_excerpt" "plans/verify.sh"; then
-  echo "FAIL: verify must emit log tail + summary on quiet failures" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "emit_fail_excerpt" "plans/verify.sh"; then
+    echo "FAIL: verify must emit log tail + summary on quiet failures" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree grep -q "error:|FAIL|FAILED|panicked" "plans/verify.sh"; then
-  echo "FAIL: verify must grep failure summary patterns in quiet mode" >&2
-  exit 1
-fi
+  if ! run_in_worktree grep -q "error:|FAIL|FAILED|panicked" "plans/verify.sh"; then
+    echo "FAIL: verify must grep failure summary patterns in quiet mode" >&2
+    exit 1
+  fi
 
-if ! run_in_worktree test -x "plans/postmortem_check.sh"; then
-  echo "FAIL: plans/postmortem_check.sh not executable" >&2
-  exit 1
-fi
-if ! run_in_worktree grep -q "Apply or it didn't happen" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
-  echo "FAIL: postmortem template must include Apply or it didn't happen section" >&2
-  exit 1
-fi
+  if ! run_in_worktree test -x "plans/postmortem_check.sh"; then
+    echo "FAIL: plans/postmortem_check.sh not executable" >&2
+    exit 1
+  fi
+  if ! run_in_worktree grep -q "Apply or it didn't happen" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
+    echo "FAIL: postmortem template must include Apply or it didn't happen section" >&2
+    exit 1
+  fi
 if ! run_in_worktree grep -q "What should we add to AGENTS.md?" "reviews/postmortems/PR_POSTMORTEM_TEMPLATE.md"; then
   echo "FAIL: postmortem template missing AGENTS.md question" >&2
   exit 1
@@ -677,10 +995,78 @@ if ! grep -Eq "VERIFY_ARTIFACTS_DIR=.*\\.ralph/verify" "$WORKTREE/plans/ralph.sh
 fi
 
 bad_scope_patterns="$(run_in_worktree jq -r '.items[].scope.touch[]?, .items[].scope.create[]? | select(endswith("/")) | select(contains("*") | not)' "$WORKTREE/plans/prd.json")"
-if [[ -n "$bad_scope_patterns" ]]; then
-  echo "FAIL: scope patterns ending in / must include a glob (e.g., **):" >&2
-  echo "$bad_scope_patterns" >&2
-  exit 1
+  if [[ -n "$bad_scope_patterns" ]]; then
+    echo "FAIL: scope patterns ending in / must include a glob (e.g., **):" >&2
+    echo "$bad_scope_patterns" >&2
+    exit 1
+  fi
+  test_pass "0k"
+fi
+
+if test_start "0l" "--list prints test ids"; then
+  list_output="$("$ROOT/plans/workflow_acceptance.sh" --list)"
+  if [[ -z "$list_output" ]]; then
+    echo "FAIL: expected --list output" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$list_output" | grep -q "^0e[[:space:]]"; then
+    echo "FAIL: expected --list output to include 0e" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$list_output" | grep -q "^0k[[:space:]]"; then
+    echo "FAIL: expected --list output to include 0k" >&2
+    exit 1
+  fi
+  test_pass "0l"
+fi
+
+if test_start "0m" "state/status files update"; then
+  status_id="$(cut -f1 "$STATUS_FILE" 2>/dev/null || true)"
+  if [[ "$status_id" != "0m" ]]; then
+    echo "FAIL: expected status file to record current test id (0m)" >&2
+    exit 1
+  fi
+  if [[ -z "$ONLY_ID" && -z "$FROM_ID" && -z "$UNTIL_ID" && "$RESUME" -eq 0 ]]; then
+    prev_state="$(head -n 1 "$STATE_FILE" 2>/dev/null | tr -d '[:space:]')"
+    if [[ "$prev_state" != "0l" ]]; then
+      echo "FAIL: expected state file to record prior test id (0l), got ${prev_state:-<empty>}" >&2
+      exit 1
+    fi
+  fi
+  test_pass "0m"
+fi
+
+if test_start "0n" "selector flags work for --only/--resume"; then
+  tmp_state="$WORKTREE/.ralph/accept_state_only"
+  tmp_status="$WORKTREE/.ralph/accept_status_only"
+  rm -f "$tmp_state" "$tmp_status"
+  set +e
+  "$ROOT/plans/workflow_acceptance.sh" --only 0h --state-file "$tmp_state" --status-file "$tmp_status" >/dev/null 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: expected --only 0h run to succeed" >&2
+    exit 1
+  fi
+  if [[ "$(head -n 1 "$tmp_state" 2>/dev/null || true)" != "0h" ]]; then
+    echo "FAIL: expected --only run to record 0h in state file" >&2
+    exit 1
+  fi
+  last_id="${ALL_TEST_IDS[$((${#ALL_TEST_IDS[@]}-1))]}"
+  echo "$last_id" > "$tmp_state"
+  set +e
+  resume_output="$("$ROOT/plans/workflow_acceptance.sh" --resume --state-file "$tmp_state" --status-file "$tmp_status" 2>&1)"
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: expected --resume with last id to exit 0" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$resume_output" | grep -q "No tests selected"; then
+    echo "FAIL: expected --resume to report no tests selected" >&2
+    exit 1
+  fi
+  test_pass "0n"
 fi
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
@@ -1288,8 +1674,8 @@ EOF
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
 
-echo "Test 0a: auditor cache skip avoids agent call"
-run_in_worktree bash -c '
+if test_start "0a" "auditor cache skip avoids agent call"; then
+  run_in_worktree bash -c '
   set -euo pipefail
   tmpdir=".ralph/audit_cache_skip"
   mkdir -p "$tmpdir"
@@ -1429,9 +1815,11 @@ JSON
 JSON
   AUDIT_PRD_FILE="$prd" AUDIT_OUTPUT_JSON="$audit" AUDIT_CACHE_FILE="$cache" AUDITOR_AGENT_CMD="/usr/bin/false" ./plans/run_prd_auditor.sh >/dev/null 2>&1
 '
+  test_pass "0a"
+fi
 
-echo "Test 0b: slice preflight blocks unresolved refs"
-run_in_worktree bash -c '
+if test_start "0b" "slice preflight blocks unresolved refs"; then
+  run_in_worktree bash -c '
   set -euo pipefail
   tmpdir=".ralph/audit_slice_preflight"
   mkdir -p "$tmpdir"
@@ -1489,10 +1877,12 @@ JSON
     exit 1
   fi
 '
+  test_pass "0b"
+fi
 
-echo "Test 0c: ref check blocks unresolved refs"
-if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
-  run_in_worktree bash -c '
+if test_start "0c" "ref check blocks unresolved refs"; then
+  if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
+    run_in_worktree bash -c '
     set -euo pipefail
     tmpdir=".ralph/ref_check_bad"
     mkdir -p "$tmpdir"
@@ -1548,13 +1938,15 @@ JSON
       exit 1
     fi
   '
-else
-  echo "SKIP: prd_ref_check.sh missing (ref check tests)"
+  else
+    echo "SKIP: prd_ref_check.sh missing (ref check tests)"
+  fi
+  test_pass "0c"
 fi
 
-echo "Test 0d: ref check resolves slash + parenthetical variants"
-if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
-  run_in_worktree bash -c '
+if test_start "0d" "ref check resolves slash + parenthetical variants"; then
+  if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
+    run_in_worktree bash -c '
     set -euo pipefail
     tmpdir=".ralph/ref_check_good"
     mkdir -p "$tmpdir"
@@ -1609,11 +2001,13 @@ if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
 JSON
     PRD_FILE="$prd" ./plans/prd_ref_check.sh >/dev/null 2>&1
   '
-else
-  echo "SKIP: prd_ref_check.sh missing (ref check tests)"
+  else
+    echo "SKIP: prd_ref_check.sh missing (ref check tests)"
+  fi
+  test_pass "0d"
 fi
 
-echo "Test 0: contract_check resolves contract refs without SIGPIPE"
+if test_start "0" "contract_check resolves contract refs without SIGPIPE"; then
 reset_state
 contract_test_root="$WORKTREE/.ralph/contract_check_ref_ok"
 iter_dir="$contract_test_root/iter_1"
@@ -1714,8 +2108,10 @@ if run_in_worktree jq -e '.violations[]? | select(.contract_ref=="CONTRACT_REFS"
 fi
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
+  test_pass "0"
+fi
 
-echo "Test 1: schema-violating PRD stops preflight"
+if test_start "1" "schema-violating PRD stops preflight"; then
 run_in_worktree mkdir -p .ralph
 reset_state
 invalid_prd="$WORKTREE/.ralph/invalid_prd.json"
@@ -1735,8 +2131,10 @@ if [[ "$after_blocked" -le "$before_blocked" ]]; then
   echo "FAIL: expected blocked artifact for invalid PRD" >&2
   exit 1
 fi
+  test_pass "1"
+fi
 
-echo "Test 2: attempted pass flip without verify_post is prevented"
+if test_start "2" "attempted pass flip without verify_post is prevented"; then
 reset_state
 valid_prd_2="$WORKTREE/.ralph/valid_prd_2.json"
 write_valid_prd "$valid_prd_2" "S1-001"
@@ -1813,8 +2211,10 @@ if [[ -z "$iter_model" ]]; then
   echo "FAIL: agent_model.txt is empty" >&2
   exit 1
 fi
+  test_pass "2"
+fi
 
-echo "Test 2b: mark_pass without meaningful change is blocked"
+if test_start "2b" "mark_pass without meaningful change is blocked"; then
 reset_state
 valid_prd_2b="$WORKTREE/.ralph/valid_prd_2b.json"
 write_valid_prd "$valid_prd_2b" "S1-001"
@@ -1848,8 +2248,10 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected pass_flip_no_touch blocked artifact" >&2
   exit 1
 fi
+  test_pass "2b"
+fi
 
-echo "Test 2c: mark_pass promotes verify mode"
+if test_start "2c" "mark_pass promotes verify mode"; then
 reset_state
 valid_prd_2c="$WORKTREE/.ralph/valid_prd_2c.json"
 write_valid_prd "$valid_prd_2c" "S1-002"
@@ -1889,8 +2291,10 @@ if ! grep -q "VERIFY_MODE_ARG=promotion" "$verify_post_log"; then
   tail -n 20 "$verify_post_log" >&2 || true
   exit 1
 fi
+  test_pass "2c"
+fi
 
-echo "Test 2d: update_task requires promotion verify mode"
+if test_start "2d" "update_task requires promotion verify mode"; then
 reset_state
 valid_prd_2d="$WORKTREE/.ralph/valid_prd_2d.json"
 write_valid_prd "$valid_prd_2d" "S1-003"
@@ -1931,8 +2335,10 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected update_task to reject non-promotion verify mode" >&2
   exit 1
 fi
+  test_pass "2d"
+fi
 
-echo "Test 2e: explore profile forbids mark_pass"
+if test_start "2e" "explore profile forbids mark_pass"; then
 reset_state
 valid_prd_2e="$WORKTREE/.ralph/valid_prd_2e.json"
 write_valid_prd "$valid_prd_2e" "S1-020"
@@ -1972,8 +2378,10 @@ if [[ -z "$latest_block" ]]; then
   tail -n 120 "$test2e_log" >&2 || true
   exit 1
 fi
+  test_pass "2e"
+fi
 
-echo "Test 2f: promote profile requires promotion verify"
+if test_start "2f" "promote profile requires promotion verify"; then
 reset_state
 valid_prd_2f="$WORKTREE/.ralph/valid_prd_2f.json"
 write_valid_prd "$valid_prd_2f" "S1-021"
@@ -2004,8 +2412,10 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected profile_requires_promotion_verify blocked artifact" >&2
   exit 1
 fi
+  test_pass "2f"
+fi
 
-echo "Test 3: COMPLETE printed early blocks with blocked_incomplete artifact"
+if test_start "3" "COMPLETE printed early blocks with blocked_incomplete artifact"; then
 reset_state
 valid_prd_3="$WORKTREE/.ralph/valid_prd_3.json"
 write_valid_prd "$valid_prd_3" "S1-002"
@@ -2050,8 +2460,10 @@ if [[ "$reason" != "incomplete_completion" ]]; then
   echo "FAIL: expected incomplete_completion reason in blocked artifact" >&2
   exit 1
 fi
+  test_pass "3"
+fi
 
-echo "Test 3b: COMPLETE mention does not trigger blocked_incomplete"
+if test_start "3b" "COMPLETE mention does not trigger blocked_incomplete"; then
 reset_state
 valid_prd_3b="$WORKTREE/.ralph/valid_prd_3b.json"
 write_valid_prd "$valid_prd_3b" "S1-002"
@@ -2101,8 +2513,10 @@ if [[ -z "$latest_block" ]]; then
   tail -n 120 "$test3b_log" >&2 || true
   exit 1
 fi
+  test_pass "3b"
+fi
 
-echo "Test 4: invalid selection writes verify_pre.log (best effort)"
+if test_start "4" "invalid selection writes verify_pre.log (best effort)"; then
 reset_state
 valid_prd_4="$WORKTREE/.ralph/valid_prd_4.json"
 write_valid_prd "$valid_prd_4" "S1-003"
@@ -2143,8 +2557,10 @@ if ! grep -q "VERIFY_SH_SHA=stub" "$latest_block/verify_pre.log"; then
   echo "FAIL: expected VERIFY_SH_SHA in verify_pre.log for invalid selection" >&2
   exit 1
 fi
+  test_pass "4"
+fi
 
-echo "Test 5: lock prevents concurrent runs"
+if test_start "5" "lock prevents concurrent runs"; then
 reset_state
 valid_prd_5="$WORKTREE/.ralph/valid_prd_5.json"
 write_valid_prd "$valid_prd_5" "S1-004"
@@ -2178,8 +2594,10 @@ if [[ "$reason" != "lock_held" ]]; then
   echo "FAIL: expected lock_held reason in blocked artifact" >&2
   exit 1
 fi
+  test_pass "5"
+fi
 
-echo "Test 5a: stale lock auto-clears"
+if test_start "5a" "stale lock auto-clears"; then
 reset_state
 valid_prd_5a="$WORKTREE/.ralph/valid_prd_5a.json"
 write_valid_prd "$valid_prd_5a" "S1-004"
@@ -2206,8 +2624,10 @@ if [[ -d "$WORKTREE/.ralph/lock" ]]; then
   echo "FAIL: expected lock directory to be released after stale lock test" >&2
   exit 1
 fi
+  test_pass "5a"
+fi
 
-echo "Test 5b: git identity is set when missing"
+if test_start "5b" "git identity is set when missing"; then
 reset_state
 valid_prd_5b="$WORKTREE/.ralph/valid_prd_5b.json"
 write_valid_prd "$valid_prd_5b" "S1-004"
@@ -2235,8 +2655,10 @@ if [[ "$git_email" != "ralph@local" || "$git_name" != "ralph" ]]; then
   echo "FAIL: expected git identity to be set locally (got name=${git_name} email=${git_email})" >&2
   exit 1
 fi
+  test_pass "5b"
+fi
 
-echo "Test 5c: preflight blocks without timeout or python3"
+if test_start "5c" "preflight blocks without timeout or python3"; then
 reset_state
 valid_prd_5c="$WORKTREE/.ralph/valid_prd_5c.json"
 write_valid_prd "$valid_prd_5c" "S1-004"
@@ -2276,8 +2698,10 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected missing_timeout_or_python3 blocked artifact" >&2
   exit 1
 fi
+  test_pass "5c"
+fi
 
-echo "Test 5d: contract review sees iteration artifacts"
+if test_start "5d" "contract review sees iteration artifacts"; then
 reset_state
 valid_prd_5d="$WORKTREE/plans/prd_iter_artifacts.json"
 write_valid_prd "$valid_prd_5d" "S1-004"
@@ -2317,8 +2741,10 @@ if [[ "$decision" != "PASS" ]]; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "5d"
+fi
 
-echo "Test 6: missing contract_check.sh writes FAIL contract review"
+if test_start "6" "missing contract_check.sh writes FAIL contract review"; then
 reset_state
 valid_prd_6="$WORKTREE/.ralph/valid_prd_6.json"
 write_valid_prd "$valid_prd_6" "S1-005"
@@ -2379,8 +2805,10 @@ if [[ "$decision" != "FAIL" ]]; then
   echo "FAIL: expected decision=FAIL when contract_check.sh missing (got ${decision})" >&2
   exit 1
 fi
+  test_pass "6"
+fi
 
-echo "Test 7: invalid contract_review.json is rewritten to FAIL"
+if test_start "7" "invalid contract_review.json is rewritten to FAIL"; then
 reset_state
 valid_prd_7="$WORKTREE/.ralph/valid_prd_7.json"
 write_valid_prd "$valid_prd_7" "S1-006"
@@ -2421,8 +2849,10 @@ if [[ "$decision" != "FAIL" ]]; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "7"
+fi
 
-echo "Test 8: decision=BLOCKED stops iteration"
+if test_start "8" "decision=BLOCKED stops iteration"; then
 reset_state
 valid_prd_8="$WORKTREE/.ralph/valid_prd_8.json"
 write_valid_prd "$valid_prd_8" "S1-007"
@@ -2453,8 +2883,10 @@ if [[ "$decision" != "BLOCKED" ]]; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "8"
+fi
 
-echo "Test 9: decision=FAIL stops iteration"
+if test_start "9" "decision=FAIL stops iteration"; then
 reset_state
 valid_prd_9="$WORKTREE/.ralph/valid_prd_9.json"
 write_valid_prd "$valid_prd_9" "S1-008"
@@ -2496,8 +2928,10 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "9"
+fi
 
-echo "Test 10: decision=PASS with ALLOW pass flip completes"
+if test_start "10" "decision=PASS with ALLOW pass flip completes"; then
 reset_state
 valid_prd_10="$WORKTREE/plans/prd_acceptance.json"
 write_valid_prd "$valid_prd_10" "S1-009"
@@ -2554,8 +2988,10 @@ if [[ "$required_count" -lt 1 || "$missing_count" -ne 0 ]]; then
   echo "FAIL: expected evidence requirements satisfied for pass flip allow test" >&2
   exit 1
 fi
+  test_pass "10"
+fi
 
-echo "Test 10b: final verify uses RPH_FINAL_VERIFY_MODE"
+if test_start "10b" "final verify uses RPH_FINAL_VERIFY_MODE"; then
 reset_state
 valid_prd_10b="$WORKTREE/.ralph/valid_prd_10b.json"
 write_valid_prd "$valid_prd_10b" "S1-020"
@@ -2662,9 +3098,10 @@ if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" an
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "10b"
+fi
 
-
-echo "Test 10c: final verify disabled writes SKIPPED manifest"
+if test_start "10c" "final verify disabled writes SKIPPED manifest"; then
 reset_state
 valid_prd_10c="$WORKTREE/.ralph/valid_prd_10c.json"
 write_valid_prd "$valid_prd_10c" "S1-021"
@@ -2712,8 +3149,10 @@ if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="final_verify" an
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "10c"
+fi
 
-echo "Test 10c: update_task blocks non-promotion verify"
+if test_start "10c" "update_task blocks non-promotion verify"; then
 reset_state
 valid_prd_10c="$WORKTREE/plans/prd_acceptance_non_promo.json"
 write_valid_prd "$valid_prd_10c" "S1-010"
@@ -2765,8 +3204,10 @@ if [[ -z "$latest_block" ]]; then
 fi
 
 write_contract_check_stub "PASS"
+  test_pass "10c"
+fi
 
-echo "Test 10d: final verify failure writes FAIL manifest"
+if test_start "10d" "final verify failure writes FAIL manifest"; then
 reset_state
 valid_prd_10d="$WORKTREE/.ralph/valid_prd_10d.json"
 write_valid_prd "$valid_prd_10d" "S1-022"
@@ -2821,8 +3262,10 @@ if [[ -z "$manifest_log" || ! -f "$WORKTREE/$manifest_log" ]]; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "10d"
+fi
 
-echo "Test 11: contract_review_validate enforces schema file"
+if test_start "11" "contract_review_validate enforces schema file"; then
 valid_review="$WORKTREE/.ralph/contract_review_valid.json"
 cat > "$valid_review" <<'JSON'
 {
@@ -2857,8 +3300,10 @@ if [[ "$rc" -eq 0 ]]; then
   exit 1
 fi
 run_in_worktree ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2>&1
+  test_pass "11"
+fi
 
-echo "Test 12: workflow contract traceability gate"
+if test_start "12" "workflow contract traceability gate" 1; then
 run_in_worktree ./plans/workflow_contract_gate.sh >/dev/null 2>&1
 bad_map="$WORKTREE/.ralph/workflow_contract_map.bad.json"
 run_in_worktree jq 'del(.rules[0])' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_map"
@@ -2869,6 +3314,8 @@ set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected workflow_contract_gate to fail with missing rule id" >&2
   exit 1
+fi
+  test_pass "12"
 fi
 
 check_required_workflow_artifacts() {
@@ -2896,22 +3343,26 @@ check_required_workflow_artifacts() {
   return "$missing"
 }
 
-echo "Test 12b: required workflow artifacts are present"
-check_required_workflow_artifacts
-
-echo "Test 12c: missing required workflow artifact fails fast"
-set +e
-mv "$WORKTREE/plans/workflow_contract_map.json" "$WORKTREE/.ralph/workflow_contract_map.tmp"
-check_required_workflow_artifacts
-rc=$?
-set -e
-mv "$WORKTREE/.ralph/workflow_contract_map.tmp" "$WORKTREE/plans/workflow_contract_map.json"
-if [[ "$rc" -eq 0 ]]; then
-  echo "FAIL: expected missing artifact to fail" >&2
-  exit 1
+if test_start "12b" "required workflow artifacts are present"; then
+  check_required_workflow_artifacts
+  test_pass "12b"
 fi
 
-echo "Test 13: missing PRD file stops preflight"
+if test_start "12c" "missing required workflow artifact fails fast"; then
+  set +e
+  mv "$WORKTREE/plans/workflow_contract_map.json" "$WORKTREE/.ralph/workflow_contract_map.tmp"
+  check_required_workflow_artifacts
+  rc=$?
+  set -e
+  mv "$WORKTREE/.ralph/workflow_contract_map.tmp" "$WORKTREE/plans/workflow_contract_map.json"
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected missing artifact to fail" >&2
+    exit 1
+  fi
+  test_pass "12c"
+fi
+
+if test_start "13" "missing PRD file stops preflight"; then
 reset_state
 missing_prd="$WORKTREE/.ralph/missing_prd.json"
 before_blocked="$(count_blocked)"
@@ -2938,8 +3389,10 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected missing_prd blocked artifact" >&2
   exit 1
 fi
+  test_pass "13"
+fi
 
-echo "Test 14: verify_pre failure stops before implementation"
+if test_start "14" "verify_pre failure stops before implementation"; then
 reset_state
 valid_prd_13="$WORKTREE/.ralph/valid_prd_13.json"
 write_valid_prd "$valid_prd_13" "S1-010"
@@ -2996,8 +3449,10 @@ if [[ -n "$dirty_status" ]]; then
   echo "$dirty_status" >&2
   exit 1
 fi
+  test_pass "14"
+fi
 
-echo "Test 14b: verify output is tailed and summary created"
+if test_start "14b" "verify output is tailed and summary created"; then
 reset_state
 valid_prd_14b="$WORKTREE/.ralph/valid_prd_14b.json"
 write_valid_prd "$valid_prd_14b" "S1-010"
@@ -3054,13 +3509,15 @@ if ! grep -q "line 300" "$verify_tail_log"; then
   echo "FAIL: expected tail of noisy output to include line 300" >&2
   exit 1
 fi
+  test_pass "14b"
+fi
 
 # NOTE: Tests 11–21 are intentionally ordered by runtime workflow rather than
 # strictly following the WF-12.1–WF-12.7 order in WORKFLOW_CONTRACT.md.
 # In particular, Test 14 ("verify_pre failure stops before implementation")
 # is grouped here with other verify/preflight behaviour tests instead of
 # appearing immediately after the baseline integrity tests in WF-12.2.
-echo "Test 15: needs_human_decision=true blocks execution"
+if test_start "15" "needs_human_decision=true blocks execution"; then
 reset_state
 valid_prd_14="$WORKTREE/.ralph/valid_prd_14.json"
 write_valid_prd "$valid_prd_14" "S1-010"
@@ -3086,8 +3543,10 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for needs_human_decision" >&2
   exit 1
 fi
+  test_pass "15"
+fi
 
-echo "Test 16: cheating detected (deleted test file)"
+if test_start "16" "cheating detected (deleted test file)"; then
 reset_state
 valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
 write_valid_prd "$valid_prd_15" "S1-011"
@@ -3151,8 +3610,10 @@ if ! run_in_worktree test -f "tests/test_dummy.rs"; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "16"
+fi
 
-echo "Test 16b: harness tamper blocks before processing"
+if test_start "16b" "harness tamper blocks before processing"; then
 reset_state
 valid_prd_16b="$WORKTREE/.ralph/valid_prd_16b.json"
 write_valid_prd "$valid_prd_16b" "S1-011"
@@ -3190,8 +3651,10 @@ fi
 copy_worktree_file "plans/ralph.sh"
 chmod +x "$WORKTREE/plans/ralph.sh" >/dev/null 2>&1 || true
 run_in_worktree git update-index --skip-worktree plans/ralph.sh >/dev/null 2>&1 || true
+  test_pass "16b"
+fi
 
-echo "Test 16c: .ralph tamper blocks before processing"
+if test_start "16c" ".ralph tamper blocks before processing"; then
 reset_state
 valid_prd_16c="$WORKTREE/.ralph/valid_prd_16c.json"
 write_valid_prd "$valid_prd_16c" "S1-012"
@@ -3226,8 +3689,10 @@ if [[ -z "$latest_block" ]]; then
   tail -n 120 "$test16c_log" >&2 || true
   exit 1
 fi
+  test_pass "16c"
+fi
 
-echo "Test 17: active slice gating selects lowest slice"
+if test_start "17" "active slice gating selects lowest slice"; then
 reset_state
 valid_prd_16="$WORKTREE/.ralph/valid_prd_16.json"
 cat > "$valid_prd_16" <<'JSON'
@@ -3304,8 +3769,10 @@ if [[ "$selected_id" != "S1-012" ]]; then
   echo "FAIL: expected slice 1 selection (S1-012), got ${selected_id}" >&2
   exit 1
 fi
+  test_pass "17"
+fi
 
-echo "Test 18: rate limit sleep updates state and cooldown"
+if test_start "18" "rate limit sleep updates state and cooldown"; then
 reset_state
 rate_prd="$WORKTREE/plans/prd_rate_limit.json"
 write_valid_prd "$rate_prd" "S1-014"
@@ -3388,8 +3855,10 @@ if run_in_worktree grep -q "RateLimit: sleeping" "$test18b_log"; then
   tail -n 80 "$test18b_log" >&2 || true
   exit 1
 fi
+  test_pass "18"
+fi
 
-echo "Test 19: circuit breaker blocks after repeated verify_post failure"
+if test_start "19" "circuit breaker blocks after repeated verify_post failure"; then
 reset_state
 valid_prd_19="$WORKTREE/.ralph/valid_prd_19.json"
 write_valid_prd "$valid_prd_19" "S1-015"
@@ -3428,8 +3897,10 @@ if [[ "$pass_state" != "false" ]]; then
   echo "FAIL: expected passes=false after circuit breaker" >&2
   exit 1
 fi
+  test_pass "19"
+fi
 
-echo "Test 20: max iterations exceeded"
+if test_start "20" "max iterations exceeded"; then
 reset_state
 valid_prd_20="$WORKTREE/.ralph/valid_prd_20.json"
 write_valid_prd "$valid_prd_20" "S1-012"
@@ -3462,8 +3933,10 @@ if [[ "$reason" != "max_iters_exceeded" ]]; then
   echo "FAIL: expected reason=max_iters_exceeded, got ${reason}" >&2
   exit 1
 fi
+  test_pass "20"
+fi
 
-echo "Test 21: self-heal reverts bad changes"
+if test_start "21" "self-heal reverts bad changes"; then
 reset_state
 valid_prd_21="$WORKTREE/.ralph/valid_prd_21.json"
 write_valid_prd "$valid_prd_21" "S1-013"
@@ -3510,6 +3983,8 @@ fi
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected exit 1 from self-healing loop (max iters)" >&2
   exit 1
+fi
+  test_pass "21"
 fi
 
 echo "Workflow acceptance tests passed"

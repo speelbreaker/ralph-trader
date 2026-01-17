@@ -643,3 +643,23 @@ Traceability / drift gate [WF-12.8]
 
 [ ] plans/workflow_contract_gate.sh fails if any WF-* rule_id in specs/WORKFLOW_CONTRACT.md is unmapped or lacks enforcement + artifact metadata.
 [ ] plans/workflow_acceptance.sh runs the traceability gate.
+
+---
+
+## 13) Workflow Acceptance Runner (Required)
+
+[WF-13.1] Running ./plans/workflow_acceptance.sh with no args MUST run the full suite and preserve existing exit semantics (non-zero on first failing test).
+
+[WF-13.2] --list MUST print a stable ordered list of test IDs and descriptions and exit 0 without running tests.
+
+[WF-13.3] Targeted run controls MUST be supported: --only <id>, --from <id>, --until <id>, --resume. --only overrides other selectors. --from/--until are inclusive. --resume continues from the next test after the last completed ID recorded in the state file.
+
+[WF-13.4] Fast precheck mode: --fast MUST execute a cheap subset that includes:
+- real PRD schema check against plans/prd.json (plans/prd_schema_check.sh)
+- PRD self-dependency check with explicit diagnostics
+- traceability gate (plans/workflow_contract_gate.sh)
+- shell safety check: bash -n plans/workflow_acceptance.sh; if shellcheck is installed, run shellcheck too
+
+[WF-13.5] The runner MUST write progress state to a state file and current test status to a status file, defaulting to /tmp/workflow_acceptance.state and /tmp/workflow_acceptance.status. Both paths MUST be overrideable via flags: --state-file and --status-file.
+
+[WF-13.6] shellcheck is optional by default. If --require-shellcheck is provided and shellcheck is missing, the run MUST fail fast with a clear install message.
