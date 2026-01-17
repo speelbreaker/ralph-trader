@@ -1,50 +1,106 @@
 # SKILL: /plan (Elevation -> Implementation Plan)
 
-## Purpose
-Convert an approved Elevation (permanent fix proposal) into an executable, handoff-ready plan
-that a different agent can implement with minimal ambiguity and minimal merge conflict.
+Purpose
+Convert an approved Elevation into a handoff-ready, executable plan with minimal ambiguity and merge conflict.
 
-## Inputs (required)
-- Elevation statement (1–3 sentences)
-- Context: PR postmortem (sections 3, 6, 8–12) OR a brief summary
-- Repo pointers: relevant files/paths + any constraints (non-bypass gates, verify scripts)
-- Constraints: what must not change (scope fence)
+Inputs (required)
+- Elevation: (1-3 sentences)
+- Context: PR postmortem (secs 3,6,8-12) OR brief summary
+- Repo pointers: key files/paths + constraints (non-bypass gates, verify scripts, CI jobs)
+- Scope fence: what must NOT change (APIs/behavior/perf/deps)
 
-## Output (required sections)
-1) **Outcome & Scope**
-   - What will be true after this change (1–2 bullets)
-   - Explicit non-goals (2–4 bullets)
+If missing: proceed using repo pointers; mark Assumptions.
 
-2) **Design sketch (minimal)**
-   - Key mechanism + data flow (no essays)
-   - Public interfaces impacted (if any)
+Output (use these headers, in order)
+0) Header
+Name:
+Owner/Implementer:
+Branch:
+Risk (low/med/high + 1 line):
+Primary areas (paths):
 
-3) **Change List (patch plan)**
-   - Ordered steps, each with:
-     - files to edit
-     - exact objects to add/modify (functions, structs, constants)
-     - notes on backward compatibility
+1) Contract Changes (FIRST)
+Contract changes:
+(list: API/schema/events/CLI/config/UI; old->new; versioning/migration; compat)
+OR: No contract changes.
 
-4) **Tests & Proof**
-   - Fast checks first (targeted)
-   - Full gate checks (e.g. ./plans/verify.sh full)
-   - Expected pass/fail signals
+2) Outcome & Scope
+Outcome (true after change):
+...
+Non-goals:
+...
+Scope fence (must not change):
+...
 
-5) **Failure Modes & Rollback**
-   - Top 3 ways this can break
-   - Detection
-   - Rollback plan (how to revert safely)
+3) Assumptions / Open Questions
+Assumptions:
+A1...
+Blocking questions (only if truly blocking):
+Q1...
 
-6) **Merge-Conflict Controls**
-   - Hot zones touched
-   - How to minimize conflicts (change zoning)
-   - Suggested branch naming / ownership
+4) Design Sketch (minimal)
+Key mechanism:
+...
+Data flow:
+A -> B -> C
+Interfaces touched:
+...
+Backward compatibility:
+...
+Risk hotspots:
+...
 
-7) **Acceptance Criteria (Definition of Done)**
-   - Bullet list of must-meet criteria tied to the Elevation
+5) Change List (Patch Plan)
+Patch 1 - <title>
+Goal:
+Files:
+...
+Symbols (exact objects):
+add/modify ...
+Compat notes:
+Gating/rollout (flag/config) if any:
+Proof (fast):
+cmd -> expected signal
 
-## Non-negotiables
-- No new systems unless required by the Elevation.
-- If plan requires contract changes, list them first; otherwise declare “no contract changes”.
-- Provide exact commands for proof.
-- If any required input is missing, make best effort using repo context; mark assumptions.
+Patch 2 - ...
+(repeat; keep patches reviewable + ordered)
+
+6) Tests & Proof (Runbook)
+Fast checks:
+... -> expected
+Targeted tests (add/update):
+test_name in file
+Full gates (required):
+...
+Expected fail signals / likely causes:
+...
+
+7) Failure Modes & Rollback
+Top 3 failure modes:
+... Detection: ... Mitigation: ...
+...
+...
+Rollback plan:
+revert steps / disable flag / config rollback
+data rollback (if relevant)
+post-rollback verification commands
+
+8) Merge-Conflict Controls
+Hot zones:
+...
+Change zoning strategy:
+...
+Branch/ownership sequencing:
+...
+Churn limits:
+no opportunistic refactors in hot zones
+
+9) Acceptance Criteria (DoD)
+Must meet (tied to Elevation):
+...
+Required commands passing:
+...
+Non-negotiables:
+no new systems unless Elevation requires
+contract changes listed first (or "No contract changes.")
+exact commands included for proof
