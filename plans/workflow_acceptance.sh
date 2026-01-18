@@ -135,6 +135,7 @@ test_pass() {
   local end
   end="$(now_secs)"
   local duration=$((end - CURRENT_TEST_START))
+  : "$CURRENT_TEST_ID" "$CURRENT_TEST_DESC"
   mark_done "$id"
   echo "PASS ${id} (${duration}s)"
 }
