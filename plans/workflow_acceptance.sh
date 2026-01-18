@@ -6,6 +6,7 @@ SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SO
 DEFAULT_STATE_FILE="/tmp/workflow_acceptance.state"
 DEFAULT_STATUS_FILE="/tmp/workflow_acceptance.status"
 
+WORKFLOW_ACCEPTANCE_MODE="full"
 ONLY_ID=""
 FROM_ID=""
 UNTIL_ID=""
@@ -31,6 +32,7 @@ Usage: ./plans/workflow_acceptance.sh [options]
 Options:
   --list                 List tests and exit
   --fast                 Run fast prechecks only
+  --mode <full|smoke>     Run full suite or fast smoke subset
   --only <id>            Run a single test id (overrides other selectors)
   --from <id>            Start running at id (inclusive)
   --until <id>           Stop after id (inclusive)
@@ -151,6 +153,14 @@ parse_args() {
         FAST=1
         shift
         ;;
+      --mode)
+        WORKFLOW_ACCEPTANCE_MODE="${2:-}"
+        if [[ -z "$WORKFLOW_ACCEPTANCE_MODE" ]]; then
+          echo "FAIL: --mode requires a value (full|smoke)" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
       --only)
         ONLY_ID="${2:-}"
         if [[ -z "$ONLY_ID" ]]; then
@@ -213,6 +223,17 @@ parse_args() {
 }
 
 parse_args "$@"
+
+case "$WORKFLOW_ACCEPTANCE_MODE" in
+  full) ;;
+  smoke)
+    FAST=1
+    ;;
+  *)
+    echo "FAIL: unknown workflow acceptance mode: $WORKFLOW_ACCEPTANCE_MODE (expected full|smoke)" >&2
+    exit 1
+    ;;
+esac
 
 if (( LIST == 1 )); then
   list_tests
@@ -285,6 +306,7 @@ if (( ${#mode_parts[@]} == 0 )); then
   mode_parts+=("full")
 fi
 echo "Workflow acceptance mode: ${mode_parts[*]}"
+echo "workflow_acceptance_mode=$WORKFLOW_ACCEPTANCE_MODE"
 echo "State file: ${STATE_FILE}"
 echo "Status file: ${STATUS_FILE}"
 
@@ -747,6 +769,16 @@ if test_start "0k" "workflow preflight checks"; then
     exit 1
   fi
 
+  if ! run_in_worktree grep -q "workflow_acceptance.sh --mode" "plans/verify.sh"; then
+    echo "FAIL: verify must pass --mode to workflow_acceptance.sh" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "workflow_acceptance_mode" "plans/verify.sh"; then
+    echo "FAIL: verify must select workflow acceptance mode" >&2
+    exit 1
+  fi
+
   if ! run_in_worktree grep -q "workflow acceptance skipped" "plans/verify.sh"; then
     echo "FAIL: verify must emit a workflow acceptance skip message" >&2
     exit 1
@@ -759,6 +791,51 @@ if test_start "0k" "workflow preflight checks"; then
 
   if ! run_in_worktree grep -q "contract_coverage_matrix.py" "plans/verify.sh"; then
     echo "FAIL: verify must run contract coverage matrix" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "contract coverage skipped" "plans/verify.sh"; then
+    echo "FAIL: verify must emit a contract coverage skip message" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "change_detection_ok=" "plans/verify.sh"; then
+    echo "FAIL: verify must emit change detection status" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "should_run_rust_gates" "plans/verify.sh"; then
+    echo "FAIL: verify must include change-aware rust gate selection" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "should_run_python_gates" "plans/verify.sh"; then
+    echo "FAIL: verify must include change-aware python gate selection" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "should_run_node_gates" "plans/verify.sh"; then
+    echo "FAIL: verify must include change-aware node gate selection" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "rust gates skipped" "plans/verify.sh"; then
+    echo "FAIL: verify must emit rust gate skip message" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "python gates skipped" "plans/verify.sh"; then
+    echo "FAIL: verify must emit python gate skip message" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "node gates skipped" "plans/verify.sh"; then
+    echo "FAIL: verify must emit node gate skip message" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "endpoint gate skipped" "plans/verify.sh"; then
+    echo "FAIL: verify must emit endpoint gate skip message" >&2
     exit 1
   fi
 
@@ -854,8 +931,8 @@ if ! run_in_worktree test -x "plans/workflow_verify.sh"; then
   exit 1
 fi
 
-if ! run_in_worktree grep -q "workflow_acceptance.sh" "plans/workflow_verify.sh"; then
-  echo "FAIL: workflow_verify must invoke workflow_acceptance.sh" >&2
+if ! run_in_worktree grep -q "workflow_acceptance.sh --mode" "plans/workflow_verify.sh"; then
+  echo "FAIL: workflow_verify must invoke workflow_acceptance.sh with --mode" >&2
   exit 1
 fi
 
