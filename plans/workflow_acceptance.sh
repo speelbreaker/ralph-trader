@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2026
 set -euo pipefail
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -19,6 +20,7 @@ END_INDEX=0
 TEST_COUNTER=0
 CURRENT_TEST_START=0
 CURRENT_TEST_ID=""
+# shellcheck disable=SC2034
 CURRENT_TEST_DESC=""
 ALL_TEST_IDS=()
 
@@ -1047,18 +1049,20 @@ if test_start "0n" "selector flags work for --only/--resume"; then
 fi
 
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
-echo ".context/" >> "$exclude_file"
-echo "plans/contract_check.sh" >> "$exclude_file"
-echo "plans/contract_review_validate.sh" >> "$exclude_file"
-echo "plans/workflow_contract_gate.sh" >> "$exclude_file"
-echo "plans/workflow_contract_map.json" >> "$exclude_file"
-echo "plans/run_prd_auditor.sh" >> "$exclude_file"
-echo "plans/prd_ref_check.sh" >> "$exclude_file"
-echo "plans/prd_ref_index.sh" >> "$exclude_file"
-echo "plans/build_markdown_digest.sh" >> "$exclude_file"
-echo "plans/build_contract_digest.sh" >> "$exclude_file"
-echo "plans/build_plan_digest.sh" >> "$exclude_file"
-echo "plans/prd_slice_prepare.sh" >> "$exclude_file"
+{
+  printf '%s\n' ".context/"
+  printf '%s\n' "plans/contract_check.sh"
+  printf '%s\n' "plans/contract_review_validate.sh"
+  printf '%s\n' "plans/workflow_contract_gate.sh"
+  printf '%s\n' "plans/workflow_contract_map.json"
+  printf '%s\n' "plans/run_prd_auditor.sh"
+  printf '%s\n' "plans/prd_ref_check.sh"
+  printf '%s\n' "plans/prd_ref_index.sh"
+  printf '%s\n' "plans/build_markdown_digest.sh"
+  printf '%s\n' "plans/build_contract_digest.sh"
+  printf '%s\n' "plans/build_plan_digest.sh"
+  printf '%s\n' "plans/prd_slice_prepare.sh"
+} >> "$exclude_file"
 
 count_blocked() {
   find "$WORKTREE/.ralph" -maxdepth 1 -type d -name 'blocked_*' | wc -l | tr -d ' '
