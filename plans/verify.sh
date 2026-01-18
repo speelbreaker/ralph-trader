@@ -342,16 +342,25 @@ is_rust_affecting_file() {
 
 is_python_affecting_file() {
   case "$1" in
-    *.py|pyproject.toml|requirements*.txt|setup.cfg|setup.py|tox.ini|mypy.ini|pytest.ini|Pipfile|Pipfile.lock|.python-version) return 0 ;;
+    *.py|*.pyi|pyproject.toml|requirements*.txt|setup.cfg|setup.py|tox.ini|mypy.ini|pytest.ini|.mypy.ini|.pytest.ini) return 0 ;;
+    poetry.lock|uv.lock|ruff.toml|.ruff.toml|Pipfile|Pipfile.lock|.python-version) return 0 ;;
     */pyproject.toml|*/requirements*.txt|*/setup.cfg|*/setup.py|*/tox.ini|*/mypy.ini|*/pytest.ini) return 0 ;;
+    */poetry.lock|*/uv.lock|*/ruff.toml|*/.ruff.toml|*/Pipfile|*/Pipfile.lock|*/.python-version) return 0 ;;
     *) return 1 ;;
   esac
 }
 
 is_node_affecting_file() {
   case "$1" in
-    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|tsconfig.json|tsconfig.*.json) return 0 ;;
-    */package.json|*/pnpm-lock.yaml|*/package-lock.json|*/yarn.lock|*/tsconfig.json|*/tsconfig.*.json) return 0 ;;
+    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) return 0 ;;
+    package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|.nvmrc|.node-version) return 0 ;;
+    tsconfig.json|tsconfig.*.json|eslint.config.*|.eslintrc*|.prettierrc*|prettier.config.*) return 0 ;;
+    jest.config.*|vitest.config.*|babel.config.*|vite.config.*|next.config.*) return 0 ;;
+    webpack.config.*|rollup.config.*) return 0 ;;
+    */package.json|*/pnpm-lock.yaml|*/package-lock.json|*/yarn.lock|*/.nvmrc|*/.node-version) return 0 ;;
+    */tsconfig.json|*/tsconfig.*.json|*/eslint.config.*|*/.eslintrc*|*/.prettierrc*|*/prettier.config.*) return 0 ;;
+    */jest.config.*|*/vitest.config.*|*/babel.config.*|*/vite.config.*|*/next.config.*) return 0 ;;
+    */webpack.config.*|*/rollup.config.*) return 0 ;;
     *) return 1 ;;
   esac
 }
