@@ -1,4 +1,5 @@
 # Plan 1 — Run workflow_acceptance only when workflow/harness files change (CI + local)
+Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 
@@ -212,6 +213,7 @@ WORKFLOW_CONTRACT
 ---
 
 # Plan 2 — Add “smoke” mode to workflow_acceptance.sh for fast iteration
+Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 
@@ -405,6 +407,7 @@ workflow_acceptance
 ---
 
 # Plan 3 — Make verify.sh “fail-safe by default” in CI (full in CI, quick locally)
+Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 
@@ -582,6 +585,7 @@ Pseudo-flow:
 ---
 
 # Plan 4 — Make the endpoint gate base-ref robust (less CI friction, fewer false fails)
+Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 
@@ -759,6 +763,7 @@ Ensure fetch gets the chosen base ref.
 ---
 
 # Plan 5 — Add a “summary console mode” to verify.sh to reduce token/log volume
+Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 
@@ -960,6 +965,7 @@ Also write `verify_summary.txt` containing:
 ---
 
 # Plan 6 — Enforce “workflow maintenance tasks are NOT PRD stories” (hard guardrail)
+Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 

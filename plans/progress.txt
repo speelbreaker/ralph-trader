@@ -434,3 +434,9 @@ Summary: Added conditional workflow acceptance in verify, added workflow_verify 
 Commands: bash -n plans/verify.sh plans/workflow_verify.sh plans/workflow_acceptance.sh; ./plans/workflow_contract_gate.sh; ./plans/workflow_acceptance.sh; ./plans/verify.sh full.
 Evidence: plans/verify.sh; plans/workflow_acceptance.sh; plans/workflow_verify.sh; plans/workflow_contract_map.json; specs/WORKFLOW_CONTRACT.md; artifacts/verify/20260116_174658.
 Next: None.
+Story: workflow-maintenance
+Date: 2026-01-17
+Summary: Added workflow acceptance runner controls (list/only/fast/resume), fast prechecks, and state/status tracking; updated workflow contract + map; expanded acceptance tests for selector behavior and fast checks.
+Commands: ./plans/verify.sh full.
+Evidence: plans/workflow_acceptance.sh; specs/WORKFLOW_CONTRACT.md; plans/workflow_contract_map.json; artifacts/verify/20260117_101902.
+Next: None.

@@ -19,6 +19,18 @@
 - Blocked artifacts still do not include iter_dir or selection context beyond `blocked_item.json`; debugging relies on `plans/logs/ralph.*.log`. Consider adding iter_dir pointer in blocked metadata later.
 - Instrument cache TTL tests used exact counter deltas on global atomics; parallel tests can skew them. Assertions now require monotonic increase to avoid flakes.
 
+## Contract Integrity Checks (Required)
+- C-001 (RED, resolved): containment eligibility now gates mandatory containment; otherwise hard-stop. Evidence: `CONTRACT.md:850`.
+- C-002 (RED, resolved): staleness uses `now_ms` with ms->sec conversions for policy and watchdog logic. Evidence: `CONTRACT.md:645`, `CONTRACT.md:653`, `CONTRACT.md:758`, `CONTRACT.md:787`.
+- C-003 (YELLOW, resolved): addendum references corrected to existing contract sections. Evidence: `CONTRACT.md:80`, `CONTRACT.md:83`.
+- C-004 (YELLOW, resolved): Inventory Skew requires Net Edge re-evaluation using adjusted `min_edge_usd` before dispatch. Evidence: `CONTRACT.md:475`.
+- C-005 (YELLOW, resolved): Liquidity Gate scope excludes emergency close; test added to ensure emergency close is not blocked by Liquidity Gate. Evidence: `CONTRACT.md:407`, `CONTRACT.md:415`, `CONTRACT.md:1029`.
+- D-001 (YELLOW, resolved): instrument metadata TTL sets `RiskState::Degraded` so PolicyGuard computes ReduceOnly within one tick. Evidence: `CONTRACT.md:127`, `CONTRACT.md:129`.
+- U-001 (YELLOW, resolved): defines risk-increasing cancel/replace in exposure terms. Evidence: `CONTRACT.md:926`, `CONTRACT.md:928`.
+- T-001 (YELLOW, resolved): F1_CERT binding mismatch and no-cache rules now have explicit acceptance tests. Evidence: `CONTRACT.md:706`, `CONTRACT.md:708`.
+- F-016 (YELLOW, resolved): Net Edge Gate scope excludes emergency close; tests added. Evidence: `CONTRACT.md:476`, `CONTRACT.md:480`.
+- O-002 (YELLOW, resolved): /status policy timestamp consistency test added. Evidence: `CONTRACT.md:1676`, `CONTRACT.md:1678`.
+
 ## Contract mapping table
 | Decision / Gate | Contract clause | Evidence |
 |---|---|---|

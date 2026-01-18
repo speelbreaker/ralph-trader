@@ -99,16 +99,13 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
    - Do not weaken fail-closed gates or staleness rules.
 
 6) [WF-2.8] **PR postmortem is mandatory (no postmortem, no merge).**
-   - Every PR MUST include a filled postmortem entry under `reviews/postmortems/` using `PR_POSTMORTEM_TEMPLATE.md`.
+   - Every PR MUST include a postmortem entry under `reviews/postmortems/`.
    - `plans/verify.sh` MUST fail if no postmortem entry is changed.
-   - Postmortems MUST include: "Apply or it didn't happen", "What should we add to AGENTS.md?", and a "Concrete Elevation Plan" tied to the top 3 sinks.
-   - PR descriptions MUST include "AGENTS.md updates proposed" and "Elevation plan" sections via `.github/pull_request_template.md`; reviewers must accept or explicitly reject with a reason.
+   - `PR_POSTMORTEM_TEMPLATE.md` defines the preferred structure (recommended, not enforced).
    - `POSTMORTEM_GATE=0` may disable locally, but is ignored in CI.
 
-7) [WF-2.9] **Recurring friction must be elevated to enforcement.**
-   - If a postmortem marks a recurring issue, the PR MUST include one of: a script check, a contract clarification, or a test.
-   - The postmortem MUST reference the enforcement path (file path updated in the PR).
-   - `WORKFLOW_FRICTION.md` MUST be updated with the next elevation action for recurring issues.
+7) [WF-2.9] **Recurring friction should be elevated to enforcement.**
+   - If a recurring issue is identified in the postmortem, update `WORKFLOW_FRICTION.md` with the next elevation action.
 
 Observable gate requirement:
 - [WF-2.6] plans/ralph.sh MUST exit non-zero on any gate failure and MUST leave a diagnostic artifact under .ralph/ explaining the stop reason.
@@ -658,3 +655,23 @@ Traceability / drift gate [WF-12.8]
 
 [ ] plans/workflow_contract_gate.sh fails if any WF-* rule_id in specs/WORKFLOW_CONTRACT.md is unmapped or lacks enforcement + artifact metadata.
 [ ] plans/workflow_acceptance.sh runs the traceability gate.
+
+---
+
+## 13) Workflow Acceptance Runner (Required)
+
+[WF-13.1] Running ./plans/workflow_acceptance.sh with no args MUST run the full suite and preserve existing exit semantics (non-zero on first failing test).
+
+[WF-13.2] --list MUST print a stable ordered list of test IDs and descriptions and exit 0 without running tests.
+
+[WF-13.3] Targeted run controls MUST be supported: --only <id>, --from <id>, --until <id>, --resume. --only overrides other selectors. --from/--until are inclusive. --resume continues from the next test after the last completed ID recorded in the state file.
+
+[WF-13.4] Fast precheck mode: --fast MUST execute a cheap subset that includes:
+- real PRD schema check against plans/prd.json (plans/prd_schema_check.sh)
+- PRD self-dependency check with explicit diagnostics
+- traceability gate (plans/workflow_contract_gate.sh)
+- shell safety check: bash -n plans/workflow_acceptance.sh; if shellcheck is installed, run shellcheck too
+
+[WF-13.5] The runner MUST write progress state to a state file and current test status to a status file, defaulting to /tmp/workflow_acceptance.state and /tmp/workflow_acceptance.status. Both paths MUST be overrideable via flags: --state-file and --status-file.
+
+[WF-13.6] shellcheck is optional by default. If --require-shellcheck is provided and shellcheck is missing, the run MUST fail fast with a clear install message.

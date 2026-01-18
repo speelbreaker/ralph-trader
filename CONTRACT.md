@@ -1,16 +1,32 @@
 This is the canonical contract path. Do not edit other copies.
 
-# **Version: 4.9 (The "Antifragile" Standard)**
+# **Version: 5.1 (The "Antifragile" Standard)**
 **Status**: FINAL ARCHITECTURE **Objective**: Net Profit via Structural Arbitrage using **Atomic Group Execution**, **Fee-Aware IOC Limits**, and **Closed-Loop Optimization**. **Architecture**: "The Iron Monolith v4.0" (Rust Execution/Risk \+ Python Policy \+ **Automated Policy Tuner**)
 
 ---
 
-## Patch Summary (Contract Patch Set)
+## Patch Summary (P0 — TradingMode Canonicalization)
 
-- **Patch A — Replay Gatekeeper ↔ Disk Watermarks:** Make **Decision Snapshots the REQUIRED replay input**; full tick/L2 archives are **optional** and pausable without forcing Degraded.
-- **Patch B — EvidenceGuard:** Add a hard runtime invariant: **no evidence chain → no opens** (ReduceOnly until green + cooldown).
-- **Patch C — Bunker Mode:** Add **network jitter** safety override that forces ReduceOnly and blocks opens until comms stabilize.
-- **Patch D — Owner /status Endpoint:** Add a read-only `GET /api/v1/status` endpoint + **endpoint-level test requirement** for any new endpoint.
+**Applied:** 2026-01-15  
+**Objective:** Eliminate TradingMode split-brain; canonicalize under PolicyGuard ownership.
+
+- **§2.2.3 Canonical Precedence** — Relocated ladder from EvidenceGuard; expanded to 6 KILL + 11 REDUCEONLY triggers including margin, disk, session termination, and open permission latch.
+- **§2.2.3 ModeReasonCode Registry** — Added authoritative reason codes exposed via `/api/v1/status` (prevents "operator lies").
+- **§2.2.4 Open Permission Latch (CP-001)** — Blocks opens after restart/WS gaps/session kill until reconciliation clears (5 reconcile-class codes).
+- **§2.2 PolicyGuard Inputs** — Extended from 8→17 variables to eliminate "magic" inputs referenced in precedence ladder.
+- **§2.2.2 EvidenceGuard Queue Depth Gate** — Added `parquet_queue_depth_pct <= 0.90` fail-closed gate with hysteresis.
+- **§7.0 /status Observability** — Added 4 required fields: `mode_reasons`, `open_permission_blocked_latch`, `open_permission_reason_codes`, `open_permission_requires_reconcile`.
+- **§7.2 Decision Snapshot Retention** — Explicit defaults (30d, ≥2d bound) aligned with Replay Gatekeeper 48h window.
+- **§1.4.3, §3.3 Wording Cleanup** — "PolicyGuard MUST force" (not "Force TradingMode"); fixed §3.3 10028 Kill contradiction.
+
+**Note:** Patch Summary is informational; requirements and acceptance tests are defined in the referenced sections below.
+**Acceptance Test References (informational):**
+- Kill containment eligibility: see §2.2.3 Kill Mode Semantics acceptance tests.
+- Staleness arithmetic: see §2.2.3 Policy Staleness Rule acceptance tests.
+- /status required fields: see §7.0 acceptance tests.
+
+> [!WARNING]
+> **v5.1 F1_CERT Binding Requirement:** This version introduces F1_CERT binding validation (§2.2.1). ALL components that produce or consume `contract_version` MUST be updated to `5.1` in lockstep (F1 cert generator, runtime binary, PolicyGuard). Mismatched versions will force `TradingMode::ReduceOnly` until aligned.
 
 ## Definitions
 
@@ -18,16 +34,12 @@ This is the canonical contract path. Do not edit other copies.
   - **Linear Perpetuals (USDC‑margined)**: treat as `linear_future` for sizing (canonical `qty_coin`), even if their venue symbol says "PERPETUAL".
 - **order_type** (Deribit `type`): `limit | market | stop_limit | stop_market | ...` (venue-specific).
 - **linked_order_type**: Deribit linked/OCO semantics (venue-specific; gated off for this bot).
-- **Aggressive IOC Limit**: a `limit` order with `time_in_force=immediate_or_cancel` and a *bounded* limit price computed from L2 + safety clamps.
+- **Aggressive IOC Limit**: a `limit` order with `time_in_force=immediate_or_cancel` and a *bounded* limit price computed from `fair_price` with fee-aware edge-based clamps (see §1.4).
 
 - **RiskState** (health/cause layer): `Healthy | Degraded | Maintenance | Kill`
 - **TradingMode** (enforcement layer): `Active | ReduceOnly | Kill`  
   Resolved by PolicyGuard each tick from RiskState, policy staleness, watchdog, exchange health, fee cache staleness, and Cortex overrides.
-  **Runtime F1 Gate in PolicyGuard (HARD, runtime enforcement):**
-  - PolicyGuard MUST read `artifacts/F1_CERT.json`.
-  - Freshness window: default 24h (configurable). If missing OR stale OR FAIL => TradingMode MUST be ReduceOnly.
-  - While in ReduceOnly due to F1 failure: allow only closes/hedges/cancels; block all opens.
-  - This rule is strict: no caching last-known-good and no grace periods.
+  **Runtime F1 Gate in PolicyGuard (HARD, runtime enforcement):** See §2.2.1 for canonical specification. Summary: F1_CERT missing/stale/invalid → ReduceOnly (blocks opens; allows closes/hedges/cancels).
 
 ## **0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)**
 
@@ -58,40 +70,24 @@ as part of its core gate.
 - `./plans/verify.sh` runs `cargo test --workspace` from repo root.
 
 
-## §0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)
-
-This repo is a Rust workspace with two required crates:
-- `crates/soldier_core`
-- `crates/soldier_infra`
-
-Any "Where:" references in this contract that mention `soldier/core/...` or `soldier/infra/...` map to:
-- `soldier/core/...` -> `crates/soldier_core/...`
-- `soldier/infra/...` -> `crates/soldier_infra/...`
-
-**Contract invariant:** any implementation that relocates these crates or breaks this mapping is non-compliant unless CONTRACT.md is updated first.
-
-**Contract acceptance criteria (repo-level):**
-- `cargo test --workspace` must run from repo root.
-- Both crates must exist and be members of the workspace.
-
 
 ## Deribit Venue Facts Addendum (Artifact-Backed)
 
 This contract is **venue-bound**: any behavior marked **VERIFIED** below is backed by artifacts under `artifacts/` and is enforced by code + regression tests.  
 CI guardrail: `python scripts/check_vq_evidence.py` must pass, or **build fails**.
 
-| Fact ID | Status | Enforcement point in engine | Evidence path under `artifacts/` |
-|---|---|---|---|
-| **F-01a** | **VERIFIED** | §1.4.4 **Options Order-Type Guard** → reject stop orders on options preflight | `artifacts/T-TRADE-02_response.json` |
-| **F-01b** | **DOC-CONFLICT** (POLICY-DISALLOWED) | §1.4 **No Market Orders** + §1.4.4 **Options Order-Type Guard** → market on options forbidden (reject only; no normalization) | `artifacts/deribit_testnet_trade_20260103_015804.log` |
-| **F-03** | **VERIFIED** | §1.1.1 **Canonical Quantization** → tick/step rounding before hash + dispatch | `artifacts/deribit_testnet_trade_final_20260103_020002.log` |
-| **F-05** | **VERIFIED** | §5 **Rate Limiting** → do **not** rely on rate-limit headers; enforce local throttle + retry/backoff | `artifacts/deribit_testnet_trade_final_20260103_020002.log` |
-| **F-06** | **VERIFIED** | §1.4.4 **Post-Only Guard** → never send `post_only` that would cross; treat venue reject as deterministic, not “random” | `artifacts/deribit_testnet_trade_final_20260103_020002.log` |
-| **F-07** | **VERIFIED** | §2.2/§5.4 **Reduce-Only Mode** → when effective mode is ReduceOnly/Kill, outbound orders must include venue `reduce_only=true` | `artifacts/deribit_testnet_trade_final_20260103_020002.log` |
-| **F-08** | **VERIFIED** (NOT SUPPORTED) | §1.4.4 **Linked Orders Gate** → `linked_order_type` rejected unless explicitly certified (not currently) | `artifacts/T-OCO-01_response.json` |
-| **F-09** | **VERIFIED** | §1.4.4 **Stop Order Guard** → perps/futures stops allowed *only* with `trigger` set; options stops always rejected | `artifacts/T-STOP-01_response.json`, `artifacts/T-STOP-02_response.json` |
-| **F-10** | **VERIFIED** (observed metric) | §5.5 **Timeouts & Circuit Breakers** → use conservative timeouts; do not treat latency as invariant | `artifacts/T-PM-01_latency_testnet.json` |
-| **A-03** | **VERIFIED** | §3.2 **Data Plane / Heartbeat** → websocket silence triggers ReduceOnly/Kill | `artifacts/deribit_testnet_trade_final_20260103_020002.log` |
+| Fact ID   | Status                               | Enforcement point in engine                                                                                                    | Evidence path under `artifacts/`                                         |
+| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| **F-01a** | **VERIFIED**                         | §1.4.4 **Options Order-Type Guard** → reject stop orders on options preflight                                                  | `artifacts/T-TRADE-02_response.json`                                     |
+| **F-01b** | **DOC-CONFLICT** (POLICY-DISALLOWED) | §1.4 **No Market Orders** + §1.4.4 **Options Order-Type Guard** → market on options forbidden (reject only; no normalization)  | `artifacts/deribit_testnet_trade_20260103_015804.log`                    |
+| **F-03**  | **VERIFIED**                         | §1.1.1 **Canonical Quantization** → tick/step rounding before hash + dispatch                                                  | `artifacts/deribit_testnet_trade_final_20260103_020002.log`              |
+| **F-05**  | **VERIFIED**                         | §3.3 **Local Rate Limit Circuit Breaker** → do **not** rely on rate-limit headers; enforce local throttle + retry/backoff      | `artifacts/deribit_testnet_trade_final_20260103_020002.log`              |
+| **F-06**  | **VERIFIED**                         | §1.4.4 **Post-Only Guard** → never send `post_only` that would cross; treat venue reject as deterministic, not “random”        | `artifacts/deribit_testnet_trade_final_20260103_020002.log`              |
+| **F-07**  | **VERIFIED**                         | §2.2/§2.2.3 **TradingMode Computation** → when effective mode is ReduceOnly/Kill, outbound orders must include venue `reduce_only=true` | `artifacts/deribit_testnet_trade_final_20260103_020002.log`              |
+| **F-08**  | **VERIFIED** (NOT SUPPORTED)         | §1.4.4 **Linked Orders Gate** → `linked_order_type` rejected unless explicitly certified (not currently)                       | `artifacts/T-OCO-01_response.json`                                       |
+| **F-09**  | **VERIFIED** (NOT SUPPORTED) | §1.4.4 **Stop Order Guard** → stop orders rejected for this bot; venue requires trigger if enabled                       | `artifacts/T-STOP-01_response.json`, `artifacts/T-STOP-02_response.json` |
+| **F-10**  | **VERIFIED** (observed metric)       | §2.3.2 + §3.3 **Network Jitter Monitor / Rate Limit Circuit Breaker** → use conservative timeouts; do not treat latency as invariant | `artifacts/T-PM-01_latency_testnet.json`                                 |
+| **A-03**  | **VERIFIED**                         | §3.2 **Data Plane / Heartbeat** → websocket silence triggers ReduceOnly/Kill                                                   | `artifacts/deribit_testnet_trade_final_20260103_020002.log`              |
 
 ### Policy decision for DOC-CONFLICT (F-01b)
 
@@ -123,11 +119,20 @@ This policy is enforced in §1.4 (**No Market Orders**) and §1.4.4 (**Options O
 2. If both `contracts` and `amount` are provided (internally or via strategy output), they **must match** within tolerance:
    - `amount ≈ contracts * contract_multiplier`  
    - `contract_multiplier` is instrument-specific (e.g., inverse futures contract size in USD; options contract multiplier in coin).
-3. If a mismatch is detected: **reject the intent** and set `RiskState::Degraded` (this is a wiring bug, not “market noise”).
+   - Tolerance: `abs(amount - contracts * contract_multiplier) / max(abs(amount), epsilon) <= contracts_amount_match_tolerance` where `contracts_amount_match_tolerance = 0.001` (0.1%, default) and `epsilon = 1e-9`.
+3. If a mismatch is detected: **reject the intent** and set `RiskState::Degraded` (this is a wiring bug, not "market noise").
+4. For `instrument_kind == option`, order size MUST use `qty_coin` (Deribit `amount` in base coin units); `qty_usd` MUST be unset.
+
+**Acceptance Tests (REQUIRED):**
+- For an option instrument, `qty_coin` is used for sizing and maps to the Deribit `amount` field; `qty_usd` is empty.
 
 #### **1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement**
 
 **Purpose:** Stale instrument metadata can silently break sizing and quantization (tick_size, amount_step, min_amount), causing wrong exposure.
+
+**Source of truth (Non-Negotiable):**
+- Instrument metadata MUST be fetched from `/public/get_instruments` and cached (Deribit).
+- Hardcoding `tick_size`, `amount_step`, `min_amount`, or `contract_multiplier` is forbidden; all sizing/quantization MUST use the fetched metadata.
 
 **Invariant (Non-Negotiable):**
 - The engine MUST track freshness of instrument metadata used for:
@@ -135,7 +140,7 @@ This policy is enforced in §1.4 (**No Market Orders**) and §1.4.4 (**Options O
   - quantization constraints (tick_size, amount_step, min_amount)
 - If instrument metadata age exceeds `instrument_cache_ttl_s`:
   - set `RiskState::Degraded`
-  - block opens by forcing `TradingMode::ReduceOnly` within one tick (closes/hedges/cancels allowed)
+  - PolicyGuard MUST compute `TradingMode::ReduceOnly` within one tick (closes/hedges/cancels allowed; see §2.2.3)
 
 **Required observability (contract-bound names):**
 - `instrument_cache_age_s` (gauge)
@@ -146,6 +151,7 @@ This policy is enforced in §1.4 (**No Market Orders**) and §1.4.4 (**Options O
 **Acceptance tests (REQUIRED):**
 - `test_stale_instrument_cache_sets_degraded`
 - `test_instrument_cache_ttl_blocks_opens_allows_closes` (or equivalent)
+- `test_instrument_metadata_uses_get_instruments()` verifies quantization/sizing uses values from `/public/get_instruments` (e.g., tick_size, amount_step, min_amount, contract_multiplier) rather than hardcoded defaults.
 
 **OrderSize struct (MUST implement):**
 ```rust
@@ -183,19 +189,21 @@ pub struct OrderSize {
 
 **Requirement**: Every order must be uniquely identifiable and deduplicable across restarts, socket reconnections, and race conditions.
 
-**Specification: The Label Schema** Format: `stoic:v4:{strat_id}:{group_id}:{leg_idx}:{intent_hash}`
+**Specification: The Label Schema**
 
-**Deribit Constraint:** `label` must be <= 64 chars. (Hard limit)
-
-**Compact Label Schema (must implement):**
-Format: `s4:{sid8}:{gid12}:{li}:{ih16}`
+**Canonical Outbound Format (MUST implement):** `s4:{sid8}:{gid12}:{li}:{ih16}`
 
 - `sid8` = first 8 chars of stable strategy id hash (e.g., base32(xxhash(strat_id)))
 - `gid12` = first 12 chars of group_id (uuid without dashes, truncated)
 - `li` = leg_idx (0/1)
 - `ih16` = 16-hex (or base32) intent hash
 
-**Rule:** If label would exceed 64, truncate only hashed components, never truncate structural fields.
+**Deribit Constraint:** `label` must be <= 64 chars. (Hard limit)
+
+**Rule:** All outbound orders to Deribit MUST use the `s4:` format. If label would exceed 64 chars, truncate only hashed components (`sid8`, `ih16`), never truncate structural fields (`gid12`, `li`).
+
+**Legacy Documentation Format (non-sent):** `stoic:v4:{strat_id}:{group_id}:{leg_idx}:{intent_hash}`  
+This expanded format is for human-readable logs and internal documentation only. It MUST NOT be sent to the exchange.
 
 ### **1.1.2 Label Parse + Disambiguation (Collision-Safe)**
 
@@ -215,16 +223,22 @@ Format: `s4:{sid8}:{gid12}:{li}:{ih16}`
    D) qty_q match
 5) If still ambiguous → mark `RiskState::Degraded`, block opens, and require REST trade/order snapshot reconcile.
 
-**Acceptance Test:**
-- Construct two intents with same gid12. Ensure matcher resolves using `ih16` + instrument + side.
-- If ambiguity remains, verify system enters Degraded and stops opening.
+**Acceptance Tests:**
+1. **Format Enforcement:**
+   - Build an outbound order and assert:
+     - Label starts with `s4:`
+     - Label length ≤ 64 chars
+     - Parser extracts `{sid8, gid12, li, ih16}` correctly
+2. **Collision Disambiguation:**
+   - Construct two intents with same gid12. Ensure matcher resolves using `ih16` + instrument + side.
+   - If ambiguity remains, verify system enters Degraded and stops opening.
 
 
 
 * `strat_id`: Static ID of the running strategy (e.g., `strangle_btc_low_vol`).  
 * `group_id`: UUIDv4 (Shared by all legs in a single atomic attempt).  
 * `leg_idx`: `0` or `1` (Identity within the group).  
-* `intent_hash`: `xxhash64(instrument + side + qty + limit_price + group_id + leg_idx)`
+* `intent_hash`: `xxhash64(instrument + side + qty_q + limit_price_q + group_id + leg_idx)` (see §1.1.1 for quantization)  
   **Hard rule:** Do NOT include wall-clock timestamps in the idempotency hash.
 
 
@@ -324,13 +338,13 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
     self.ledger.mark_group_state(group.group_id, GroupState::MixedFailed)?;
 
     // Containment Step A: bounded rescue (ONLY to remove naked risk)
-    // Try up to 2 IOC rescue orders for the missing qty, at cross_spread_by_ticks(2),
+    // Try up to 2 IOC rescue orders for the missing qty, crossing spread by rescue_cross_spread_ticks,
     // but ONLY if Liquidity Gate passes AND NetEdge remains ≥ min_edge.
     for _attempt in 0..2 {
       if !self.liquidity_gate_passes(&group)? { break; }
       if !self.net_edge_gate_passes(&group)? { break; }
 
-      let rescue = self.build_rescue_intents(&group, &results, self.cross_spread_by_ticks(2))?;
+      let rescue = self.build_rescue_intents(&group, &results, self.cfg.rescue_cross_spread_ticks)?;
       if rescue.is_empty() { break; }
 
       let rescue_results = self.dispatch_rescue_ioc(rescue).await?;
@@ -393,7 +407,7 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 
 ### **1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)**
 
-**Council Weakness Covered:** No Liquidity Gate (Low) \+ Taker Bleed (Critical). **Requirement:** Before any order is sent (including IOC), the Soldier must estimate book impact for the requested size and reject trades that exceed max slippage. **Where:** `soldier/core/execution/gate.rs` **Input:** `OrderQty`, `L2BookSnapshot`, `MaxSlippageBps`
+**Council Weakness Covered:** No Liquidity Gate (Low) \+ Taker Bleed (Critical). **Requirement:** Before any order is sent (including IOC), the Soldier must estimate book impact for the requested size and reject trades that exceed max slippage. **Where:** `soldier/core/execution/gate.rs` **Input:** `OrderQty`, `L2BookSnapshot`, `max_slippage_bps = 10` (default: see Appendix A)
 
 **Output:** `Allowed | Rejected(reason=ExpectedSlippageTooHigh)`
 
@@ -402,13 +416,18 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 1. Walk the L2 book on the correct side (asks for buy, bids for sell).  
 2. Compute the Weighted Avg Price (WAP) for `OrderQty`.  
 3. Compute expected slippage: `slippage_bps = (WAP - BestPrice) / BestPrice * 10_000` (sign adjusted)  
-4. Reject if `slippage_bps > MaxSlippageBps`.  
+4. Reject if `slippage_bps > max_slippage_bps` (default 10bps from Appendix A).  
 5. If rejected, log `LiquidityGateReject` with computed WAP \+ slippage.
 
+**Scope (explicit):**
+- Applies to normal dispatch and containment rescue IOC orders (see §1.1 containment Step A).
+- Does NOT apply to Deterministic Emergency Close (§3.1) or containment Step B; emergency close MUST NOT be blocked by profitability gates.
+
 **Acceptance Test (Reject Sweeping):**
-- Given an L2 book where `OrderQty` requires consuming multiple levels causing `slippage_bps > MaxSlippageBps`,
+- Given an L2 book where `OrderQty` requires consuming multiple levels causing `slippage_bps > max_slippage_bps`,
 - Expect: `Rejected(ExpectedSlippageTooHigh)`, and a `LiquidityGateReject` log with WAP + slippage.
 - Verify: no `OrderIntent` is emitted (i.e., pricer/NetEdge gate never runs).
+- Emergency close proceeds even if Liquidity Gate would reject under the same slippage conditions.
 
 
 
@@ -454,6 +473,14 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 **Hard Rule:**
 - This gate MUST run **before** any `OrderIntent` is eligible for dispatch (before AtomicGroup creation).
 
+**Scope (explicit):**
+- Applies to normal dispatch and containment rescue IOC orders (see §1.1 containment Step A).
+- Does NOT apply to Deterministic Emergency Close (§3.1) or reduce-only close/hedge intents.
+
+**Acceptance Tests (REQUIRED):**
+- `test_net_edge_gate_rejects_low_edge()` verifies that `net_edge_usd < min_edge_usd` rejects an OPEN intent.
+- Emergency close proceeds even if Net Edge Gate would reject under the same net edge conditions.
+
 
 ### **1.4.2 Inventory Skew Gate (Execution Bias vs Current Exposure)**
 **Why this exists:** Prevent “good trades” from compounding the *wrong* inventory when already near limits.
@@ -467,20 +494,22 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 
 **Biasing behavior (deterministic):**
 - **BUY intents when `inventory_bias > 0` (already long):**
-  - Require higher edge: `min_edge_usd := min_edge_usd * (1 + k * inventory_bias)`
-  - Be less aggressive: shift `limit_price` **away** from the touch by `bias_ticks(inventory_bias)`
+  - Require higher edge: `min_edge_usd := min_edge_usd * (1 + k * inventory_bias)` where `k = 0.5` (default)
+  - Be less aggressive: shift `limit_price` **away** from the touch by `bias_ticks(inventory_bias)` where `bias_ticks(x) = ceil(abs(x) * tick_penalty_max)` and `tick_penalty_max = 3` (default)
 - **SELL intents when `inventory_bias > 0` (already long):**
   - Allow slightly lower edge (within bounds) and/or be more aggressive to **flatten** inventory
 - Mirror the above for `inventory_bias < 0` (already short).
 
 **Hard Rule:**
-- Inventory Skew runs **after** Net Edge Gate and **before** pricer dispatch. It may *tighten* requirements for risk-increasing trades and *loosen* requirements only for risk-reducing trades.
+- Inventory Skew runs **after** Net Edge Gate and **before** pricer dispatch. If it adjusts `min_edge_usd`, the Net Edge Gate MUST be re-evaluated against the adjusted `min_edge_usd` before dispatch; the adjusted value is authoritative for dispatch eligibility.
+- Inventory Skew may *tighten* requirements for risk-increasing trades and *loosen* requirements only for risk-reducing trades.
 - Inventory Skew must be computed using **current + pending** exposure, or it must run **after** PendingExposure reservation (see §1.4.2.1). This prevents concurrent risk-budget double-spend.
 
 **Acceptance Test:**
 - Set `current_delta ≈ 0.9 * delta_limit` (near limit).
 - A BUY intent that previously passed Net Edge now **rejects** (InventorySkew).
 - A SELL intent for the same instrument still **passes** (risk-reducing).
+- A SELL intent that initially fails Net Edge passes after Inventory Skew lowers `min_edge_usd` and Net Edge is re-evaluated using the adjusted value.
 
 ### **1.4.2.1 PendingExposure Reservation (Anti Over‑Fill)**
 **Why:** Without reservation, multiple concurrent signals can all observe the same “free delta” and over‑allocate risk.
@@ -534,8 +563,8 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 
 **Rules (deterministic):**
 - If `mm_util >= 0.70` → **Reject** any **NEW opens**
-- If `mm_util >= 0.85` → Force `TradingMode = ReduceOnly` (override Python)
-- If `mm_util >= 0.95` → Force `TradingMode = Kill` + trigger deterministic emergency flatten (existing §3.1/§1.2 containment applies)
+- If `mm_util >= 0.85` → PolicyGuard MUST force `TradingMode = ReduceOnly` (block opens; allow close/hedge/cancel)
+- If `mm_util >= 0.95` → PolicyGuard MUST force `TradingMode = Kill` + trigger deterministic emergency flatten (existing §3.1/§1.2 containment applies)
 
 **Acceptance Test:**
 - Mock `equity=100k`, `maintenance_margin=72k` → opens rejected.
@@ -558,11 +587,12 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 - Execution policy: use **Aggressive IOC Limit** with bounded `limit_price_q` (see §1.4.1).
 
 **B) Futures/Perps (`instrument_kind in {linear_future, inverse_future, perpetual}`)**
-- Allowed `type`: **`limit` only** (policy forbids market orders even if the venue allows them).
+- **Allowed `type`:** `limit` (for this bot's execution policy)
 - **Market orders:** forbidden by policy  
   - If `type == market` → **REJECT** (no rewrite/normalization).
-- **Stop orders require trigger** (F-09)  
-  - If `type in {stop_market, stop_limit}` → `trigger` is **mandatory** and must be one of Deribit-allowed triggers (e.g., index/mark/last).
+- **Stop orders:** **NOT SUPPORTED** for this bot (execution policy is IOC limits only)  
+  - Reject any `type in {stop_market, stop_limit}` even if `trigger` is present.
+  - Deribit venue fact (F-09): If stop orders were enabled, venue requires `trigger` to be set.
 - **Linked/OCO orders:** forbidden unless explicitly certified (F-08 currently indicates NOT SUPPORTED)  
   - Reject any non-null `linked_order_type` unless `linked_orders_supported == true` **and** feature flag `ENABLE_LINKED_ORDERS_FOR_BOT == true`.
 
@@ -578,8 +608,8 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 - `options_market_order_is_rejected`
 - `perp_market_order_is_rejected`
 - `options_stop_order_is_rejected_preflight`
+- `perp_stop_order_is_rejected_preflight`
 - `linked_orders_oco_is_gated_off`
-- `perp_stop_requires_trigger`
 
 
 ### **1.5 Position-Aware Execution Sequencer (Council D3)**
@@ -602,6 +632,11 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 
 **Invariant:**  
 - No step may increase exposure while `RiskState != Healthy` or while a prior step is unresolved.
+
+**Acceptance Test:**
+- Set `RiskState::Degraded` and submit an Open intent → expect rejection.
+- Submit Close/Hedge intent → expect allowed.
+- Verify no exposure-increasing action occurs while `RiskState != Healthy`.
 
 
 
@@ -633,21 +668,74 @@ pub async fn execute_atomic_group(&self, group: AtomicGroup) -> Result<()> {
 **Where:** `soldier/core/policy/guard.rs`
 
 **Inputs:**
+- **Timebase convention:** all `*_ts_ms` values are epoch milliseconds; `now_ms` is current epoch milliseconds (and `now` refers to `now_ms` in this contract); seconds are derived as `(now_ms - *_ts_ms)/1000`.
 - `python_policy` (latest policy payload)
 - `python_policy_generated_ts_ms` (timestamp from Commander when policy was computed)
 - `watchdog_last_heartbeat_ts_ms`
+- `now_ms` (local epoch milliseconds used for staleness calculations)
 - `cortex_override` (from §2.3)
 - `exchange_health_state` (from §2.3.1)
-- `f1_cert` (from `artifacts/F1_CERT.json`: `{status, generated_ts_ms}`)
+- `f1_cert` (from `artifacts/F1_CERT.json`: `{status, generated_ts_ms, build_id, runtime_config_hash, contract_version}`)
 - `fee_model_cache_age_s` (from §4.2)
 - `risk_state` (Healthy | Degraded | Maintenance | Kill)
+- `bunker_mode_active` (bool; from §2.3.2 Network Jitter Monitor)
+- `evidence_chain_state` (EvidenceChainState; from §2.2.2 EvidenceGuard)
+- `policy_age_sec` (derived: `(now_ms - python_policy_generated_ts_ms) / 1000`)
+- `mm_util` (float; maintenance margin utilization; from §1.4.3 Margin Headroom Gate)
+- `disk_used_pct` (float; from §7.2 Disk Watermarks)
+- `emergency_reduceonly_active` (bool; true if `POST /api/v1/emergency/reduce_only` is latched/cooldown active)
+- `open_permission_blocked_latch` (bool; from §2.2.4 CP-001)
+- `open_permission_reason_codes` (OpenPermissionReasonCode[]; from §2.2.4 CP-001)
+- `rate_limit_session_kill_active` (bool; true if 10028/session termination occurred and reconciliation has not cleared)
 
 
 #### **2.2.1 Runtime F1 Certification Gate (HARD, runtime enforcement)**
 - PolicyGuard MUST read `artifacts/F1_CERT.json`.
+- Required schema (minimum keys): `{ status, generated_ts_ms, build_id, runtime_config_hash, contract_version }`.
+  - `build_id`: immutable build identifier for the running binary (e.g., git commit SHA).
+  - `runtime_config_hash`: `sha256` hex of canonicalized runtime config (see below).
+  - `contract_version`: MUST match this contract's Version header.
+  - `policy_hash_at_cert_time` MAY be included for observability only and MUST NOT be used as a runtime validity gate.
 - Freshness window: default 24h (configurable). If missing OR stale OR FAIL => TradingMode MUST be ReduceOnly.
-- While in ReduceOnly due to F1 failure: allow only closes/hedges/cancels; block all opens.
+- Binding (Canary hardening): if any of these do not match runtime, F1_CERT MUST be treated as INVALID (ReduceOnly):
+  - `F1_CERT.build_id != runtime.build_id`
+  - `F1_CERT.runtime_config_hash != runtime.runtime_config_hash`
+  - `F1_CERT.contract_version != runtime.contract_version`
+- While in ReduceOnly due to F1 invalidity: allow only closes/hedges/cancels; block all opens.
 - This rule is strict: no caching last-known-good and no grace periods.
+
+**Acceptance Tests (REQUIRED):**
+- `test_f1_cert_binding_mismatch_forces_reduceonly()` verifies that any mismatch in `build_id`, `runtime_config_hash`, or `contract_version` forces ReduceOnly, blocks OPEN intents, and allows CLOSE/HEDGE/CANCEL.
+- `test_f1_cert_no_cache_last_known_good()` verifies that a previously valid F1_CERT that becomes missing or stale forces ReduceOnly (no cached prior cert keeps Active).
+
+**Canonical hashing rule (non-negotiable):**
+- `runtime_config_hash` MUST be computed as `sha256(canonical_json_bytes(config))` where `canonical_json_bytes` means:
+  - JSON with **stable key ordering** (sorted recursively),
+  - no insignificant whitespace,
+  - UTF-8 encoding.
+
+
+#### **2.2.1.1 PolicyGuard Critical Input Freshness (Missing/Stale → Fail-Closed for Opens)**
+
+**Rule (non-negotiable):**
+PolicyGuard MUST NOT return `TradingMode::Active` if any critical safety input required for Kill/ReduceOnly decisions is missing or stale.
+
+**Critical inputs (minimum):**
+- `mm_util` (from account summary) must have `mm_util_last_update_ts_ms`
+- `disk_used_pct` must have `disk_used_last_update_ts_ms`
+- session termination / rate-limit kill flag must be explicit (no "unknown treated as false")
+
+**Freshness defaults (configurable):**
+- `mm_util_max_age_ms = 30_000`
+- `disk_used_max_age_ms = 30_000`
+
+**Enforcement:**
+- If any critical input is missing OR `now_ms - last_update_ts_ms > max_age_ms`:
+  - force `TradingMode = ReduceOnly` (block OPEN; allow CLOSE/HEDGE/CANCEL)
+  - set `mode_reasons` to include `REDUCEONLY_INPUT_MISSING_OR_STALE`
+
+**Acceptance test (REQUIRED):**
+- Simulate `mm_util_last_update_ts_ms` stale > max age → verify OPEN blocked within one tick; CLOSE/HEDGE/CANCEL still allowed.
 
 
 #### **2.2.2 EvidenceGuard (No Evidence → No Opens) — HARD RUNTIME INVARIANT**
@@ -663,7 +751,7 @@ The following MUST be writable + joinable for every dispatched open-intent:
 
 **Invariant (Non-Negotiable):**
 - If Evidence Chain is not GREEN → **block ALL new OPEN intents**.
-- CLOSE / HEDGE / CANCEL intents are still allowed (risk-reducing).
+- CLOSE / HEDGE / CANCEL intents are still allowed (risk-reducing), **except when superseded by Kill hard-stop causes** (e.g., disk≥92% per §2.2.3 Kill Mode Semantics).
 - EvidenceGuard triggers `RiskState::Degraded` and forces `TradingMode::ReduceOnly` until GREEN recovers AND remains stable for a cooldown window.
 
 **GREEN/RED criteria (minimum):**
@@ -672,7 +760,12 @@ EvidenceChainState = GREEN iff ALL are true (rolling window, e.g. last 60s):
 - `decision_snapshot_write_errors == 0`
 - `parquet_queue_overflow_count` not increasing
 - `wal_write_errors == 0` (if present)
-- `snapshot_coverage_pct` not dropping (for replay window; still enforced in §5.2)
+
+- `parquet_queue_depth_pct` is defined AND below thresholds (fail-closed if metrics unavailable):
+  - Metrics MUST exist: `parquet_queue_depth` (gauge, count), `parquet_queue_capacity` (gauge, count).
+  - Derived: `parquet_queue_depth_pct = parquet_queue_depth / max(parquet_queue_capacity, 1)`
+  - Trip (breach window): if `parquet_queue_depth_pct > 0.90` for >= 5s → EvidenceChainState != GREEN
+  - Clear (hysteresis): require `parquet_queue_depth_pct < 0.70` for >= 120s before GREEN (cleared only after max(queue_clear_window=120s, evidenceguard_global_cooldown) with all criteria satisfied)
 
 **Where enforced (must be explicit):**
 - PolicyGuard `get_effective_mode()` MUST include EvidenceGuard in precedence.
@@ -682,42 +775,167 @@ EvidenceChainState = GREEN iff ALL are true (rolling window, e.g. last 60s):
 1) If Decision Snapshot writer fails (simulate write error) → OPEN intents blocked; CLOSE intents allowed.
 2) If TruthCapsule writes fail → OPEN intents blocked; system enters ReduceOnly within 1 cycle.
 3) Recovery: when errors stop, system remains ReduceOnly for cooldown (e.g., 120s) then may return to Active.
+4) If `parquet_queue_depth_pct` breaches the threshold (simulate depth_pct > 0.90) OR the metric is missing/uncomputable → EvidenceChainState becomes not GREEN → OPEN intents blocked; CLOSE/HEDGE/CANCEL allowed; returns to GREEN only after cooldown.
 
-**Hard Rule:** The Soldier never “stores” TradingMode as authoritative state. It recomputes it every loop tick via `PolicyGuard.get_effective_mode()`.
+**Canonical TradingMode computation (precedence + staleness + watchdog semantics + reason codes) is defined in §2.2.3 (PolicyGuard-owned).**
 
+#### **2.2.3 TradingMode Computation (Canonical Precedence + Reason Codes)**
+
+**Hard Rule:** The Soldier never "stores" TradingMode as authoritative state. It recomputes it every loop tick via `PolicyGuard.get_effective_mode()`.
+
+
+**Config defaults (fail-closed):**
+- `watchdog_kill_s = 10` (seconds; see Appendix A for default)
+- `max_policy_age_sec = 300` (5min default; aligned with ops alert threshold §7.1)
 **Precedence (Highest → Lowest):**
 1. `TradingMode::Kill` if any:
-   - watchdog heartbeat stale (`now - watchdog_last_heartbeat > watchdog_kill_s`)
+   - watchdog heartbeat stale (`now_ms - watchdog_last_heartbeat_ts_ms > watchdog_kill_s * 1000`)
    - `risk_state == Kill`
+   - `mm_util >= 0.95` (Margin Headroom Gate; see §1.4.3)
+   - `rate_limit_session_kill_active == true` (session termination / `too_many_requests` code 10028; see §3.3)
+   - `disk_used_pct >= 92%` (Kill switch; see §7.2)
+   - `cortex_override == ForceKill` (see §2.3)
+
 2. `TradingMode::ReduceOnly` if any:
    - `risk_state == Maintenance` (maintenance window)
+   - `emergency_reduceonly_active == true` (`POST /api/v1/emergency/reduce_only` active)
+   - `open_permission_blocked_latch == true` (block OPEN; allow CLOSE/HEDGE/CANCEL; see §2.2.4)
    - `bunker_mode_active == true` (Network Jitter Monitor; see §2.3.2)
    - `F1_CERT` missing OR stale OR FAIL (runtime gate; see §2.2.1)
-   - EvidenceChainState != GREEN (EvidenceGuard; see §2.2.2)
+   - `evidence_chain_state != GREEN` (EvidenceGuard; see §2.2.2)
    - `cortex_override == ForceReduceOnly`
    - fee model stale beyond hard limit (see §4.2)
-   - `risk_state == Degraded` => `TradingMode::ReduceOnly` (mandatory)
+   - `risk_state == Degraded` (mandatory ReduceOnly)
+   - `policy_age_sec > max_policy_age_sec` (Policy staleness rule)
+   - `mm_util >= 0.85` (Margin Headroom Gate; see §1.4.3)
+
 3. `TradingMode::Active` only if:
    - `risk_state == Healthy`, and
    - policy staleness is within limits, and
+   - `evidence_chain_state == GREEN`, and
+   - `open_permission_blocked_latch == false`, and
    - no override is active.
 
-**Policy Staleness Rule (Anti “late update” bug):**
+**Policy Staleness Rule (Anti "late update" bug):**
 - Compute staleness using Commander time, not local receive time:
-  - `policy_age_s = now - python_policy_generated_ts_ms`
-- If `policy_age_s > max_policy_age_s` → force ReduceOnly (even if an old update arrives late).
+  - `policy_age_sec = (now_ms - python_policy_generated_ts_ms) / 1000`
+- If `policy_age_sec > max_policy_age_sec` → force ReduceOnly (even if an old update arrives late).
+
+**Acceptance Tests (REQUIRED):**
+- If `now_ms - python_policy_generated_ts_ms = 301_000` and `max_policy_age_sec = 300` → `policy_age_sec == 301` and ReduceOnly triggers; at `300_000` → `policy_age_sec == 300` and does not trigger.
+- If `now_ms - watchdog_last_heartbeat_ts_ms > watchdog_kill_s * 1000` → TradingMode enters Kill; if within threshold, Kill does not trigger.
 
 **Watchdog Semantics (Single Source):**
 - Watchdog triggers reduce-only via `POST /api/v1/emergency/reduce_only`.
 - PolicyGuard enforces that reduce-only persists until cooldown expiry and reconciliation confirms exposure is safe.
 
-**Acceptance Tests:**
-1) **Late Policy Update:** receive a delayed policy update with old `python_policy_generated_ts_ms` → effective mode stays ReduceOnly.
-2) **Override Priority:** maintenance window active → effective mode ReduceOnly even if python_policy says Active.
-3) **Heartbeat Kill:** watchdog heartbeat stops → effective mode Kill within one loop tick.
-4) **F1_CERT Missing:** `artifacts/F1_CERT.json` missing → effective mode ReduceOnly; any OPEN intent is rejected/blocked.
-5) **F1_CERT FAIL:** `artifacts/F1_CERT.json.status == FAIL` → effective mode ReduceOnly; any OPEN intent is rejected/blocked.
-6) **F1_CERT Stale:** `now - F1_CERT.generated_ts_ms > f1_cert_max_age_s` → effective mode ReduceOnly; any OPEN intent is rejected/blocked.
+##### **ModeReasonCode (Authoritative TradingMode Reasons — MUST be complete)**
+
+PolicyGuard MUST compute `mode_reasons: ModeReasonCode[]` every loop tick and MUST expose it via `/api/v1/status`.
+
+**Rules (non-negotiable):**
+- `mode_reasons` MUST include all active reasons within the winning precedence tier for this tick:
+  - if `trading_mode == Kill`: include all active `KILL_*` reasons (and no `REDUCEONLY_*`)
+  - if `trading_mode == ReduceOnly`: include all active `REDUCEONLY_*` reasons (and no `KILL_*`)
+  - if `trading_mode == Active`: `mode_reasons` MUST be `[]`
+- `mode_reasons` MUST be deterministically ordered: in the same order as the "Allowed values" list below (no per-tick reordering).
+
+**Allowed values (minimal complete set):**
+
+# Kill reasons
+- `KILL_WATCHDOG_HEARTBEAT_STALE`
+- `KILL_RISKSTATE_KILL`
+- `KILL_MARGIN_MM_UTIL_HIGH`
+- `KILL_RATE_LIMIT_SESSION_TERMINATION`
+- `KILL_DISK_WATERMARK_KILL`
+- `KILL_CORTEX_FORCE_KILL`
+
+# ReduceOnly reasons
+- `REDUCEONLY_RISKSTATE_MAINTENANCE`
+- `REDUCEONLY_EMERGENCY_REDUCEONLY_ACTIVE`  # emergency_reduceonly_active == true (POST /api/v1/emergency/reduce_only is active)
+- `REDUCEONLY_OPEN_PERMISSION_LATCHED`
+- `REDUCEONLY_BUNKER_MODE_ACTIVE`
+- `REDUCEONLY_F1_CERT_INVALID`
+- `REDUCEONLY_EVIDENCE_CHAIN_NOT_GREEN`
+- `REDUCEONLY_CORTEX_FORCE_REDUCE_ONLY`
+- `REDUCEONLY_FEE_MODEL_HARD_STALE`
+- `REDUCEONLY_RISKSTATE_DEGRADED`
+- `REDUCEONLY_POLICY_STALE`
+- `REDUCEONLY_MARGIN_MM_UTIL_HIGH`
+- `REDUCEONLY_INPUT_MISSING_OR_STALE`  # critical safety input missing or stale (fail-closed)
+
+#### **Kill Mode Semantics (Hard-Stop vs Containment Micro-Loop) — MUST be explicit**
+
+**Definition:**
+- `TradingMode::Kill` stops the strategy/policy loop immediately (no new strategy-generated OrderIntents).
+- A limited **Containment Micro-Loop** MAY run in Kill **only** if it is safe to dispatch risk-reducing orders.
+
+**Containment Micro-Loop (allowed actions in Kill when enabled):**
+- Cancel only `reduce_only == false` orders.
+- Place only risk-reducing orders:
+  - EmergencyClose (bounded IOC close attempts per §3.1)
+  - Reduce-only hedges (bounded) if still exposed per §3.1
+
+**Containment eligibility (fail-closed):**
+Containment is allowed ONLY when ALL are true:
+- `disk_used_pct < 92%` (not in disk Kill switch condition)
+- `EvidenceChainState == GREEN` AND WAL writes are succeeding (no unlogged actions)
+- Session is healthy (`rate_limit_session_kill_active == false` / no 10028 termination class event)
+- WebSocket + REST connectivity state is not degraded in a way that prevents reconciliation-safe action
+
+**Kill causes that MUST enable containment:**
+- `KILL_MARGIN_MM_UTIL_HIGH` (mm_util ≥ 0.95): containment is mandatory ("Kill + emergency flatten").
+Containment is mandatory only when the eligibility predicates above are all true; if any predicate is false, containment is forbidden and the system MUST hard-stop.
+
+**Kill causes that MUST hard-stop (containment forbidden):**
+- `KILL_DISK_WATERMARK_KILL` (disk ≥ 92%): containment forbidden (integrity-first).
+- `KILL_RATE_LIMIT_SESSION_TERMINATION` (10028 / session termination): containment forbidden (cannot trust connectivity / state).
+- `KILL_WATCHDOG_HEARTBEAT_STALE`: containment forbidden (process health unknown).
+
+**Precedence rule (non-negotiable):**
+When `disk_used_pct >= 92%`, containment is forbidden (hard-stop). No dispatch occurs, including CLOSE/HEDGE/CANCEL, regardless of Open Permission Latch state or other permissions.
+
+**Acceptance Test (REQUIRED):**
+- Trigger `disk_used_pct >= 92%` with open exposure → verify trading loop hard-stops; no CLOSE/HEDGE dispatch.
+
+**Acceptance tests (REQUIRED):**
+1) Margin kill containment: trigger `mm_util >= 0.95` with open exposure → verify only containment actions occur (no opens), and deterministic emergency flatten executes.
+2) Disk kill hard-stop: trigger `disk_used_pct >= 92%` → verify no dispatch occurs (containment does NOT run).
+3) Margin kill with failed eligibility (e.g., `EvidenceChainState != GREEN` OR WAL not writable) → verify containment is forbidden and the system hard-stops (no dispatch).
+
+#### **2.2.4 Open Permission Latch (Reconcile-Required, Sticky Until Cleared) — CP-001**
+
+**Goal:** Prevent "false-safe opens" after restart, WS gaps, or session termination until reconciliation proves state truth.
+
+**Semantics:**
+- If `open_permission_blocked_latch == true`:
+  - OPEN intents MUST be blocked.
+  - CLOSE / HEDGE / CANCEL intents MUST remain allowed.
+
+**State fields:**
+- `open_permission_blocked_latch` (bool; `true` means OPEN blocked)
+- `open_permission_reason_codes` (`OpenPermissionReasonCode[]`; MUST be `[]` iff `open_permission_blocked_latch == false`)
+- `open_permission_requires_reconcile` (bool; MUST equal `open_permission_blocked_latch` for v5.1 - all reason codes are reconcile-class)
+
+**Deterministic reconstruction (preferred; no persistence):**
+- On startup, set `open_permission_blocked_latch = true` with reason `RESTART_RECONCILE_REQUIRED`.
+- The latch MUST clear only after reconciliation succeeds.
+
+**Reconciliation success criteria (required):**
+- Ledger inflight intents (non-terminal) match exchange open orders by label (all matched within label disambiguation rules per §1.1.2).
+- Exchange positions match ledger cumulative fills within `position_reconcile_epsilon` (default: instrument's `min_amount` or `1e-6` if undefined).
+- No missing trades over the last `reconcile_trade_lookback_sec` (default: 300s) as determined by REST `/get_user_trades` query.
+- All reconcile-class reason codes cleared (no unresolved WS gaps, inventory mismatches, or session termination flags).
+
+**Allowed values (reconcile-only):** `OpenPermissionReasonCode[]`
+- `RESTART_RECONCILE_REQUIRED`
+- `WS_BOOK_GAP_RECONCILE_REQUIRED`
+- `WS_TRADES_GAP_RECONCILE_REQUIRED`
+- `INVENTORY_MISMATCH_RECONCILE_REQUIRED`
+- `SESSION_TERMINATION_RECONCILE_REQUIRED`
+
+**Hard rule:** F1_CERT and EvidenceChain failures MUST NOT appear in `open_permission_reason_codes` (they are cleared by cert/evidence recovery, not reconciliation).
+
 
 ### 2.3 Reflexive Cortex (Hot-Loop Safety Override)
 
@@ -731,12 +949,16 @@ EvidenceChainState = GREEN iff ALL are true (rolling window, e.g. last 60s):
 **Rules (deterministic):**
 - If **DVOL jumps ≥ +10% within ≤ 60s** → `ForceReduceOnly{cooldown_s=300}`
 - If `spread_bps > spread_max_bps` **OR** `depth_topN < depth_min` → `ForceReduceOnly{cooldown_s=120}`
-- If `ws_gap_flag == true`: opens are already frozen, but Cortex must also block any **risk-increasing cancels/replaces**.
+- If `ws_gap_flag == true`: opens are already frozen, but Cortex must also block any **risk-increasing cancels/replaces** (see definition below).
 
 **Behavior when override is active:**
 - `EffectivePolicy.mode = ReduceOnly`
 - Cancel **only** non-reduce-only opens; keep closes/hedges alive.
 - Reject any `Cancel/Replace` that increases exposure while `ws_gap_flag == true`.
+
+**Definition (Risk-Increasing Cancel/Replace):**
+- Any cancel/replace that increases absolute net exposure, increases exposure in the current risk direction, or removes reduce_only protection on a closing/hedging order.
+- Examples: canceling reduce_only close/hedge orders; replacing with larger size in the risk-increasing direction.
 
 **Acceptance Test:**
 - Feed `MarketData` where DVOL jumps by +10% in one minute.
@@ -750,7 +972,7 @@ EvidenceChainState = GREEN iff ALL are true (rolling window, e.g. last 60s):
 - Poll `/public/get_announcements` every **60s**
 - If a maintenance window start is ≤ **60 minutes** away:
   - Set `RiskState::Maintenance`
-  - Force `TradingMode = ReduceOnly`
+  - This causes PolicyGuard to compute `TradingMode::ReduceOnly` (via `risk_state == Maintenance`; see §2.2.3)
   - Block all **new opens** even if NetEdge is positive
   - Allow closes/hedges (reduce-only)
 
@@ -771,7 +993,7 @@ EvidenceChainState = GREEN iff ALL are true (rolling window, e.g. last 60s):
 
 **Rules (Non-Negotiable):**
 - If `deribit_http_p95_ms > 750ms` for 3 consecutive windows OR `ws_event_lag_ms > 2000ms` OR `request_timeout_rate > 2%`:
-  - Force `TradingMode::ReduceOnly` (Bunker Mode)
+  - Set `bunker_mode_active = true` (PolicyGuard computes `TradingMode::ReduceOnly`; see §2.2.3)
   - Block OPEN intents
   - Allow CLOSE/HEDGE/CANCEL
 - Exit Bunker Mode only after all metrics are below thresholds for a stable period (e.g., 120s).
@@ -830,13 +1052,14 @@ durability barrier is configured/required by the subsystem.
 **Where:** `soldier/core/execution/emergency_close.rs`
 
 **Algorithm (Deterministic, 3 tries):**
-1. Attempt **IOC limit close** at `best ± close_buffer`.
-2. If partial fill: repeat for remaining qty (max 3 loops, exponential buffer).
+1. Attempt **IOC limit close** at `best ± close_buffer_ticks` (default 5 ticks from Appendix A).
+2. If partial fill: repeat for remaining qty (max 3 loops, exponential buffer: multiply by 2 each retry → 10 ticks, 20 ticks).
 3. If still exposed after retries: submit **reduce-only perp hedge** to neutralize delta (bounded size).
 4. Log `AtomicNakedEvent` with group_id + exposure + time-to-delta-neutral.
 
 **Test:**
 - Inject: one leg filled, book thins. Expect: close attempts then fallback hedge; exposure goes to ~0.
+- Force Liquidity Gate reject conditions and verify emergency close still submits IOC close attempts.
 
 
 ### **3.2 Smart Watchdog**
@@ -847,7 +1070,7 @@ durability barrier is configured/required by the subsystem.
 - Watchdog triggers on silence > 5s → calls `POST /api/v1/emergency/reduce_only`.
 
 **Soldier behavior on reduce_only:**
-1. Force `TradingMode = ReduceOnly` immediately.
+1. Ensure `emergency_reduceonly_active == true` so PolicyGuard computes `TradingMode::ReduceOnly` immediately.
 2. Cancel orders where `reduce_only == false`.
 3. KEEP all reduce-only closing/hedging orders alive.
 4. If exposure breaches limit: submit emergency reduce-only hedge.
@@ -886,18 +1109,21 @@ durability barrier is configured/required by the subsystem.
   - block `OPEN` next (treat as ReduceOnly)
   - preserve `CANCEL`/`HEDGE`/`EMERGENCY_CLOSE`
 - On `too_many_requests` / `code 10028` (maintenance/session termination):
-  - Immediately block `OPEN`
-  - Enter ReduceOnly or Kill per existing strict safety rules
-  - Reconnect/backoff and run full reconcile before any trading resumes
+  1. Set `rate_limit_session_kill_active = true`
+  2. PolicyGuard MUST compute `TradingMode::Kill` within one tick
+  3. Set Open Permission Latch reason: `SESSION_TERMINATION_RECONCILE_REQUIRED`
+  4. Reconnect/backoff and run full reconcile before any trading resumes
 
 **Hard Rules:**
 1. If bucket empty: wait required time (async sleep). Never panic.
 2. On observed 429: enter `RiskState::Degraded`, slow loops automatically, and reduce non-critical traffic.
-3. On `too_many_requests` / `code 10028` OR “session terminated”:
-   - Set `RiskState::Degraded` and `TradingMode = Kill` immediately (no opens, no replaces).
-   - Exponential backoff, then **reconnect**.
-   - Run **3-way reconciliation** (orders + trades + positions + ledger).
-   - Resume only when stable (`RiskState::Healthy`) and Cortex override is None.
+3. On `too_many_requests` / `code 10028` OR "session terminated":
+   - Set `rate_limit_session_kill_active = true`
+   - PolicyGuard computes `TradingMode::Kill` immediately (no opens, no replaces)
+   - Set Open Permission Latch reason: `SESSION_TERMINATION_RECONCILE_REQUIRED`
+   - Exponential backoff, then **reconnect**
+   - Run **3-way reconciliation** (orders + trades + positions + ledger)
+   - Resume only when stable (`RiskState::Healthy`) and latch cleared
 
 **Acceptance Tests:**
 1) **Throughput + Priority Preemption:**
@@ -956,7 +1182,7 @@ durability barrier is configured/required by the subsystem.
   2) Force REST snapshot reconciliation (open orders + positions + recent trades).
   3) Resume only after reconciliation passes.
 
-**Safety rule during Degraded:** allow reduce-only closes/hedges to proceed; block any risk-increasing cancels/replaces/opens.
+**Safety rule during Degraded:** allow reduce-only closes/hedges to proceed; block any risk-increasing cancels/replaces/opens (see definition in §2.3).
 
 **Acceptance Tests (WS Continuity):**
 1) **Orderbook continuity break:** feed an incremental book update where `prevChangeId != last_changeId`.  
@@ -1025,12 +1251,12 @@ Still enforce **SVI Math Guard** and **Arb-Guards** (those do NOT loosen).
 **Gate 2 (Parameter Drift):**
 - If params move > `drift_max` vs last valid fit in one tick → reject new fit and hold previous params.
 - Where `drift_max = 0.20` (healthy depth) or `0.40` (low depth per Gate 0).
-**Action:** set `RiskState::Degraded` if drift repeats N times in M minutes.
+**Action:** set `RiskState::Degraded` if drift exceeds threshold `svi_guard_trip_count` times within `svi_guard_trip_window_s` (defaults from Appendix A).
 
 **SVI Math Guard (Hard NaN / Blow-Up Shield):**
 - If any fitted parameter is non-finite (`NaN` / `Inf`) → return `None` and hold last valid fit.
 - If any derived implied vol is non-finite OR exceeds **500%** (`iv > 5.0`) → return `None`.
-- On any guard trip: increment `svi_guard_trips`; if it repeats N times in M minutes → set `RiskState::Degraded`.
+- On any guard trip: increment `svi_guard_trips`; if count exceeds `svi_guard_trip_count` within `svi_guard_trip_window_s` (defaults from Appendix A) → set `RiskState::Degraded`.
 
 #### **4.1.1 SVI Arb-Guards (No-Arb Validity)**
 
@@ -1047,7 +1273,7 @@ Still enforce **SVI Math Guard** and **Arb-Guards** (those do NOT loosen).
 
 **Action:**
 - If any arb-guard fails → invalidate fit, hold last valid, increment `svi_arb_guard_trips`.
-- If repeats N times in M minutes → `RiskState::Degraded` and **pause opens**.
+- If count exceeds `svi_guard_trip_count` within `svi_guard_trip_window_s` (defaults from Appendix A) → `RiskState::Degraded` and **pause opens**.
 
 **Acceptance Test:**
 - Feed a deliberately “wavy” fit that passes RMSE but violates convexity → must reject and hold previous.
@@ -1096,8 +1322,13 @@ Still enforce **SVI Math Guard** and **Arb-Guards** (those do NOT loosen).
 
 **Council Weakness Covered:** Self-improving open loop \+ time handling / drift. **Where:** `soldier/core/analytics/attribution.rs` **Requirement:** Every trade must log projected edge vs realized execution friction with timestamps to measure drift. **Key Fields:** `exchange_ts`, `local_send_ts`, `local_recv_ts`, `drift_ms = local_recv_ts - exchange_ts`. **Rules:**
 
-* If `drift_ms` exceeds threshold, force ReduceOnly until time sync is restored.  
+* If `drift_ms` exceeds `time_drift_threshold_ms` (default: **50ms**, configurable), PolicyGuard MUST force `TradingMode::ReduceOnly` until time sync is restored.  
 * Require **chrony/NTP** running as an operational prerequisite.
+* Time drift monitoring is a RiskState input; PolicyGuard enforces the mode consequence.
+* **Alignment**: Default aligns with §8.1 Time Drift gate (p99_clock_drift ≤ 50ms).
+
+**Acceptance Test (Time Drift Gate):**
+- Given `drift_ms > time_drift_threshold_ms`, expect opens blocked (ReduceOnly) until drift is restored.
 
 **Parquet Row (Minimum):**
 - group_id, leg_idx, strategy_id
@@ -1175,7 +1406,7 @@ Without this, optimization is open-loop and you will “improve” the wrong kno
 **TruthCapsule fields (minimum viable):**
 **Decision Snapshot (Decision-time L2 top‑N) — REQUIRED for replay validity:**
 - Define “Decision Snapshot” as a compact L2 top‑N snapshot captured at decision time.
-- Persist Decision Snapshots in an append-only store (e.g., `decision_snapshots.parquet` or JSONL), keyed by `decision_snapshot_id` and partitioned by date.
+- Persist Decision Snapshots in an append-only store (partitioned by date or hour; storage format implementation-defined).
 - On every trade decision that results in dispatch, the system MUST persist the Decision Snapshot and write `decision_snapshot_id` into the Truth Capsule / decision record.
 - If Decision Snapshot persistence fails → treat as a TruthCapsule logging failure: block opens and enter `RiskState::Degraded` (ReduceOnly).
 - If heavy tick/L2 stream archives are paused due to disk watermarks, Decision Snapshots MUST still be recorded (they are small and required).
@@ -1269,8 +1500,8 @@ A daily cron job ingests Parquet data to calculate realized friction and generat
 3. If `atomic_naked_events > 0` → tighten max size + force ReduceOnly for cooldown window.
 
 **Governor (Safety):**
-- Clamp changes within bounds (e.g., min_edge_usd ∈ [X, Y]).
-- Require “dry-run” mode first: logs patch, does not apply.
+- Clamp changes within bounds (implementation-defined safe ranges for each parameter).
+- Require "dry-run" mode first: logs patch, does not apply.
 
 **Implementation:** `python/optimizer/closed_loop.py`
 
@@ -1286,7 +1517,7 @@ A daily cron job ingests Parquet data to calculate realized friction and generat
 - **Decision Snapshots (required):** Every dispatched intent MUST reference a decision-time snapshot via `decision_snapshot_id` (see §4.3.2).
 - Track `snapshot_coverage_pct` over the replay window (48h): `% of dispatched intents with a valid `decision_snapshot_id` AND snapshot payload available`.
 - **Replay Required Inputs (Non-Negotiable):**
-  - **Decision Snapshots are REQUIRED** for replay validity (see §4.3.3).
+  - **Decision Snapshots are REQUIRED** for replay validity (see §4.3.2).
   - Replay Gatekeeper MUST HARD FAIL if `snapshot_coverage_pct < 95%` (fail-closed; no patch may apply).
 - **Full tick/L2 archives are OPTIONAL (diagnostics/research), not required for the gate:**
   - If full tick/L2 archives are paused due to disk watermarks (§7.2), Replay Gatekeeper continues using Decision Snapshots.
@@ -1393,15 +1624,33 @@ Replay uses FillSimulator impact costs; **penalize** them using the calibrated f
 
 **Endpoints:**
 - `GET /api/v1/status` (read-only)
+- `GET /api/v1/health` (read-only; minimal external watchdog primitive)
+
+**/health response MUST include (minimum):**
+- `ok` (bool; MUST be true when process is up)
+- `build_id` (string)
+- `contract_version` (string)
+
+**Acceptance Test (REQUIRED):**
+- `test_health_endpoint_returns_minimal_payload()` verifies:
+  1) HTTP 200
+  2) keys `ok`, `build_id`, `contract_version` exist
+  3) `ok == true`
 
 **/status response MUST include (minimum):**
+- `status_schema_version` (integer; current version = 1)
 - `trading_mode`, `risk_state`, `evidence_chain_state`, `bunker_mode_active`
-- `policy_age_sec`, `last_policy_update_ts`
+- `policy_age_sec`, `last_policy_update_ts` (epoch ms; MUST equal `python_policy_generated_ts_ms` from PolicyGuard inputs)
 - `f1_cert_state` + `f1_cert_expires_at`
-- `disk_used_pct`
+- `disk_used_pct`, `disk_used_last_update_ts_ms` (epoch ms; see §2.2.1.1)
+- `mm_util`, `mm_util_last_update_ts_ms` (epoch ms; see §2.2.1.1)
 - `snapshot_coverage_pct` (current computed metric / last window)
 - `atomic_naked_events_24h`, `429_count_5m`
 - `deribit_http_p95_ms`, `ws_event_lag_ms`
+- `mode_reasons` (ModeReasonCode[]; authoritative explanation of `trading_mode` for this tick; MUST be `[]` iff `trading_mode == Active`)
+- `open_permission_blocked_latch` (bool; true means OPEN blocked; CLOSE/HEDGE/CANCEL allowed)
+- `open_permission_reason_codes` (OpenPermissionReasonCode[]; MUST be [] iff `open_permission_blocked_latch == false`)
+- `open_permission_requires_reconcile` (bool; MUST equal `open_permission_blocked_latch` for v5.1 - all reason codes are reconcile-class)
 
 **Security:** This endpoint MUST NOT allow changing risk. No “set Active” endpoints in this patch.
 
@@ -1409,7 +1658,25 @@ Replay uses FillSimulator impact costs; **penalize** them using the calibrated f
 Any new endpoint introduced by this contract MUST include at least one endpoint-level test.
 
 **Acceptance Test (REQUIRED):**
-- `test_status_endpoint_returns_required_fields()` verifies HTTP 200 and required JSON keys.
+- `test_status_endpoint_returns_required_fields()` verifies:
+  1) HTTP 200
+  2) that all keys listed under "/status response MUST include (minimum)" are present in the JSON response.
+
+**Acceptance Tests (REQUIRED - semantic invariants):**
+- `test_status_mode_reasons_empty_iff_active()` verifies:
+  1) When `trading_mode == Active`: `mode_reasons` MUST be `[]`
+  2) When `trading_mode != Active`: `mode_reasons` MUST be non-empty
+- `test_status_mode_reasons_tier_purity_and_ordering()` verifies:
+  1) Simulate multiple simultaneous ReduceOnly triggers (e.g., policy_stale + evidence_not_green + margin_util_high)
+  2) Assert `mode_reasons` contains only `REDUCEONLY_*` codes (no `KILL_*`)
+  3) Assert `mode_reasons` ordering matches the "Allowed values" list order in §2.2.3
+  4) Repeat for Kill mode tier
+- `test_status_open_permission_latch_invariants()` verifies:
+  1) At startup (latch true with `RESTART_RECONCILE_REQUIRED`): assert `open_permission_requires_reconcile == true` and `open_permission_reason_codes != []`
+  2) After simulated reconciliation pass: assert `open_permission_blocked_latch == false` and `open_permission_reason_codes == []` and `open_permission_requires_reconcile == false`
+- `test_status_policy_timestamp_consistency()` verifies:
+  1) `last_policy_update_ts == python_policy_generated_ts_ms`
+  2) `policy_age_sec == floor((now_ms - python_policy_generated_ts_ms) / 1000)` and is non-negative
 
 ### **7.1 Review Loop (Autopilot Reviewer + Minimal Human Touch)**
 
@@ -1490,6 +1757,11 @@ If any of the following occur, the system MUST generate an incident report and e
 **Retention defaults (configurable):**
 - Tick/L2 archives: keep **72h** (rolling) (compressed).
 - Parquet analytics (attribution + truth capsules): keep **30d** (compressed).
+- **Decision Snapshots (REQUIRED replay input; see §4.3.2):** rolling retention window for Decision Snapshot partitions.
+  - Default: `decision_snapshot_retention_days = 30` (configurable).
+  - Hard lower bound: `decision_snapshot_retention_days` MUST be ≥ `ceil(replay_window_hours / 24)` (Replay Gatekeeper window; default 48h → 2 days; see §5.2).
+  - Safety invariant: retention MUST NOT delete any Decision Snapshots that fall within the window used to compute `snapshot_coverage_pct`.
+  - Storage model requirement: Decision Snapshots MUST be partitioned by day (or hour) so retention deletes only cold partitions (never hot writer partitions).
 - WAL / intent ledger: keep **indefinitely** (small, critical).
 
 **Disk watermarks (hard rules):**
@@ -1499,12 +1771,30 @@ If any of the following occur, the system MUST generate an incident report and e
   - Truth Capsule + attribution analytics (required)
 
 - `disk_used_pct >= 85%`: force `RiskState::Degraded` (ReduceOnly) until back under 80%.
-- `disk_used_pct >= 92%`: hard-stop trading loop (Kill switch) to protect integrity.
+- `disk_used_pct >= 92%`: PolicyGuard MUST compute `TradingMode::Kill` and the trading loop MUST hard-stop to protect integrity.
+
+**Automatic retention reclaim (non-blocking):**
+- The system MUST implement `retention_reclaim()` to prevent the 85%→92% death spiral.
+- Triggering:
+  - `disk_used_pct >= 80%`: best-effort reclaim (background task; rate-limited, e.g., ≤ 1 run/hour).
+  - `disk_used_pct >= 85%`: mandatory reclaim (repeat until `disk_used_pct < 80%` OR no reclaimable data remains).
+- Eligible deletions (ONLY beyond configured retention windows; delete cold partitions only):
+  - Tick/L2 archives older than retention (default 72h).
+  - Parquet analytics (attribution + truth capsules) older than retention (default 30d).
+  - Decision Snapshots older than `decision_snapshot_retention_days`, subject to replay-window safety below.
+- Safety invariants:
+  - MUST NOT delete WAL / intent ledger (indefinite).
+  - MUST NOT delete any Decision Snapshot partition that intersects the current replay window used to compute `snapshot_coverage_pct`.
+  - MUST NOT delete hot writer partitions (current open partition(s)); reclaim operates only on closed partitions.
+- Evidence:
+  - Each reclaim run MUST write `artifacts/disk_reclaim/<ts>_reclaim.json` containing: reclaimed_bytes, cutoff_ts per dataset, disk_used_pct_before/after.
+  - Reclaim MUST NOT stall the hot loop; it runs as a low-priority async/background task.
 
 **Acceptance Tests:**
 1) Under simulated `disk_used_pct >= 80%`: full tick/L2 archive writing stops; Decision Snapshots continue.
 2) Under simulated `disk_used_pct >= 85%`: system enters `RiskState::Degraded` and enforces ReduceOnly until back under 80%.
 3) Under simulated `disk_used_pct >= 92%`: trading loop enters Kill.
+4) Under simulated `disk_used_pct >= 85%`: `retention_reclaim()` runs and deletes only cold partitions older than retention; MUST NOT touch WAL; MUST NOT delete any Decision Snapshot data within the replay window.
 
 **Minimum alerts add:**
 - `disk_used_pct >= 80`
@@ -1556,7 +1846,7 @@ All must pass in CI before any deployment:
 **A) Deterministic Unit Tests**
 - Quantization: bids round down, asks round up; coin-vs-USD size mismatches reject.
 - TLSM: fill-before-ack, out-of-order events, orphan fills → no panic, correct final state.
-- Gates: GrossEdge > 0 but NetEdge < 0 (fees) → REJECT.
+- Gates: GrossEdge > 0 but NetEdge < 0 (fees + expected_slippage) → REJECT.
 - Arb-Guards: RMSE-pass but convexity fail → REJECT and hold last good fit.
 
 
@@ -1564,6 +1854,51 @@ All must pass in CI before any deployment:
 - `test_atomic_containment_calls_emergency_close_algorithm_with_hedge_fallback()`
 - `test_disk_watermark_stops_tick_archives_and_forces_reduceonly()`
 - `test_release_gate_fee_drag_ratio_blocks_scaling()`
+- `test_atomic_qty_epsilon_tolerates_float_noise_but_rejects_mismatch()`
+- `test_cortex_spread_max_bps_forces_reduceonly()`
+- `test_cortex_depth_min_forces_reduceonly()`
+- `test_svi_depth_min_applies_loosened_thresholds()`
+- `test_stale_order_sec_cancels_non_reduce_only_orders()`
+
+**Appendix A Default Tests (Comprehensive Coverage):**
+- `test_contracts_amount_match_tolerance_rejects_mismatches_above_0_001()`
+- `test_instrument_cache_ttl_s_expires_after_3600s()`
+- `test_inventory_skew_k_and_tick_penalty_max_adjust_prices()`
+- `test_rescue_cross_spread_ticks_uses_2_ticks_default()`
+- `test_f1_cert_freshness_window_s_forces_reduceonly_after_86400s()`
+- `test_mm_util_max_age_ms_forces_reduceonly_after_30000ms()`
+- `test_disk_used_max_age_ms_forces_reduceonly_after_30000ms()`
+- `test_watchdog_kill_s_triggers_kill_after_10s_no_health_report()`
+- `test_mm_util_reject_opens_blocks_opens_at_70_pct()`
+- `test_mm_util_reduceonly_forces_reduceonly_at_85_pct()`
+- `test_mm_util_kill_forces_kill_at_95_pct()`
+- `test_evidenceguard_global_cooldown_blocks_opens_for_120s()`
+- `test_position_reconcile_epsilon_tolerates_1e_6_qty_diff()`
+- `test_reconcile_trade_lookback_sec_queries_300s_history()`
+- `test_parquet_queue_trip_pct_triggers_evidenceguard_at_90_pct()`
+- `test_parquet_queue_clear_pct_resumes_opens_below_70_pct()`
+- `test_parquet_queue_trip_window_s_measures_over_5s()`
+- `test_queue_clear_window_s_requires_120s_stability()`
+- `test_disk_pause_archives_pct_stops_tick_writes_at_80_pct()`
+- `test_disk_degraded_pct_forces_reduceonly_at_85_pct()`
+- `test_disk_kill_pct_hard_stops_at_92_pct()`
+- `test_time_drift_threshold_ms_forces_reduceonly_above_50ms()`
+- `test_max_policy_age_sec_forces_reduceonly_after_300s()`
+- `test_close_buffer_ticks_uses_5_ticks_on_first_attempt()`
+- `test_max_slippage_bps_rejects_trades_above_10bps()`
+- `test_fee_cache_soft_s_applies_buffer_after_300s()`
+- `test_fee_cache_hard_s_forces_degraded_after_900s()`
+- `test_fee_stale_buffer_multiplies_fees_by_1_20()`
+- `test_svi_guard_trip_count_triggers_degraded_after_3_trips()`
+- `test_svi_guard_trip_window_s_counts_over_300s()`
+- `test_dvol_jump_pct_triggers_reduceonly_at_10_pct_spike()`
+- `test_dvol_jump_window_s_measures_over_60s()`
+- `test_dvol_cooldown_s_blocks_opens_for_300s()`
+- `test_spread_depth_cooldown_s_blocks_opens_for_120s()`
+- `test_decision_snapshot_retention_days_deletes_after_30_days()`
+- `test_replay_window_hours_checks_coverage_over_48h()`
+- `test_tick_l2_retention_hours_deletes_after_72h()`
+- `test_parquet_analytics_retention_days_deletes_after_30_days()`
 
 **B) Chaos/Integration Scenarios**
 - Hanging Leg: Leg A Filled, Leg B Rejected → EmergencyFlatten within 200ms–1s window.
@@ -1585,6 +1920,7 @@ Policy staging in §5.3 is mandatory. Promotion requires:
 **Where:**
 - `python/tools/f1_certify.py`
 - outputs `artifacts/F1_CERT.json` and `artifacts/F1_CERT.md`
+- `artifacts/F1_CERT.json` MUST include (minimum): `{ status, generated_ts_ms, build_id, runtime_config_hash, contract_version }` (see §2.2.1).
 
 **Example CI command:**
 - Run: `python python/tools/f1_certify.py --window=24h --out=artifacts/F1_CERT.json`
@@ -1592,3 +1928,359 @@ Policy staging in §5.3 is mandatory. Promotion requires:
 
 **Acceptance Test:**
 - Force atomic_naked_events=1 in a test run → cert status must be FAIL and deployment blocked.
+
+
+---
+
+## **Appendix A: Configuration Defaults (Safety-Critical Thresholds)**
+
+This appendix defines default values for safety-critical configuration parameters referenced throughout the contract. These defaults provide fail-safe behavior and deterministic acceptance testing.
+
+**Enforcement (Non-Negotiable):** If a safety-critical config value is missing at runtime, the Soldier MUST apply the default from this appendix (fail-closed).
+
+**Acceptance Test (REQUIRED):** Start with config missing `instrument_cache_ttl_s` and `evidenceguard_global_cooldown` and verify the system applies the defaults below (no "zero/none = safe" behavior).
+
+### **A.1 Atomic Group Execution**
+
+**`atomic_qty_epsilon`** (§1.2 Atomic Group Executor)
+- **Default**: `1e-9` (in the same units as `filled_qty`)
+- **Purpose**: Tolerance for declaring "no fill mismatch" between legs
+- **Rationale**: Tiny epsilon tolerates only floating-point rounding noise, not meaningful exposure mismatch
+- **Acceptance Test**: Two legs Filled at nominally equal quantities differing only by ≤ `atomic_qty_epsilon` \u2192 group eligible for `Complete` (if no partials)
+
+**`instrument_cache_ttl_s`** (§1.0.X Instrument Metadata Freshness)
+- **Default**: `3600` seconds
+- **Purpose**: Default TTL for instrument metadata freshness; stale metadata triggers Degraded + ReduceOnly.
+- **Acceptance Test**: If `instrument_cache_age_s > instrument_cache_ttl_s` \u2192 Degraded + ReduceOnly within one tick (CLOSE/HEDGE/CANCEL allowed).
+
+**`contracts_amount_match_tolerance`** (§1.0 Instrument Units & Notional Invariants)
+- **Default**: `0.001` (0.1% relative tolerance)
+- **Purpose**: Tolerance for contracts vs amount consistency check when both are provided; prevents wiring bugs.
+- **Rationale**: 0.1% tolerates floating-point rounding without masking meaningful mismatches.
+- **Acceptance Test**: If `contracts=100` and `amount` deviates by >0.1% from `contracts * contract_multiplier` → reject + Degraded.
+
+---
+
+### **A.1.1 Inventory Skew Gate**
+
+**`inventory_skew_k`** (§1.4.2 Inventory Skew Gate)
+- **Default**: `0.5`
+- **Purpose**: Scaling factor for edge requirement increase when approaching inventory limits.
+- **Rationale**: At max inventory (`inventory_bias=1.0`), require 50% higher edge (conservative but tradable).
+- **Acceptance Test**: At `inventory_bias=0.9`, `min_edge_usd` increased by ~45% for risk-increasing trades.
+
+**`inventory_skew_tick_penalty_max`** (§1.4.2 Inventory Skew Gate)
+- **Default**: `3` ticks
+- **Purpose**: Maximum limit price shift away from touch when near inventory limits.
+- **Rationale**: 3 ticks reduces fill rate without making execution impossible; balances inventory control with opportunity cost.
+- **Acceptance Test**: At `inventory_bias=1.0`, BUY limit price shifts 3 ticks below best ask.
+
+**`rescue_cross_spread_ticks`** (§1.2 Atomic Group Executor)
+- **Default**: `2` ticks
+- **Purpose**: How far to cross the spread when placing rescue IOC orders for atomic group containment.
+- **Rationale**: 2 ticks provides aggressive fill probability while limiting slippage cost during containment.
+- **Semantics**: For BUY rescue: `limit_price = best_ask + (rescue_cross_spread_ticks * tick_size)`; for SELL rescue: `limit_price = best_bid - (rescue_cross_spread_ticks * tick_size)`.
+- **Acceptance Test**: Mixed-state rescue attempts use limit price 2 ticks past best bid/ask (BUY crosses ask upward; SELL crosses bid downward).
+
+---
+
+### **A.2 Reflexive Cortex (Microstructure Collapse)**
+
+**`spread_max_bps`** (§2.3 Reflexive Cortex)
+- **Default**: `25` bps
+- **Purpose**: Maximum tolerable spread before forcing ReduceOnly
+- **Rationale**: Live F1 PASS target tolerates p95 slippage ≤ 10 bps (§8.1). Spreads >2.5× indicate microstructure collapse.
+- **Acceptance Test**: Given `spread_bps = 26`, Cortex outputs `ForceReduceOnly{cooldown_s=120}` and opens blocked
+
+**`depth_min`** (§2.3 Cortex, §4.1 SVI)
+- **Default**: `300_000` USD
+- **Unit**: USD notional depth in top-N price levels
+- **Purpose**: Minimum depth threshold; below triggers ReduceOnly (Cortex) and loosened SVI gates
+- **Rationale**: Contract uses `notional_usd=30_000` as worked example (§1.0). 10× ensures "low depth" means thin markets.
+- **Behavior**: Cortex \u2192 ReduceOnly; SVI \u2192 drift 20%→40%, RMSE 0.05→0.08
+- **Acceptance Tests**:
+  1. `depth_topN = 299_999` \u2192 Cortex outputs `ForceReduceOnly`
+  2. `depth_topN = 299_999` \u2192 SVI applies 40% drift max, 0.08 RMSE max
+
+**`dvol_jump_pct`** (§2.3 Reflexive Cortex)
+- **Default**: `0.10` (10%)
+- **Purpose**: DVOL jump threshold triggering ReduceOnly (volatility shock detection).
+- **Rationale**: 10% intra-minute DVOL spike signals market stress or regime shift; halts opens until cooldown expires.
+- **Acceptance Test**: If DVOL increases by ≥10% within 60s → Cortex outputs `ForceReduceOnly{cooldown_s=300}`.
+
+**`dvol_jump_window_s`** (§2.3 Reflexive Cortex)
+- **Default**: `60` seconds
+- **Purpose**: Rolling window for DVOL jump detection.
+- **Rationale**: 60s captures intra-minute volatility shocks while filtering tick-level noise.
+- **Acceptance Test**: DVOL jump from 0.50 to 0.55 over 61s → no trip (outside window); same over 59s → trip.
+
+**`dvol_cooldown_s`** (§2.3 Reflexive Cortex)
+- **Default**: `300` seconds (5 minutes)
+- **Purpose**: Cooldown duration after DVOL jump before resuming opens.
+- **Rationale**: 5min allows regime to stabilize post-shock; longer than spread/depth cooldown (120s) due to higher severity.
+- **Acceptance Test**: DVOL trip at T=0 → opens blocked until T=300s; closes/hedges/cancels allowed throughout.
+
+**`spread_depth_cooldown_s`** (§2.3 Reflexive Cortex)
+- **Default**: `120` seconds (2 minutes)
+- **Purpose**: Cooldown duration after spread/depth trip before resuming opens.
+- **Rationale**: 2min balances recovery time vs opportunity cost; shorter than DVOL cooldown (less severe).
+- **Acceptance Test**: Spread trip at T=0 → opens blocked until T=120s; closes/hedges/cancels allowed throughout.
+
+---
+
+### **A.2.1 F1 Certification & Critical Inputs**
+
+**`f1_cert_freshness_window_s`** (§2.2.1 Runtime F1 Certification Gate)
+- **Default**: `86400` seconds (24 hours)
+- **Purpose**: TTL for F1_CERT validity; stale cert triggers ReduceOnly.
+- **Rationale**: 24h aligns with daily certification cadence and allows weekend/holiday tolerance.
+- **Acceptance Test**: If `now - F1_CERT.generated_ts_ms > 86400000ms` → ReduceOnly forced.
+
+**`mm_util_max_age_ms`** (§2.2.1.1 PolicyGuard Critical Input Freshness)
+- **Default**: `30000` milliseconds (30 seconds)
+- **Purpose**: Max staleness for margin utilization metric before forcing ReduceOnly.
+- **Rationale**: 30s provides reasonable tolerance for API latency while ensuring timely margin risk detection.
+- **Acceptance Test**: If `mm_util_last_update_ts_ms` stale > 30s → OPEN blocked; CLOSE allowed.
+
+**`disk_used_max_age_ms`** (§2.2.1.1 PolicyGuard Critical Input Freshness)
+- **Default**: `30000` milliseconds (30 seconds)
+- **Purpose**: Max staleness for disk usage metric before forcing ReduceOnly.
+- **Rationale**: 30s balances system monitoring overhead with integrity protection.
+- **Acceptance Test**: If `disk_used_last_update_ts_ms` stale > 30s → OPEN blocked; CLOSE allowed.
+
+---
+
+### **A.3 Watchdog & Recovery**
+
+**`watchdog_kill_s`** (§2.2.3 PolicyGuard)
+- **Default**: `10` seconds
+- **Purpose**: Watchdog staleness threshold triggering `TradingMode::Kill`
+- **Rationale**: Smart Watchdog triggers ReduceOnly at 5s (§3.2). Kill at 10s provides 2× margin while remaining aggressive.
+- **Acceptance Test**: At 6s silence \u2192 ReduceOnly; at 11s \u2192 Kill
+
+**`mm_util_reject_opens`** (§1.4.3 Margin Headroom Gate)
+- **Default**: `0.70` (70%)
+- **Purpose**: Margin utilization threshold for rejecting new opens at gate level.
+- **Rationale**: 70% provides early warning before ReduceOnly (85%) and Kill (95%) thresholds.
+- **Acceptance Test**: If `mm_util >= 0.70` → new OPEN intents rejected at Margin Gate; CLOSE/HEDGE allowed.
+
+**`mm_util_reduceonly`** (§1.4.3 Margin Headroom Gate)
+- **Default**: `0.85` (85%)
+- **Purpose**: Margin utilization threshold triggering `TradingMode::ReduceOnly`.
+- **Rationale**: 85% is aggressive but provides 10% buffer before Kill (95%); prevents late liquidation risk.
+- **Acceptance Test**: If `mm_util >= 0.85` → PolicyGuard forces ReduceOnly; opens blocked; closes allowed.
+
+**`mm_util_kill`** (§1.4.3 Margin Headroom Gate)
+- **Default**: `0.95` (95%)
+- **Purpose**: Margin utilization threshold triggering `TradingMode::Kill` + emergency flatten.
+- **Rationale**: 95% is near-liquidation; immediate containment (emergency close + hedge) is mandatory.
+- **Acceptance Test**: If `mm_util >= 0.95` → PolicyGuard forces Kill; deterministic emergency flatten executes.
+
+**`stale_order_sec`** (§3.5 Zombie Sweeper)
+- **Default**: `30` seconds
+- **Purpose**: Age threshold for canceling non-reduce-only open orders
+- **Rationale**: Sweeper runs every 10s (§3.5). 30s ensures 2-3 cycles before force-cancel.
+- **Acceptance Test**: Non-reduce-only order age >30s \u2192 Sweeper cancels; reduce-only orders NOT canceled
+
+**`evidenceguard_global_cooldown`** (§2.2.2 EvidenceGuard)
+- **Default**: `120` seconds
+- **Purpose**: Global cooldown window before EvidenceChainState may return to GREEN after recovery (hysteresis).
+- **Acceptance Test**: After write errors stop, EvidenceGuard remains ReduceOnly for ≥ `evidenceguard_global_cooldown` before allowing GREEN.
+
+**`position_reconcile_epsilon`** (§2.2.4 Open Permission Latch)
+- **Default**: `1e-6` (or instrument `min_amount` if larger)
+- **Purpose**: Tolerance for position matching during reconciliation; allows for floating-point precision limits.
+- **Acceptance Test**: If ledger position and exchange position differ by ≤ epsilon → reconciliation pass; if > epsilon → INVENTORY_MISMATCH_RECONCILE_REQUIRED.
+
+**`reconcile_trade_lookback_sec`** (§2.2.4 Open Permission Latch)
+- **Default**: `300` seconds (5 minutes)
+- **Purpose**: Lookback window for detecting missing trades during reconciliation.
+- **Rationale**: 5min covers typical WS gap/restart scenarios without excessive REST API load.
+- **Acceptance Test**: Reconciliation queries `/get_user_trades` for last 300s and matches against ledger trade registry.
+
+**`parquet_queue_trip_pct`** (§2.2.2 EvidenceGuard)
+- **Default**: `0.90` (90%)
+- **Purpose**: Queue depth threshold that trips EvidenceChainState to not GREEN.
+- **Rationale**: 90% provides headroom before overflow while allowing bursts.
+- **Acceptance Test**: If `parquet_queue_depth_pct > 0.90` for ≥ `parquet_queue_trip_window_s` → EvidenceChain not GREEN; OPEN blocked.
+
+**`parquet_queue_trip_window_s`** (§2.2.2 EvidenceGuard)
+- **Default**: `5` seconds
+- **Purpose**: Breach window duration before parquet_queue_trip_pct triggers not-GREEN state.
+- **Rationale**: 5s filters transient spikes while catching sustained queue pressure.
+- **Acceptance Test**: Queue depth must exceed 90% continuously for ≥5s to trip.
+
+**`parquet_queue_clear_pct`** (§2.2.2 EvidenceGuard)
+- **Default**: `0.70` (70%)
+- **Purpose**: Queue depth hysteresis threshold for returning to GREEN.
+- **Rationale**: 20% hysteresis band (90% trip, 70% clear) prevents oscillation.
+- **Acceptance Test**: After trip, queue must drop below 70% for ≥ `queue_clear_window_s` before GREEN restored.
+
+**`queue_clear_window_s`** (§2.2.2 EvidenceGuard)
+- **Default**: `120` seconds
+- **Purpose**: Hysteresis cooldown window before EvidenceChainState may return to GREEN after queue depth clears.
+- **Rationale**: Equals `evidenceguard_global_cooldown` by default; explicit parameter allows independent tuning if needed.
+- **Acceptance Test**: After queue drops below 70%, system waits ≥120s before GREEN (max of this and `evidenceguard_global_cooldown`).
+
+**`disk_pause_archives_pct`** (§7.2 Disk Watermarks)
+- **Default**: `0.80` (80%)
+- **Purpose**: Disk usage threshold for pausing tick/L2 archive writes (Decision Snapshots + WAL continue).
+- **Rationale**: 80% provides headroom before Degraded (85%) and Kill (92%); protects critical writes.
+- **Acceptance Test**: If `disk_used_pct >= 0.80` → full tick/L2 archives stop; Decision Snapshots + WAL + analytics continue.
+
+**`disk_degraded_pct`** (§7.2 Disk Watermarks)
+- **Default**: `0.85` (85%)
+- **Purpose**: Disk usage threshold triggering `RiskState::Degraded` + `TradingMode::ReduceOnly`.
+- **Rationale**: 85% triggers retention reclaim and blocks opens; 7% buffer before Kill hard-stop.
+- **Acceptance Test**: If `disk_used_pct >= 0.85` → RiskState::Degraded; ReduceOnly until back under 80%; reclaim runs.
+
+**`disk_kill_pct`** (§7.2 Disk Watermarks)
+- **Default**: `0.92` (92%)
+- **Purpose**: Disk usage threshold triggering `TradingMode::Kill` + trading loop hard-stop.
+- **Rationale**: 92% is integrity-first hard-stop; no dispatch (including CLOSE/HEDGE/CANCEL) to prevent corruption.
+- **Acceptance Test**: If `disk_used_pct >= 0.92` → trading loop hard-stops; no dispatch occurs (containment forbidden).
+
+**`time_drift_threshold_ms`** (§4.3 Trade Attribution Schema)
+- **Default**: `50` milliseconds
+- **Purpose**: Maximum tolerable clock drift before forcing ReduceOnly; prevents attribution corruption and execution timing errors.
+- **Rationale**: Aligns with §8.1 Time Drift gate (p99_clock_drift ≤ 50ms). Tight threshold ensures reliable timestamps for slippage measurement and replay.
+- **Acceptance Test**: If `drift_ms > 50ms` → PolicyGuard forces ReduceOnly until time sync restored.
+
+**`max_policy_age_sec`** (§2.2.3 PolicyGuard)
+- **Default**: `300` seconds (5 minutes)
+- **Purpose**: Maximum policy staleness before forcing ReduceOnly; prevents trading on stale/outdated policy.
+- **Rationale**: Aligned with ops alert threshold (§7.1). 5min provides reasonable tolerance for transient Commander hiccups while preventing drift.
+- **Acceptance Test**: If `policy_age_sec > 300` → PolicyGuard forces ReduceOnly until fresh policy received.
+
+---
+
+### **A.3.1 Emergency Close & Liquidity Gates**
+
+**`close_buffer_ticks`** (§3.1 Deterministic Emergency Close)
+- **Default**: `5` ticks
+- **Purpose**: Initial spread buffer for emergency IOC close orders (in ticks from best price).
+- **Rationale**: 5 ticks respects instrument microstructure (BTC-10k vs ETH-1k have different tick regimes); exponential retry provides fallback.
+- **Acceptance Test**: First emergency close attempt uses `best ± 5 ticks`; retry 2 uses ~10 ticks; retry 3 uses ~20 ticks.
+
+**`max_slippage_bps`** (§1.3 Pre-Trade Liquidity Gate)
+- **Default**: `10` bps (0.10%)
+- **Purpose**: Maximum acceptable estimated slippage before rejecting trade.
+- **Rationale**: Exact alignment with F1 PASS target (p95 slippage ≤10bps §8.1); gate matches certification requirement.
+- **Acceptance Test**: If L2 walk estimates `slippage_bps > 10` → trade rejected before dispatch.
+
+---
+
+### **A.4 Fee Model Staleness**
+
+**`fee_cache_soft_s`** (§4.2 Fee-Aware Execution)
+- **Default**: `300` seconds (5 minutes)
+- **Purpose**: Soft threshold for fee model staleness; triggers conservative buffer.
+- **Rationale**: 5min polling interval is reasonable; soft buffer prevents false rejects while encouraging refresh.
+- **Acceptance Test**: If fee cache age > 300s → apply 20% buffer to fee rates.
+
+**`fee_cache_hard_s`** (§4.2 Fee-Aware Execution)
+- **Default**: `900` seconds (15 minutes)
+- **Purpose**: Hard threshold for fee model staleness; triggers Degraded + ReduceOnly.
+- **Rationale**: 3× soft limit provides ample warning; 15min stale fee data is unacceptable for edge calculations.
+- **Acceptance Test**: If fee cache age > 900s → RiskState::Degraded; OPEN blocked.
+
+**`fee_stale_buffer`** (§4.2 Fee-Aware Execution)
+- **Default**: `0.20` (20% multiplicative buffer)
+- **Purpose**: Conservative buffer applied to fee rates when cache is soft-stale.
+- **Rationale**: 20% provides margin for tier changes without excessive rejections.
+- **Acceptance Test**: With soft-stale cache, `fee_rate_effective = fee_rate * 1.20`.
+
+---
+
+### **A.5 SVI Stability Guards**
+
+**`svi_guard_trip_count`** (§4.1 SVI Stability Gates)
+- **Default**: `3` trips
+- **Purpose**: Number of guard failures within window before forcing Degraded.
+- **Rationale**: 3 trips filters transient noise while catching persistent calibration issues.
+- **Acceptance Test**: SVI drift/math/arb guard fails 3 times in 5min → RiskState::Degraded.
+
+**`svi_guard_trip_window_s`** (§4.1 SVI Stability Gates)
+- **Default**: `300` seconds (5 minutes)
+- **Purpose**: Time window for counting guard trip frequency.
+- **Rationale**: 5min window balances responsiveness with stability.
+- **Acceptance Test**: Guard failures separated by >5min do not accumulate toward trip threshold.
+
+---
+
+### **A.6 Retention & Replay Windows**
+
+**`decision_snapshot_retention_days`** (§7.2 Retention Policy)
+- **Default**: `30` days
+- **Purpose**: Rolling retention window for Decision Snapshot partitions (replay input).
+- **Rationale**: 30 days provides sufficient history for Governor tuning and incident analysis while managing storage costs.
+- **Safety Invariant**: `decision_snapshot_retention_days >= ceil(replay_window_hours / 24)` (must cover replay window; default 48h → 2 days).
+- **Acceptance Test**: Decision Snapshots older than 30 days are eligible for deletion (cold partitions only); snapshots within replay window MUST NOT be deleted.
+
+**`replay_window_hours`** (§5.2 Replay Gatekeeper)
+- **Default**: `48` hours
+- **Purpose**: Time window used to compute `snapshot_coverage_pct` for Replay Gatekeeper readiness.
+- **Rationale**: 48h provides weekend coverage and captures recent regime while limiting computational cost.
+- **Acceptance Test**: Replay Gatekeeper checks Decision Snapshot coverage over last 48h; if `snapshot_coverage_pct < 90%` → BLOCKED.
+
+**`tick_l2_retention_hours`** (§7.2 Retention Policy)
+- **Default**: `72` hours
+- **Purpose**: Retention window for tick/L2 archives (compressed).
+- **Rationale**: 72h provides sufficient history for slippage calibration and debugging while managing disk usage.
+- **Acceptance Test**: Tick/L2 archives older than 72h are eligible for deletion during retention reclaim.
+
+**`parquet_analytics_retention_days`** (§7.2 Retention Policy)
+- **Default**: `30` days
+- **Purpose**: Retention window for Parquet analytics (attribution + truth capsules).
+- **Rationale**: 30 days provides month-over-month analysis capability for Governor tuning and F1 certification metrics.
+- **Acceptance Test**: Parquet analytics older than 30 days are eligible for deletion during retention reclaim.
+
+---
+
+### **A.7 Summary Table**
+
+| Parameter | Default | Unit | Referenced In |
+|-----------|---------|------|---------------|
+| `atomic_qty_epsilon` | `1e-9` | qty units | §1.2 |
+| `contracts_amount_match_tolerance` | `0.001` | relative | §1.0 |
+| `instrument_cache_ttl_s` | `3600` | sec | §1.0.X |
+| `inventory_skew_k` | `0.5` | dimensionless | §1.4.2 |
+| `inventory_skew_tick_penalty_max` | `3` | ticks | §1.4.2 |
+| `rescue_cross_spread_ticks` | `2` | ticks | §1.2 |
+| `spread_max_bps` | `25` | bps | §2.3 |
+| `depth_min` | `300_000` | USD | §2.3, §4.1 |
+| `f1_cert_freshness_window_s` | `86400` | sec | §2.2.1 |
+| `mm_util_max_age_ms` | `30000` | ms | §2.2.1.1 |
+| `disk_used_max_age_ms` | `30000` | ms | §2.2.1.1 |
+| `watchdog_kill_s` | `10` | sec | §2.2.3 |
+| `mm_util_reject_opens` | `0.70` | pct | §1.4.3 |
+| `mm_util_reduceonly` | `0.85` | pct | §1.4.3 |
+| `mm_util_kill` | `0.95` | pct | §1.4.3 |
+| `stale_order_sec` | `30` | sec | §3.5 |
+| `evidenceguard_global_cooldown` | `120` | sec | §2.2.2 |
+| `position_reconcile_epsilon` | `1e-6` | qty units | §2.2.4 |
+| `reconcile_trade_lookback_sec` | `300` | sec | §2.2.4 |
+| `parquet_queue_trip_pct` | `0.90` | pct | §2.2.2 |
+| `parquet_queue_trip_window_s` | `5` | sec | §2.2.2 |
+| `parquet_queue_clear_pct` | `0.70` | pct | §2.2.2 |
+| `queue_clear_window_s` | `120` | sec | §2.2.2 |
+| `disk_pause_archives_pct` | `0.80` | pct | §7.2 |
+| `disk_degraded_pct` | `0.85` | pct | §7.2 |
+| `disk_kill_pct` | `0.92` | pct | §7.2 |
+| `time_drift_threshold_ms` | `50` | ms | §4.3 |
+| `max_policy_age_sec` | `300` | sec | §2.2.3 |
+| `close_buffer_ticks` | `5` | ticks | §3.1 |
+| `max_slippage_bps` | `10` | bps | §1.3 |
+| `fee_cache_soft_s` | `300` | sec | §4.2 |
+| `fee_cache_hard_s` | `900` | sec | §4.2 |
+| `fee_stale_buffer` | `0.20` | relative | §4.2 |
+| `svi_guard_trip_count` | `3` | count | §4.1 |
+| `svi_guard_trip_window_s` | `300` | sec | §4.1 |
+| `dvol_jump_pct` | `0.10` | relative | §2.3 |
+| `dvol_jump_window_s` | `60` | sec | §2.3 |
+| `dvol_cooldown_s` | `300` | sec | §2.3 |
+| `spread_depth_cooldown_s` | `120` | sec | §2.3 |
+| `decision_snapshot_retention_days` | `30` | days | §7.2 |
+| `replay_window_hours` | `48` | hours | §5.2 |
+| `tick_l2_retention_hours` | `72` | hours | §7.2 |
+| `parquet_analytics_retention_days` | `30` | days | §7.2 |

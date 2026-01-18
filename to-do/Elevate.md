@@ -167,3 +167,74 @@
 - `plans/verify.sh` header documents `VERIFY_CONSOLE`, `VERIFY_FAIL_TAIL_LINES`, `VERIFY_FAIL_SUMMARY_LINES`, and quiet mode uses them.
 - `plans/workflow_acceptance.sh` enforces the quiet-mode wiring and header docs.
 - `./plans/verify.sh full` passes (includes workflow acceptance).
+
+
+
+
+
+
+4. ==4 builtins==
+
+- After change, workflow acceptance fails fast if harness scripts use bash 4+ builtins (`mapfile`, `readarray`).
+- After change, AGENTS.md documents bash 3.2 compatibility for harness scripts and acceptance selector behavior is guarded by a dedicated test.
+- Non-goals: no changes to trading logic, no changes to PRD items, no changes to CI pipelines beyond existing workflow acceptance gates.
+
+2. Design sketch (minimal)
+
+- Add a workflow acceptance test that scans relevant harness scripts for `mapfile|readarray` usage and fails.
+- Add a new acceptance test covering `--from/--until` selection in `plans/workflow_acceptance.sh` to ensure selector behavior stays stable.
+- Add AGENTS.md guidance for bash 3.2 compatibility so the rule is discoverable and enforced by acceptance.
+
+3. Change List (patch plan)
+
+- `AGENTS.md`
+    - Add a MUST rule: “Harness scripts must remain bash 3.2 compatible; avoid bash 4+ builtins like mapfile/readarray.”
+    - Keep wording consistent with existing “Harness guardrails” section.
+- `plans/workflow_acceptance.sh`
+    - Add a new test (new ID) under the 0x workflow preflight section that:
+        - Scans harness scripts (see allowlist in `plans/verify.sh:is_workflow_file` + harness scripts under `plans/`) for `mapfile` or `readarray`.
+        - Fails with a clear message listing offending file(s).
+    - Add a new test (new ID) to exercise `--from`/`--until` selection (e.g., run `--from 0h --until 0i` and assert that only 0h/0i run).
+    - Ensure test IDs are stable and listable (no dynamic generation).
+    - Keep logic bash 3.2 compatible (no arrays that require bash 4 features).
+
+4. Tests & Proof
+
+- Fast checks:
+    - `bash -n plans/workflow_acceptance.sh`
+    - `./plans/workflow_acceptance.sh --list` (confirm new IDs listed)
+    - `./plans/workflow_acceptance.sh --only <new_bash_guard_id>`
+    - `./plans/workflow_acceptance.sh --only <new_selector_id>`
+- Full gates:
+    - `./plans/verify.sh full`
+- Expected signals:
+    - New acceptance test fails if any harness script contains `mapfile`/`readarray`.
+    - Selector test runs only the specified range and exits 0.
+
+5. Failure Modes & Rollback
+
+- Failure: false positives from grep pattern matching in non-harness files.
+    - Detection: acceptance test fails on clean repo.
+    - Rollback: tighten file list to explicit harness scripts.
+- Failure: selector test is brittle due to ordering changes of existing IDs.
+    - Detection: acceptance test fails after ID reordering.
+    - Rollback: use named IDs and validate inclusion rather than hardcoded index.
+- Failure: acceptance changes require full verify and are skipped.
+    - Detection: verify gate fails in CI due to missing acceptance proof.
+    - Rollback: rerun `./plans/verify.sh full` after patch; no code rollback.
+
+6. Merge-Conflict Controls
+
+- Hot zones: `plans/workflow_acceptance.sh` (frequently edited), `AGENTS.md`.
+- Minimize conflicts:
+    - Append new tests near existing selector tests (0l/0m/0n) to keep grouping.
+    - Keep AGENTS change localized to the harness guardrails section.
+- Suggested branch name: `workflow/bash-compat-guard`.
+
+7. Acceptance Criteria (Definition of Done)
+
+- AGENTS.md includes a MUST rule for bash 3.2 compatibility of harness scripts.
+- Workflow acceptance has a test that fails when `mapfile`/`readarray` appears in harness scripts.
+- Workflow acceptance includes a test that validates `--from/--until` selection behavior.
+- `./plans/verify.sh full` passes.
+- Postmortem includes AGENTS.md update reference and the elevation plan per template.

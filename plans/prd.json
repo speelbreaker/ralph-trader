@@ -710,7 +710,7 @@
       "category": "durability",
       "description": "Implement compact label encode/decode with 64-character limit enforcement.",
       "contract_refs": [
-        "CONTRACT.md Compact Label Schema (must implement):",
+        "CONTRACT.md §1.1 Labeling & Idempotency Contract",
         "Anchor-020",
         "VR-021"
       ],
