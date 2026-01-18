@@ -3920,6 +3920,7 @@ EOF
 chmod +x "$STUB_DIR/agent_select.sh"
 rate_limit_file="$WORKTREE/.ralph/rate_limit_test.json"
 now="$(date +%s)"
+# Keep window close to "now" to make sleep-path deterministic and avoid edge-of-hour flakiness.
 window_start=$((now - 300))
 jq -n \
   --argjson window_start_epoch "$window_start" \
