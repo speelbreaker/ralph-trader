@@ -1068,6 +1068,89 @@
       "tests": [
         "plans/workflow_acceptance.sh (Test 11)"
       ]
+    },
+    {
+      "id": "WF-13.1",
+      "title": "Default behavior: running ./plans/workflow_acceptance.sh with no args runs the full suite and preserves existing exit semantics.",
+      "enforcement": [
+        "plans/workflow_acceptance.sh (default mode)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (default run)"
+      ]
+    },
+    {
+      "id": "WF-13.2",
+      "title": "--list prints a stable ordered list of test IDs and descriptions and exits 0 without running tests.",
+      "enforcement": [
+        "plans/workflow_acceptance.sh (list mode)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0l)"
+      ]
+    },
+    {
+      "id": "WF-13.3",
+      "title": "Targeted run controls: --only, --from, --until, --resume with the specified semantics.",
+      "enforcement": [
+        "plans/workflow_acceptance.sh (selector/resume controls)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0n)"
+      ]
+    },
+    {
+      "id": "WF-13.4",
+      "title": "Fast precheck mode runs PRD schema check, self-dependency check, traceability gate, and shell safety checks.",
+      "enforcement": [
+        "plans/workflow_acceptance.sh (fast mode)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh",
+        "plans/prd_schema_check.sh",
+        "plans/workflow_contract_gate.sh",
+        "plans/prd.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0h/0i/0j/12)"
+      ]
+    },
+    {
+      "id": "WF-13.5",
+      "title": "Runner writes state/status files with default paths and supports --state-file/--status-file overrides.",
+      "enforcement": [
+        "plans/workflow_acceptance.sh (state/status files)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh",
+        "/tmp/workflow_acceptance.state",
+        "/tmp/workflow_acceptance.status"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0m/0n)"
+      ]
+    },
+    {
+      "id": "WF-13.6",
+      "title": "shellcheck is optional by default; --require-shellcheck fails fast if shellcheck is missing.",
+      "enforcement": [
+        "plans/workflow_acceptance.sh (shellcheck optional)"
+      ],
+      "artifacts": [
+        "plans/workflow_acceptance.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0j)"
+      ]
     }
   ]
 }

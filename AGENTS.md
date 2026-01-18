@@ -59,6 +59,16 @@ Any change to workflow/harness files (see allowlist in `plans/verify.sh:is_workf
 ### Fail-closed default
 If a required script/artifact is missing or invalid, the workflow must produce a deterministic BLOCKED outcome (not a silent pass).
 
+## Harness guardrails
+- MUST keep fast precheck set limited to schema/self-dep/shellcheck/traceability.
+- SHOULD keep workflow_acceptance test IDs stable and listable.
+- MUST avoid bash 4+ builtins (mapfile/readarray) in harness scripts.
+
+## Top time/token sinks (fix focus)
+- `plans/workflow_acceptance.sh` full runtime → keep acceptance tests targeted; avoid unnecessary workflow file edits; batch changes before full runs.
+- Late discovery of PRD/schema/shell issues → run fast precheck early (schema/self-dep/shellcheck/traceability only).
+- Re-running full verify after small harness tweaks → minimize harness churn; group harness edits and validate once.
+
 ## Handoff hygiene (when relevant)
 - Update `docs/codebase/*` with verified facts if you touched new areas.
 - Append deferred ideas to `plans/ideas.md`.
