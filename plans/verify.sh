@@ -62,6 +62,8 @@ VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
 VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture in verbose mode
 WORKFLOW_ACCEPTANCE_POLICY="${WORKFLOW_ACCEPTANCE_POLICY:-auto}"
+BASE_REF="${BASE_REF:-origin/main}"
+export BASE_REF
 
 mkdir -p "$VERIFY_ARTIFACTS_DIR"
 if [[ "$CI_GATES_SOURCE" == "auto" ]]; then
@@ -264,6 +266,10 @@ is_workflow_file() {
   esac
 }
 
+CHANGE_DETECTION_OK=0
+CHANGED_FILES=""
+CHANGED_FILES_COUNT=0
+
 collect_changed_files() {
   local base_ref="$1"
   if ! command -v git >/dev/null 2>&1; then
@@ -285,6 +291,113 @@ collect_changed_files() {
   fi
 }
 
+init_change_detection() {
+  CHANGE_DETECTION_OK=0
+  CHANGED_FILES=""
+  CHANGED_FILES_COUNT=0
+
+  if ! command -v git >/dev/null 2>&1; then
+    warn "git not found; change detection disabled; defaulting to full gates"
+    return 0
+  fi
+
+  if is_ci; then
+    git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main >/dev/null 2>&1 || true
+  fi
+
+  if git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+    CHANGE_DETECTION_OK=1
+  else
+    warn "Cannot verify BASE_REF=$BASE_REF; change detection disabled; defaulting to full gates"
+  fi
+
+  CHANGED_FILES="$(collect_changed_files "$BASE_REF")"
+  if [[ -n "$CHANGED_FILES" ]]; then
+    CHANGED_FILES_COUNT="$(echo "$CHANGED_FILES" | sed '/^$/d' | wc -l | tr -d ' ')"
+  fi
+  echo "info: change_detection_ok=$CHANGE_DETECTION_OK files=$CHANGED_FILES_COUNT base_ref=$BASE_REF"
+}
+
+files_match_any() {
+  local matcher="$1"
+  local f
+  if [[ -z "$CHANGED_FILES" ]]; then
+    return 1
+  fi
+  while IFS= read -r f; do
+    if "$matcher" "$f"; then
+      return 0
+    fi
+  done <<< "$CHANGED_FILES"
+  return 1
+}
+
+is_rust_affecting_file() {
+  case "$1" in
+    *.rs|Cargo.toml|Cargo.lock|rust-toolchain|rust-toolchain.toml|rustfmt.toml|clippy.toml|.cargo/*) return 0 ;;
+    */Cargo.toml|*/Cargo.lock|*/rust-toolchain|*/rust-toolchain.toml|*/rustfmt.toml|*/clippy.toml) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_python_affecting_file() {
+  case "$1" in
+    *.py|pyproject.toml|requirements*.txt|setup.cfg|setup.py|tox.ini|mypy.ini|pytest.ini|Pipfile|Pipfile.lock|.python-version) return 0 ;;
+    */pyproject.toml|*/requirements*.txt|*/setup.cfg|*/setup.py|*/tox.ini|*/mypy.ini|*/pytest.ini) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_node_affecting_file() {
+  case "$1" in
+    *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|package.json|pnpm-lock.yaml|package-lock.json|yarn.lock|tsconfig.json|tsconfig.*.json) return 0 ;;
+    */package.json|*/pnpm-lock.yaml|*/package-lock.json|*/yarn.lock|*/tsconfig.json|*/tsconfig.*.json) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_contract_coverage_input_file() {
+  case "$1" in
+    plans/prd.json|docs/contract_anchors.md|docs/validation_rules.md|plans/contract_coverage_matrix.py) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+workflow_files_changed() {
+  files_match_any is_workflow_file
+}
+
+should_run_contract_coverage() {
+  if [[ "$MODE" == "full" ]]; then
+    return 0
+  fi
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
+    return 0
+  fi
+  files_match_any is_contract_coverage_input_file
+}
+
+should_run_rust_gates() {
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
+    return 0
+  fi
+  files_match_any is_rust_affecting_file
+}
+
+should_run_python_gates() {
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
+    return 0
+  fi
+  files_match_any is_python_affecting_file
+}
+
+should_run_node_gates() {
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
+    return 0
+  fi
+  files_match_any is_node_affecting_file
+}
+
 should_run_workflow_acceptance() {
   if is_ci; then
     return 0
@@ -297,14 +410,12 @@ should_run_workflow_acceptance() {
     *) warn "Unknown WORKFLOW_ACCEPTANCE_POLICY=$WORKFLOW_ACCEPTANCE_POLICY (expected auto|always|never); defaulting to auto" ;;
   esac
 
-  if ! command -v git >/dev/null 2>&1; then
-    warn "git not found; cannot detect workflow changes; running workflow acceptance to be safe"
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
+    warn "change detection unavailable; running workflow acceptance to be safe"
     return 0
   fi
 
-  local changed
-  changed="$(collect_changed_files "$BASE_REF")"
-  if [[ -z "$changed" ]]; then
+  if [[ -z "$CHANGED_FILES" ]]; then
     return 1
   fi
 
@@ -314,9 +425,29 @@ should_run_workflow_acceptance() {
       echo "workflow acceptance required: changed workflow file: $f"
       return 0
     fi
-  done <<< "$changed"
+  done <<< "$CHANGED_FILES"
 
   return 1
+}
+
+workflow_acceptance_mode() {
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
+    echo "full"
+    return 0
+  fi
+  if workflow_files_changed; then
+    echo "full"
+    return 0
+  fi
+  if is_ci; then
+    echo "smoke"
+    return 0
+  fi
+  if [[ "$MODE" == "full" ]]; then
+    echo "full"
+    return 0
+  fi
+  echo "smoke"
 }
 RUST_FMT_TIMEOUT="${RUST_FMT_TIMEOUT:-10m}"
 RUST_CLIPPY_TIMEOUT="${RUST_CLIPPY_TIMEOUT:-20m}"
@@ -424,6 +555,9 @@ if [[ -z "${CONTRACT_COVERAGE_STRICT:-}" ]]; then
 fi
 export CONTRACT_COVERAGE_STRICT
 
+# Change detection for stack gating (fail-closed if unavailable)
+init_change_detection
+
 # -----------------------------------------------------------------------------
 # 0a) Harness script syntax
 # -----------------------------------------------------------------------------
@@ -437,10 +571,14 @@ log "0b) Contract coverage matrix"
 if [[ ! -f "plans/contract_coverage_matrix.py" ]]; then
   fail "Missing contract coverage script: plans/contract_coverage_matrix.py"
 fi
-ensure_python
-run_logged "contract_coverage" "$CONTRACT_COVERAGE_TIMEOUT" "$PYTHON_BIN" "plans/contract_coverage_matrix.py"
-if [[ -z "${CI:-}" && "$CONTRACT_COVERAGE_STRICT" == "1" && ! -f "$CONTRACT_COVERAGE_CI_SENTINEL" ]]; then
-  warn "Contract coverage strict passed locally. Run ./plans/contract_coverage_promote.sh to enable strict coverage in CI."
+if should_run_contract_coverage; then
+  ensure_python
+  run_logged "contract_coverage" "$CONTRACT_COVERAGE_TIMEOUT" "$PYTHON_BIN" "plans/contract_coverage_matrix.py"
+  if [[ -z "${CI:-}" && "$CONTRACT_COVERAGE_STRICT" == "1" && ! -f "$CONTRACT_COVERAGE_CI_SENTINEL" ]]; then
+    warn "Contract coverage strict passed locally. Run ./plans/contract_coverage_promote.sh to enable strict coverage in CI."
+  fi
+else
+  echo "info: contract coverage skipped (no relevant changes detected)"
 fi
 
 # -----------------------------------------------------------------------------
@@ -455,45 +593,37 @@ fi
 log "1) Endpoint-level test gate"
 
 ENDPOINT_GATE="${ENDPOINT_GATE:-1}"
-BASE_REF="${BASE_REF:-origin/main}"
-export BASE_REF
 
 if [[ "$ENDPOINT_GATE" == "0" && -z "${CI:-}" ]]; then
   warn "ENDPOINT_GATE=0 (disabled locally)"
 else
-  if ! command -v git >/dev/null 2>&1; then
-    warn "git not found (skipping endpoint gate)"
-  else
-    # Make BASE_REF available in CI
+  if [[ "$CHANGE_DETECTION_OK" != "1" ]]; then
     if is_ci; then
-      git fetch --no-tags --prune origin +refs/heads/main:refs/remotes/origin/main >/dev/null 2>&1 || true
+      fail "CI must be able to diff against BASE_REF=$BASE_REF (fetch-depth must be 0 and main must be present)."
+    else
+      warn "Change detection unavailable; running endpoint gate on local diffs only"
     fi
+  fi
 
-    if git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-      changed_files="$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || true)"
+  if [[ -z "$CHANGED_FILES" ]]; then
+    echo "info: endpoint gate skipped (no changes detected)"
+  else
+    # Broad but practical patterns across stacks
+    # TODO: tighten ENDPOINT_PATTERNS to repo-specific paths once Python/HTTP layout is introduced.
+    ENDPOINT_PATTERNS="${ENDPOINT_PATTERNS:-'(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/'}"
+    TEST_PATTERNS="${TEST_PATTERNS:-'(^|/)(tests?|__tests__)/|(\\.spec\\.|\\.test\\.)|(^|/)integration_tests/'}"
+    endpoint_changed="$(echo "$CHANGED_FILES" | grep -E "$ENDPOINT_PATTERNS" || true)"
+    tests_changed="$(echo "$CHANGED_FILES" | grep -E "$TEST_PATTERNS" || true)"
 
-      # Broad but practical patterns across stacks
-      # TODO: tighten ENDPOINT_PATTERNS to repo-specific paths once Python/HTTP layout is introduced.
-      ENDPOINT_PATTERNS="${ENDPOINT_PATTERNS:-'(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/'}"
-      TEST_PATTERNS="${TEST_PATTERNS:-'(^|/)(tests?|__tests__)/|(\\.spec\\.|\\.test\\.)|(^|/)integration_tests/'}"
-      endpoint_changed="$(echo "$changed_files" | grep -E "$ENDPOINT_PATTERNS" || true)"
-
-      tests_changed="$(echo "$changed_files" | grep -E "$TEST_PATTERNS" || true)"
-
-      if [[ -n "$endpoint_changed" && -z "$tests_changed" ]]; then
-        fail "Endpoint-ish files changed without corresponding test changes:
+    if [[ -z "$endpoint_changed" ]]; then
+      echo "info: endpoint gate skipped (no endpoint-affecting changes detected)"
+    elif [[ -z "$tests_changed" ]]; then
+      fail "Endpoint-ish files changed without corresponding test changes:
 $endpoint_changed
 
 Fix: add/update endpoint-level tests for the changed endpoints."
-      fi
-
-      echo "✓ endpoint gate passed"
     else
-      if is_ci; then
-        fail "CI must be able to diff against BASE_REF=$BASE_REF (fetch-depth must be 0 and main must be present)."
-      else
-        warn "Cannot verify BASE_REF=$BASE_REF (skipping endpoint gate)"
-      fi
+      echo "✓ endpoint gate passed"
     fi
   fi
 fi
@@ -517,101 +647,113 @@ fi
 # 2) Rust gates (if Rust project present)
 # -----------------------------------------------------------------------------
 if [[ -f Cargo.toml ]]; then
-  need cargo
+  if should_run_rust_gates; then
+    need cargo
 
-  log "2a) Rust format"
-  run_logged "rust_fmt" "$RUST_FMT_TIMEOUT" cargo fmt --all -- --check
+    log "2a) Rust format"
+    run_logged "rust_fmt" "$RUST_FMT_TIMEOUT" cargo fmt --all -- --check
 
-  if [[ "$MODE" == "full" ]]; then
-    log "2b) Rust clippy"
-    run_logged "rust_clippy" "$RUST_CLIPPY_TIMEOUT" cargo clippy --workspace --all-targets --all-features -- -D warnings
+    if [[ "$MODE" == "full" ]]; then
+      log "2b) Rust clippy"
+      run_logged "rust_clippy" "$RUST_CLIPPY_TIMEOUT" cargo clippy --workspace --all-targets --all-features -- -D warnings
+    else
+      warn "Skipping clippy in quick mode"
+    fi
+
+    log "2c) Rust tests"
+    if [[ "$MODE" == "full" ]]; then
+      run_logged "rust_tests_full" "$RUST_TEST_TIMEOUT" cargo test --workspace --all-features --locked
+    else
+      run_logged "rust_tests_quick" "$RUST_TEST_TIMEOUT" cargo test --workspace --lib --locked
+    fi
+
+    echo "✓ rust gates passed"
   else
-    warn "Skipping clippy in quick mode"
+    echo "info: rust gates skipped (no rust-affecting changes detected)"
   fi
-
-  log "2c) Rust tests"
-  if [[ "$MODE" == "full" ]]; then
-    run_logged "rust_tests_full" "$RUST_TEST_TIMEOUT" cargo test --workspace --all-features --locked
-  else
-    run_logged "rust_tests_quick" "$RUST_TEST_TIMEOUT" cargo test --workspace --lib --locked
-  fi
-
-  echo "✓ rust gates passed"
 fi
 
 # -----------------------------------------------------------------------------
 # 3) Python gates (if Python project present)
 # -----------------------------------------------------------------------------
 if [[ -f pyproject.toml || -f requirements.txt ]]; then
-  ensure_python
+  if should_run_python_gates; then
+    ensure_python
 
-  # Ruff: required in CI (best ROI for agent-heavy workflows)
-  if command -v ruff >/dev/null 2>&1; then
-    log "3a) Python ruff lint"
-    run_logged "python_ruff_check" "$RUFF_TIMEOUT" ruff check .
+    # Ruff: required in CI (best ROI for agent-heavy workflows)
+    if command -v ruff >/dev/null 2>&1; then
+      log "3a) Python ruff lint"
+      run_logged "python_ruff_check" "$RUFF_TIMEOUT" ruff check .
 
-    log "3b) Python ruff format"
-    run_logged "python_ruff_format" "$RUFF_TIMEOUT" ruff format --check .
-  else
-    if is_ci; then
-      fail "ruff not found in CI (install it or adjust verify.sh)"
+      log "3b) Python ruff format"
+      run_logged "python_ruff_format" "$RUFF_TIMEOUT" ruff format --check .
     else
-      warn "ruff not found (install: pip install ruff) — skipping lint/format"
+      if is_ci; then
+        fail "ruff not found in CI (install it or adjust verify.sh)"
+      else
+        warn "ruff not found (install: pip install ruff) — skipping lint/format"
+      fi
     fi
-  fi
 
-  # Pytest: required in CI if present in toolchain
-  if command -v pytest >/dev/null 2>&1; then
-    log "3c) Python tests"
-    if [[ "$MODE" == "quick" ]]; then
-      PYTEST_QUICK_EXPR="${PYTEST_QUICK_EXPR:-not integration and not slow}"
-      if ! run_logged "python_pytest_quick" "$PYTEST_TIMEOUT" pytest -q -m "$PYTEST_QUICK_EXPR"; then
-        warn "pytest quick selection failed; retrying full pytest -q"
+    # Pytest: required in CI if present in toolchain
+    if command -v pytest >/dev/null 2>&1; then
+      log "3c) Python tests"
+      if [[ "$MODE" == "quick" ]]; then
+        PYTEST_QUICK_EXPR="${PYTEST_QUICK_EXPR:-not integration and not slow}"
+        if ! run_logged "python_pytest_quick" "$PYTEST_TIMEOUT" pytest -q -m "$PYTEST_QUICK_EXPR"; then
+          warn "pytest quick selection failed; retrying full pytest -q"
+          run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
+        fi
+      else
         run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
       fi
     else
-      run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
+      if is_ci; then
+        fail "pytest not found in CI (install it or adjust verify.sh)"
+      else
+        warn "pytest not found — skipping python tests"
+      fi
     fi
-  else
-    if is_ci; then
-      fail "pytest not found in CI (install it or adjust verify.sh)"
-    else
-      warn "pytest not found — skipping python tests"
-    fi
-  fi
 
-  # MyPy optional: can be made strict with REQUIRE_MYPY=1
-  REQUIRE_MYPY="${REQUIRE_MYPY:-0}"
-  if command -v mypy >/dev/null 2>&1; then
-    log "3d) Python mypy"
-    if [[ "$REQUIRE_MYPY" == "1" ]]; then
-      run_logged "python_mypy" "$MYPY_TIMEOUT" mypy .
+    # MyPy optional: can be made strict with REQUIRE_MYPY=1
+    REQUIRE_MYPY="${REQUIRE_MYPY:-0}"
+    if command -v mypy >/dev/null 2>&1; then
+      log "3d) Python mypy"
+      if [[ "$REQUIRE_MYPY" == "1" ]]; then
+        run_logged "python_mypy" "$MYPY_TIMEOUT" mypy .
+      else
+        run_logged "python_mypy" "$MYPY_TIMEOUT" mypy . --ignore-missing-imports || warn "mypy reported issues"
+      fi
     else
-      run_logged "python_mypy" "$MYPY_TIMEOUT" mypy . --ignore-missing-imports || warn "mypy reported issues"
+      if [[ "$REQUIRE_MYPY" == "1" ]]; then
+        fail "REQUIRE_MYPY=1 but mypy is not installed"
+      fi
     fi
-  else
-    if [[ "$REQUIRE_MYPY" == "1" ]]; then
-      fail "REQUIRE_MYPY=1 but mypy is not installed"
-    fi
-  fi
 
-  echo "✓ python gates passed"
+    echo "✓ python gates passed"
+  else
+    echo "info: python gates skipped (no python-affecting changes detected)"
+  fi
 fi
 
 # -----------------------------------------------------------------------------
 # 4) Node/TS gates (if package.json present)
 # -----------------------------------------------------------------------------
 if [[ -f package.json ]]; then
-  log "4) Node/TS gates"
+  if should_run_node_gates; then
+    log "4) Node/TS gates"
 
-  if [[ -z "$NODE_PM" ]]; then
-    warn "No recognized lockfile; skipping node gates"
+    if [[ -z "$NODE_PM" ]]; then
+      warn "No recognized lockfile; skipping node gates"
+    else
+      need "$NODE_PM"
+      node_run_script lint
+      node_run_script typecheck
+      node_run_script test
+      echo "✓ node gates passed ($NODE_PM)"
+    fi
   else
-    need "$NODE_PM"
-    node_run_script lint
-    node_run_script typecheck
-    node_run_script test
-    echo "✓ node gates passed ($NODE_PM)"
+    echo "info: node gates skipped (no node-affecting changes detected)"
   fi
 fi
 
@@ -755,9 +897,10 @@ if [[ "$E2E" == "1" ]]; then
 fi
 
 if should_run_workflow_acceptance; then
-  log "6) Workflow acceptance"
-  run_logged "workflow_acceptance" "$WORKFLOW_ACCEPTANCE_TIMEOUT" ./plans/workflow_acceptance.sh
-  echo "✓ workflow acceptance passed"
+  WORKFLOW_ACCEPTANCE_MODE="$(workflow_acceptance_mode)"
+  log "6) Workflow acceptance (${WORKFLOW_ACCEPTANCE_MODE})"
+  run_logged "workflow_acceptance" "$WORKFLOW_ACCEPTANCE_TIMEOUT" ./plans/workflow_acceptance.sh --mode "$WORKFLOW_ACCEPTANCE_MODE"
+  echo "✓ workflow acceptance passed (${WORKFLOW_ACCEPTANCE_MODE})"
 else
   if [[ "${CI:-}" == "" && "${WORKFLOW_ACCEPTANCE_POLICY}" == "never" ]]; then
     echo "info: workflow acceptance skipped (policy=never)"

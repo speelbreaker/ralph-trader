@@ -621,7 +621,7 @@
     },
     {
       "id": "WF-5.5",
-      "title": "5.5 Verify gates (pre/post)",
+      "title": "5.5 Verify gates (pre/post) and change-aware gating",
       "enforcement": [
         "plans/ralph.sh (verify_pre/post)",
         "plans/verify.sh"
@@ -638,7 +638,7 @@
       "id": "WF-5.5.1",
       "title": "verify.sh MUST enforce the endpoint-level test gate if endpoint-ish files change, corresponding tests must change, unless ENDPOINT GATE=0 in a non-CI run.",
       "enforcement": [
-        "manual"
+        "plans/verify.sh (endpoint gate)"
       ],
       "artifacts": [
         "specs/WORKFLOW_CONTRACT.md"
@@ -1055,7 +1055,7 @@
         "plans/verify.sh"
       ],
       "tests": [
-        "manual"
+        "plans/workflow_acceptance.sh (verify routing checks)"
       ]
     },
     {

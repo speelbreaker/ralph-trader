@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+WORKFLOW_ACCEPTANCE_MODE="full"
+if [[ "${1:-}" == "--mode" ]]; then
+  WORKFLOW_ACCEPTANCE_MODE="${2:-full}"
+  shift 2
+fi
+case "$WORKFLOW_ACCEPTANCE_MODE" in
+  full|smoke) ;;
+  *)
+    echo "FAIL: unknown workflow acceptance mode: $WORKFLOW_ACCEPTANCE_MODE (expected smoke|full)" >&2
+    exit 1
+    ;;
+esac
+echo "workflow_acceptance_mode=$WORKFLOW_ACCEPTANCE_MODE"
+
 require_tools() {
   local missing=0
   for tool in "$@"; do
@@ -425,6 +439,16 @@ if ! run_in_worktree grep -q "run_logged \"workflow_acceptance\"" "plans/verify.
   exit 1
 fi
 
+if ! run_in_worktree grep -q "workflow_acceptance.sh --mode" "plans/verify.sh"; then
+  echo "FAIL: verify must pass --mode to workflow_acceptance.sh" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "workflow_acceptance_mode" "plans/verify.sh"; then
+  echo "FAIL: verify must select workflow acceptance mode" >&2
+  exit 1
+fi
+
 if ! run_in_worktree grep -q "workflow acceptance skipped" "plans/verify.sh"; then
   echo "FAIL: verify must emit a workflow acceptance skip message" >&2
   exit 1
@@ -437,6 +461,51 @@ fi
 
 if ! run_in_worktree grep -q "contract_coverage_matrix.py" "plans/verify.sh"; then
   echo "FAIL: verify must run contract coverage matrix" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "contract coverage skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit a contract coverage skip message" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "change_detection_ok=" "plans/verify.sh"; then
+  echo "FAIL: verify must emit change detection status" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "should_run_rust_gates" "plans/verify.sh"; then
+  echo "FAIL: verify must include change-aware rust gate selection" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "should_run_python_gates" "plans/verify.sh"; then
+  echo "FAIL: verify must include change-aware python gate selection" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "should_run_node_gates" "plans/verify.sh"; then
+  echo "FAIL: verify must include change-aware node gate selection" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "rust gates skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit rust gate skip message" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "python gates skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit python gate skip message" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "node gates skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit node gate skip message" >&2
+  exit 1
+fi
+
+if ! run_in_worktree grep -q "endpoint gate skipped" "plans/verify.sh"; then
+  echo "FAIL: verify must emit endpoint gate skip message" >&2
   exit 1
 fi
 
@@ -574,8 +643,8 @@ if ! run_in_worktree test -x "plans/workflow_verify.sh"; then
   exit 1
 fi
 
-if ! run_in_worktree grep -q "workflow_acceptance.sh" "plans/workflow_verify.sh"; then
-  echo "FAIL: workflow_verify must invoke workflow_acceptance.sh" >&2
+if ! run_in_worktree grep -q "workflow_acceptance.sh --mode" "plans/workflow_verify.sh"; then
+  echo "FAIL: workflow_verify must invoke workflow_acceptance.sh with --mode" >&2
   exit 1
 fi
 
@@ -1732,6 +1801,11 @@ if run_in_worktree jq -e '.violations[]? | select(.contract_ref=="CONTRACT_REFS"
 fi
 write_contract_check_stub "PASS"
 run_in_worktree git update-index --skip-worktree plans/contract_check.sh >/dev/null 2>&1 || true
+
+if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "smoke" ]]; then
+  echo "Workflow acceptance smoke tests passed"
+  exit 0
+fi
 
 echo "Test 1: schema-violating PRD stops preflight"
 run_in_worktree mkdir -p .ralph

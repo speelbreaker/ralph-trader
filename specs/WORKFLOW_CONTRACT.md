@@ -382,10 +382,15 @@ Mode separation:
 
 Workflow acceptance policy (local throughput, CI non-bypass):
 - verify.sh MAY skip workflow acceptance locally when no workflow-critical files changed.
-- verify.sh MUST always run workflow acceptance in CI.
+- verify.sh MUST run workflow acceptance in CI; when no workflow-critical files changed it may run in smoke mode.
+- verify.sh MUST run workflow acceptance in full mode when workflow-critical files change or when change detection fails (fail-closed).
 - Local override: WORKFLOW_ACCEPTANCE_POLICY=auto|always|never (never ignored in CI).
 - The workflow-critical allowlist is defined in plans/verify.sh:is_workflow_file and is authoritative.
-- For workflow maintenance work, run ./plans/workflow_verify.sh locally; CI still runs ./plans/verify.sh full.
+- For workflow maintenance work, run ./plans/workflow_verify.sh locally; CI still runs ./plans/verify.sh.
+
+Change-aware stack gating (fail-closed):
+- verify.sh MAY skip runtime stacks (Rust/Python/Node), contract coverage matrix, and endpoint gate when change detection confirms no relevant files changed.
+- If change detection is unavailable, verify.sh MUST run all applicable gates; in CI it MUST fail if it cannot diff against BASE_REF for endpoint enforcement.
 
 ### 5.6 Story verify requirement gate [WF-5.6]
 
@@ -644,8 +649,10 @@ Anti-spin [WF-12.6]
 CI / verify drift observability [WF-12.7]
 
 [ ] ./plans/verify.sh emits VERIFY_SH_SHA=... as the first line.
+[ ] ./plans/verify.sh logs change detection status (change_detection_ok, files, base_ref).
 [ ] .ralph/iter_*/verify_pre.log and verify_post.log contain that same VERIFY_SH_SHA=....
 [ ] CI logs/artifacts for a run contain the same VERIFY_SH_SHA=... line.
+[ ] verify.sh runs workflow acceptance in full when workflow files change (or detection fails), smoke otherwise in CI.
 
 Traceability / drift gate [WF-12.8]
 
