@@ -3656,10 +3656,8 @@ if ! run_in_worktree test -f "tests/test_dummy.rs"; then
   exit 1
 fi
 write_contract_check_stub "PASS"
-  test_pass "16"
-fi
 
-if test_start "16b" "harness tamper blocks before processing"; then
+echo "Test 16b: harness tamper blocks before processing"
 reset_state
 valid_prd_16b="$WORKTREE/.ralph/valid_prd_16b.json"
 write_valid_prd "$valid_prd_16b" "S1-011"
@@ -3697,10 +3695,8 @@ fi
 copy_worktree_file "plans/ralph.sh"
 chmod +x "$WORKTREE/plans/ralph.sh" >/dev/null 2>&1 || true
 run_in_worktree git update-index --skip-worktree plans/ralph.sh >/dev/null 2>&1 || true
-  test_pass "16b"
-fi
 
-if test_start "16c" ".ralph tamper blocks before processing"; then
+echo "Test 16c: .ralph tamper blocks before processing"
 reset_state
 valid_prd_16c="$WORKTREE/.ralph/valid_prd_16c.json"
 write_valid_prd "$valid_prd_16c" "S1-012"
@@ -3734,8 +3730,6 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for ralph_dir_modified" >&2
   tail -n 120 "$test16c_log" >&2 || true
   exit 1
-fi
-  test_pass "16c"
 fi
 
 if test_start "17" "active slice gating selects lowest slice"; then
