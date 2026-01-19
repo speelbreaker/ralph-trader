@@ -563,7 +563,7 @@ write_blocked_basic() {
   local details="$2"
   local prefix="${3:-blocked}"
   local block_dir
-  block_dir=".ralph/${prefix}_$(date +%Y%m%d-%H%M%S)"
+  block_dir=".ralph/${prefix}_$(date +%Y%m%d-%H%M%S)_$$_$RANDOM"
   mkdir -p "$block_dir"
   if [[ -f "$PRD_FILE" ]]; then
     cp "$PRD_FILE" "$block_dir/prd_snapshot.json" || true

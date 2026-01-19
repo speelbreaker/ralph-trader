@@ -2735,6 +2735,9 @@ no_timeout_bin="$WORKTREE/.ralph/no_timeout_bin"
 rm -rf "$no_timeout_bin"
 mkdir -p "$no_timeout_bin"
 for cmd in bash git jq date dirname mkdir tee cp sed awk head tail sort tr stat rm mv cat; do
+  if [[ "$cmd" == "date" ]]; then
+    continue
+  fi
   cmd_path="$(command -v "$cmd" || true)"
   if [[ -z "$cmd_path" ]]; then
     echo "FAIL: required command missing for test setup: $cmd" >&2
@@ -2742,6 +2745,11 @@ for cmd in bash git jq date dirname mkdir tee cp sed awk head tail sort tr stat 
   fi
   ln -s "$cmd_path" "$no_timeout_bin/$cmd"
 done
+cat > "$no_timeout_bin/date" <<'SH'
+#!/bin/sh
+echo "20260118-000000"
+SH
+chmod +x "$no_timeout_bin/date"
 before_blocked="$(count_blocked)"
 set +e
 run_in_worktree env \
@@ -2752,14 +2760,26 @@ run_in_worktree env \
   RPH_RATE_LIMIT_ENABLED=0 \
   ./plans/ralph.sh 1 >/dev/null 2>&1
 rc=$?
+run_in_worktree env \
+  PATH="$no_timeout_bin" \
+  PRD_FILE="$valid_prd_5c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  RPH_DRY_RUN=1 \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc2=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected preflight to block without timeout/python3" >&2
   exit 1
 fi
+if [[ "$rc2" -eq 0 ]]; then
+  echo "FAIL: expected preflight to block on second run without timeout/python3" >&2
+  exit 1
+fi
 after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for missing_timeout_or_python3" >&2
+if [[ "$after_blocked" -lt $((before_blocked + 2)) ]]; then
+  echo "FAIL: expected two blocked artifacts for missing_timeout_or_python3" >&2
   exit 1
 fi
 latest_block="$(latest_blocked_with_reason "missing_timeout_or_python3")"
