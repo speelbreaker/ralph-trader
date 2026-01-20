@@ -610,6 +610,8 @@ enforced in CI third
 
 Workflow Contract Acceptance Tests (checklist) [WF-12.1]
 
+The workflow acceptance harness supports two execution modes. Smoke mode is for local iteration and must cover early invariants, the traceability gate, and a minimal Ralph dry-run. Full mode is merge-grade and runs the entire acceptance checklist. Smoke is acceptable for iteration, but full remains required for CI and merge readiness.
+
 Preflight / PRD validation [WF-12.1]
 
 [ ] Running ./plans/ralph.sh with missing plans/prd.json exits non-zero and writes a .ralph/* stop artifact.

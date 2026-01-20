@@ -3394,6 +3394,22 @@ fi
 
 if test_start "12" "workflow contract traceability gate" 1; then
 run_in_worktree ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+if ! run_in_worktree jq -e '
+  .rules[]
+  | select(.id=="WF-12.1")
+  | (.enforcement | map(test("smoke")) | any) and (.enforcement | map(test("full")) | any)
+' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.1 enforcement must mention smoke and full modes" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .tests[] | select(test("smoke"))' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.1 tests must reference smoke coverage" >&2
+  exit 1
+fi
+if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.8") | .tests[] | select(test("Test 12"))' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.8 tests must point to workflow acceptance Test 12" >&2
+  exit 1
+fi
 bad_map="$WORKTREE/.ralph/workflow_contract_map.bad.json"
 run_in_worktree jq 'del(.rules[0])' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_map"
 set +e
@@ -3938,6 +3954,7 @@ EOF
 chmod +x "$STUB_DIR/agent_select.sh"
 rate_limit_file="$WORKTREE/.ralph/rate_limit_test.json"
 now="$(date +%s)"
+# Keep window close to "now" to make sleep-path deterministic and avoid edge-of-hour flakiness.
 window_start=$((now - 300))
 jq -n \
   --argjson window_start_epoch "$window_start" \
