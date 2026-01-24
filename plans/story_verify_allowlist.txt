@@ -20,7 +20,9 @@ cargo test -p soldier_core --test test_tlsm
 cargo test -p soldier_infra --test test_ledger_replay
 cargo test -p soldier_infra --test test_trade_id_registry
 cargo test -p soldier_infra --test test_dispatch_durability
+cargo test -p soldier_infra --test test_config_defaults
 rg -n "cargo test --workspace" plans/verify.sh
+rg -n "check_vq_evidence.py" plans/verify.sh
 test -f docs/order_size_discovery.md
 rg -n "OrderSize" docs/order_size_discovery.md
 test -f docs/dispatch_map_discovery.md

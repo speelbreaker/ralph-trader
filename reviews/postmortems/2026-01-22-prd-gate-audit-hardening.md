@@ -90,5 +90,5 @@
 ## 11) Apply or it didn't happen
 - What new invariant did we just discover?: PRD audits must include concrete notes for PASS and concrete reasons + patch suggestions for FAIL/BLOCKED.
 - What is the cheapest automated check that enforces it?: `plans/prd_audit_check.sh` meta-schema validation.
-- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): script.
+- Where is the canonical place this rule belongs? (contract | plan | AGENTS | SKILLS | script): script
 - What would break if we remove your fix?: PRD audits could revert to all-green placebo outputs without detection.

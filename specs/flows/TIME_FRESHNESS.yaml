@@ -832,6 +832,215 @@ entries:
     - AT-306
     runtime_acceptance_tests:
     - AT-306
+- id: TF-909
+  signal: Basis input staleness (mark/index/last)
+  value_field: basis_is_fresh
+  units:
+    value: bool
+  freshness_param: basis_price_max_age_ms
+  default:
+    value: 5000
+    unit: ms
+    source: Appendix A
+  critical: true
+  missing_behavior: If any basis input timestamp missing/unparseable, emit ForceReduceOnly.
+  stale_behavior: If any basis input age > basis_price_max_age_ms, emit ForceReduceOnly.
+  mode_reason_code: null
+  risk_state_effect: null
+  status_fields: []
+  refs:
+    sections:
+    - 2.3.3
+    - Appendix A
+    acceptance_tests:
+    - AT-958
+    runtime_acceptance_tests:
+    - AT-958
+- id: TF-910
+  signal: Basis reduce-only trip window
+  value_field: cortex_override
+  units:
+    value: enum
+  freshness_param: basis_reduceonly_window_s
+  default:
+    value: 5
+    unit: sec
+    source: Appendix A
+  critical: false
+  missing_behavior: If basis_reduceonly_window_s missing/unparseable, treat any basis breach as immediate ReduceOnly.
+  stale_behavior: If basis exceeds basis_reduceonly_bps for basis_reduceonly_window_s, emit ForceReduceOnly.
+  mode_reason_code: null
+  risk_state_effect: null
+  status_fields:
+  - cortex_override
+  refs:
+    sections:
+    - 2.3.3
+    - Appendix A
+    acceptance_tests:
+    - AT-951
+    runtime_acceptance_tests:
+    - AT-951
+- id: TF-911
+  signal: Basis reduce-only cooldown duration
+  value_field: cortex_override
+  units:
+    value: enum
+  freshness_param: basis_reduceonly_cooldown_s
+  default:
+    value: 300
+    unit: sec
+    source: Appendix A
+  critical: false
+  missing_behavior: If basis_reduceonly_cooldown_s missing/unparseable, treat as infinite cooldown (fail-closed).
+  stale_behavior: After basis reduce-only trip, opens remain blocked until cooldown expires.
+  mode_reason_code: null
+  risk_state_effect: null
+  status_fields:
+  - cortex_override
+  - trading_mode
+  refs:
+    sections:
+    - 2.3.3
+    - Appendix A
+    acceptance_tests:
+    - AT-959
+    runtime_acceptance_tests:
+    - AT-959
+- id: TF-912
+  signal: Basis kill trip window
+  value_field: trading_mode
+  units:
+    value: enum
+  freshness_param: basis_kill_window_s
+  default:
+    value: 5
+    unit: sec
+    source: Appendix A
+  critical: true
+  missing_behavior: If basis_kill_window_s missing/unparseable, treat any basis kill breach as immediate Kill.
+  stale_behavior: If basis exceeds basis_kill_bps for basis_kill_window_s, emit ForceKill.
+  mode_reason_code: null
+  risk_state_effect: null
+  status_fields:
+  - trading_mode
+  refs:
+    sections:
+    - 2.3.3
+    - Appendix A
+    acceptance_tests:
+    - AT-952
+    runtime_acceptance_tests:
+    - AT-952
+- id: TF-913
+  signal: Public trades feed freshness (self-impact guard)
+  value_field: public_trades_last_update_ts_ms
+  timestamp_field: public_trades_last_update_ts_ms
+  units:
+    value: ms_epoch
+    timestamp: ms_epoch
+  freshness_param: public_trade_feed_max_age_ms
+  default:
+    value: 5000
+    unit: ms
+    source: Appendix A
+  critical: true
+  missing_behavior: Treat as stale; set RiskState=Degraded and open permission latch WS_TRADES_GAP_RECONCILE_REQUIRED.
+  stale_behavior: If now_ms - public_trades_last_update_ts_ms > public_trade_feed_max_age_ms, set latch and block opens.
+  mode_reason_code: null
+  risk_state_effect: Degraded
+  status_fields:
+  - open_permission_blocked_latch
+  - open_permission_reason_codes
+  refs:
+    sections:
+    - 1.2.3
+    - 2.2.4
+    - Appendix A
+    acceptance_tests:
+    - AT-953
+    runtime_acceptance_tests:
+    - AT-953
+- id: TF-914
+  signal: Self-impact feedback window
+  value_field: feedback_loop_window_s
+  units:
+    value: sec
+  freshness_param: feedback_loop_window_s
+  default:
+    value: 10
+    unit: sec
+    source: Appendix A
+  critical: false
+  missing_behavior: If feedback_loop_window_s missing/unparseable, block opens (fail-closed).
+  stale_behavior: Self-impact guard computes notional over feedback_loop_window_s before evaluating trips.
+  mode_reason_code: null
+  risk_state_effect: null
+  status_fields: []
+  refs:
+    sections:
+    - 1.2.3
+    - Appendix A
+    acceptance_tests:
+    - AT-955
+    runtime_acceptance_tests:
+    - AT-955
+- id: TF-915
+  signal: Self-impact cooldown duration
+  value_field: feedback_loop_cooldown_s
+  units:
+    value: sec
+  freshness_param: feedback_loop_cooldown_s
+  default:
+    value: 300
+    unit: sec
+    source: Appendix A
+  critical: false
+  missing_behavior: If feedback_loop_cooldown_s missing/unparseable, treat as infinite cooldown (fail-closed).
+  stale_behavior: After FeedbackLoopGuardActive, opens remain blocked until cooldown expires.
+  mode_reason_code: null
+  risk_state_effect: null
+  status_fields: []
+  refs:
+    sections:
+    - 1.2.3
+    - Appendix A
+    acceptance_tests:
+    - AT-955
+    runtime_acceptance_tests:
+    - AT-955
+- id: TF-916
+  signal: WS marketdata activity window (zombie socket guard)
+  value_field: ws_marketdata_event_lag_ms
+  timestamp_field: last_marketdata_event_ts_ms
+  units:
+    value: ms
+    timestamp: ms_epoch
+  freshness_param: ws_zombie_activity_window_ms
+  default:
+    value: 60000
+    unit: ms
+    source: Appendix A
+  critical: true
+  missing_behavior: If ws_zombie_activity_window_ms missing/unparseable, assume recent activity and fail-closed when lag exceeds ws_zombie_silence_ms.
+  stale_behavior: If ws_marketdata_event_lag_ms > ws_zombie_silence_ms and had_recent_marketdata_activity within ws_zombie_activity_window_ms, set latch and block opens.
+  mode_reason_code: null
+  risk_state_effect: Degraded
+  status_fields:
+  - open_permission_blocked_latch
+  - open_permission_reason_codes
+  refs:
+    sections:
+    - 3.4
+    - Appendix A
+    acceptance_tests:
+    - AT-946
+    - AT-947
+    - AT-948
+    runtime_acceptance_tests:
+    - AT-946
+    - AT-947
+    - AT-948
 coverage:
   require_appendix_keys_matching:
   - max_age

@@ -1049,7 +1049,7 @@ S10.1 — TruthCapsule write-before-dispatch (bounded queue)
 Allowed paths: crates/soldier\_core/analytics/truth\_capsule.rs, crates/soldier\_core/execution/\*\*  
 Acceptance criteria: capsule enqueued before first leg dispatch; enqueue/write failure flips EvidenceChainState RED.  
 Hot loop MUST enqueue to a bounded queue; dedicated writer thread/process drains writes (no hot-loop stall).  
-Any dispatched order MUST already have a truth\_capsule\_id linked by `(group_id, leg_idx, intent_hash)`; no dispatch without linkage.  
+Any dispatched order MUST already have a truth\_capsule\_id linked by `(group_id, leg_idx, intent_hash)` and a joinable `decision_snapshot_id`; no dispatch without linkage.  
 On queue overflow or writer error: increment `truth_capsule_write_errors` (and `parquet_write_errors` if applicable) and enter ReduceOnly.  
 Tests:  
 crates/soldier\_core/tests/test\_truth\_capsule.rs::test\_truth\_capsule\_written\_before\_dispatch\_and\_fk\_linked  
@@ -1059,11 +1059,15 @@ Rollout/rollback: hot-path; rollback \= disable trading opens (ReduceOnly) if wr
 Observability: gauge parquet\_queue\_depth, counter truth\_capsule\_write\_errors\_total.  
 S10.2 — Decision Snapshot capture/persist/link (Patch A requirement)  
 Allowed paths: crates/soldier\_core/analytics/decision\_snapshot.rs, crates/soldier\_core/analytics/truth\_capsule.rs  
-Acceptance criteria: L2 top‑N snapshot persisted; `decision_snapshot_id` stored in TruthCapsule; every dispatched intent MUST reference `decision_snapshot_id`; `l2_snapshot_id` MUST NOT be emitted; failure treated as evidence failure (opens blocked).  
+Acceptance criteria: L2 top‑N snapshot persisted; `decision_snapshot_id` stored in TruthCapsule; every dispatched intent MUST reference `decision_snapshot_id` and `SnapshotRecordedBeforeDispatch` MUST be true immediately before dispatch; `record_decision_snapshot()` returns Ok only after crash-safe persistence; `l2_snapshot_id` MUST NOT be emitted; failure treated as evidence failure (opens blocked, `decision_snapshot_write_errors` increments).  
+WAL binding: for every dispatched intent, WAL intent record includes `truth_capsule_id`, `decision_snapshot_id`, and `decision_snapshot_recorded=true`; missing fields must block dispatch and enter ReduceOnly.  
 Tests:  
 crates/soldier\_core/tests/test\_decision\_snapshot.rs::test\_decision\_snapshot\_is\_required\_and\_linked  
 crates/soldier\_core/tests/test\_decision\_snapshot.rs::test\_decision\_snapshot\_write\_failure\_blocks\_opens  
 crates/soldier\_core/tests/test\_decision\_snapshot.rs::test\_decision\_snapshot\_id\_present\_and\_l2\_snapshot\_id\_absent (AT-044)  
+crates/soldier\_core/tests/test\_decision\_snapshot.rs::test\_decision\_snapshot\_recorded\_before\_dispatch\_survives\_restart (AT-943)  
+crates/soldier\_core/tests/test\_decision\_snapshot.rs::test\_decision\_snapshot\_persistence\_failure\_blocks\_dispatch (AT-944)  
+crates/soldier\_core/tests/test\_wal\_intent\_fields.rs::test\_wal\_intent\_includes\_decision\_snapshot\_fields (AT-945)  
 Observability: counter decision\_snapshot\_written\_total, decision\_snapshot\_write\_errors\_total.  
 S10.3 — Attribution rows \== fills (+ joins)  
 Allowed paths: crates/soldier\_core/analytics/attribution.rs  
@@ -1198,7 +1202,8 @@ Add deletion test: test_decision_snapshot_retention_days_deletes_after_30_days()
 
 
 S13.3 — Canary rollout (Shadow→Canary→Full) \+ abort/rollback  
-Abort conditions must include (contract §5.3): atomic_naked_events>0; p95_slippage_bps breach; fill_rate below floor with min attempts; net_pnl_usd below floor.  
+Abort conditions must include (contract §5.3): atomic_naked_events>0; p95_slippage_bps breach; fill_rate below floor with min attempts; net_pnl_usd below floor; EvidenceChainState != GREEN for > canary_evidence_abort_s.  
+EvidenceChain abort calibration: `canary_evidence_abort_s := max(evidenceguard_window_s, evidenceguard_global_cooldown, queue_clear_window_s)` and boundary is strictly `>` (no rollback when duration == threshold).  
 On abort: rollback + enforce ReduceOnly cooldown duration per contract.  
 Add tests for each abort reason.  
 Allowed paths: python/governor/canary\_rollout.py  
@@ -1207,6 +1212,8 @@ Abort threshold parameters (contract): `slippage_limit`, `fill_rate_floor`, `can
 All four MUST be provided by configuration; if any missing/unparseable ⇒ immediate rollback + ReduceOnly cooldown (AT-035).  
 Add tests: python/tests/test\_canary\_rollout.py::test\_canary\_rollout\_missing\_thresholds\_aborts (AT-035)  
 python/tests/test\_canary\_rollout.py::test\_canary\_rollout\_aborts\_when\_slippage\_exceeds\_limit (AT-036)  
+python/tests/test\_canary\_rollout.py::test\_canary\_rollout\_aborts\_when\_evidence\_chain\_exceeds\_abort\_window (AT-435)  
+python/tests/test\_canary\_rollout.py::test\_canary\_rollout\_does\_not\_abort\_on\_evidence\_chain\_threshold (AT-437)  
 
 **Stage schedule (contract §5.3)**: Shadow 6-24h → Canary 2-6h → Full.  
 

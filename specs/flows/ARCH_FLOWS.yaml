@@ -20,6 +20,7 @@ flows:
       - soldier/core/policy/guard.rs
       - soldier/core/reflex/cortex.rs
       - soldier/core/risk/exchange_health.rs
+      - soldier/core/risk/basis_monitor.rs
     refs:
       sections:
         - §2.2.1
@@ -134,6 +135,7 @@ flows:
       - soldier/core/risk/pending_exposure.rs
       - soldier/core/risk/exposure_budget.rs
       - soldier/core/risk/margin_gate.rs
+      - soldier/core/risk/self_impact_guard.rs
       - soldier/infra/deribit/account_summary.rs
       - soldier/core/execution/sequencer.rs
       - soldier/core/execution/state.rs

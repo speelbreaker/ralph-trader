@@ -2532,7 +2532,7 @@ AT-240
   2) Force REST snapshot reconciliation (open orders + positions + recent trades).
   3) Resume only after reconciliation passes.
 
-**D) Application-Level WS Data Liveness (Zombie Socket Detection) — MUST implement:**
+#### **3.4.D** Application-Level WS Data Liveness (Zombie Socket Detection) — MUST implement:
 - **Key rule:** TCP/WS ping/pong or heartbeats are not sufficient evidence of market-data liveness.
 - Track `last_marketdata_event_ts_ms`: updated ONLY on application market-data payloads (book/trades/ticker), excluding heartbeat/ping/test frames.
 - Compute `ws_marketdata_event_lag_ms = now_ms - last_marketdata_event_ts_ms`.

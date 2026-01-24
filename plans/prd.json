@@ -150,7 +150,16 @@
       "enforcement_point": "",
       "failure_mode": [],
       "observability": {
-        "metrics": [],
+        "metrics": [
+          {
+            "name": "config_defaults_applied_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": [
+              "config_key"
+            ]
+          }
+        ],
         "status_fields": [],
         "status_contract_ats": []
       },

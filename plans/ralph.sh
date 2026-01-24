@@ -807,7 +807,8 @@ run_story_verify() {
 
   while IFS= read -r cmd; do
     [[ -z "$cmd" ]] && continue
-    if [[ "$cmd" == "./plans/verify.sh" ]]; then
+    # Ignore verify.sh itself and its syntax check; they are not story-specific.
+    if [[ "$cmd" == "./plans/verify.sh" || "$cmd" == "bash -n plans/verify.sh" || "$cmd" == "bash -n ./plans/verify.sh" ]]; then
       continue
     fi
     saw_extra=1

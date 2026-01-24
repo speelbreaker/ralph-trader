@@ -187,6 +187,7 @@ for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
     exit 4
   fi
 
+  # Stage A gate: ./plans/prd_gate.sh (via PRD_GATE_CMD) runs before PRD_CUTTER.
   if run_gate; then
     pass=1
     break
