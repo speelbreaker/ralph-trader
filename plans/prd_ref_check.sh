@@ -37,11 +37,14 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 EXTRA_CONTRACT_FILES=()
-if [[ -f "docs/contract_anchors.md" ]]; then
-  EXTRA_CONTRACT_FILES+=("docs/contract_anchors.md")
+if [[ -f "docs/architecture/contract_anchors.md" ]]; then
+  EXTRA_CONTRACT_FILES+=("docs/architecture/contract_anchors.md")
 fi
-if [[ -f "docs/validation_rules.md" ]]; then
-  EXTRA_CONTRACT_FILES+=("docs/validation_rules.md")
+if [[ -f "docs/architecture/validation_rules.md" ]]; then
+  EXTRA_CONTRACT_FILES+=("docs/architecture/validation_rules.md")
+fi
+if [[ -f "docs/contract_kernel.json" ]]; then
+  EXTRA_CONTRACT_FILES+=("docs/contract_kernel.json")
 fi
 
 python3 - "$PRD_FILE" "$CONTRACT_FILE" "$PLAN_FILE" "${EXTRA_CONTRACT_FILES[@]}" <<'PY'

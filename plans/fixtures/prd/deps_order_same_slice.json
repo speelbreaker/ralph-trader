@@ -20,21 +20,56 @@
       "story_ref": "S1.1",
       "category": "workflow",
       "description": "dependency base item",
-      "contract_refs": ["specs/WORKFLOW_CONTRACT.md §5.3"],
-      "plan_refs": ["IMPLEMENTATION_PLAN.md Phase 1"],
+      "contract_refs": [
+        "specs/WORKFLOW_CONTRACT.md \u00a75.3"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Phase 1"
+      ],
       "scope": {
-        "touch": ["plans/ralph.sh"],
+        "touch": [
+          "plans/ralph.sh"
+        ],
         "avoid": []
       },
-      "acceptance": ["a", "b", "c"],
-      "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": ["e1"],
+      "acceptance": [
+        "a",
+        "b",
+        "c"
+      ],
+      "steps": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "e1"
+      ],
       "dependencies": [],
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     },
     {
       "id": "S1-002",
@@ -45,21 +80,58 @@
       "story_ref": "S1.2",
       "category": "workflow",
       "description": "depends on S1-001",
-      "contract_refs": ["specs/WORKFLOW_CONTRACT.md §5.3"],
-      "plan_refs": ["IMPLEMENTATION_PLAN.md Phase 1"],
+      "contract_refs": [
+        "specs/WORKFLOW_CONTRACT.md \u00a75.3"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Phase 1"
+      ],
       "scope": {
-        "touch": ["plans/ralph.sh"],
+        "touch": [
+          "plans/ralph.sh"
+        ],
         "avoid": []
       },
-      "acceptance": ["a", "b", "c"],
-      "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": ["e1"],
-      "dependencies": ["S1-001"],
+      "acceptance": [
+        "a",
+        "b",
+        "c"
+      ],
+      "steps": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "e1"
+      ],
+      "dependencies": [
+        "S1-001"
+      ],
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     }
   ]
 }

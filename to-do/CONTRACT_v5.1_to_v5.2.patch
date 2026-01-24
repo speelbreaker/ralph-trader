@@ -1,0 +1,649 @@
+--- CONTRACT.md (v5.1)
++++ CONTRACT.md (v5.2)
+@@ -1,6 +1,6 @@
+ This is the canonical contract path. Do not edit other copies.
+
+ 
+
+-# **Version: 5.1 (The "Antifragile" Standard)**
+
++# **Version: 5.2 (The "Antifragile" Standard)**
+
+ **Status**: FINAL ARCHITECTURE **Objective**: Net Profit via Structural Arbitrage using **Atomic Group Execution**, **Fee-Aware IOC Limits**, and **Closed-Loop Optimization**. **Architecture**: "The Iron Monolith v4.0" (Rust Execution/Risk \+ Python Policy \+ **Automated Policy Tuner**)
+
+ 
+
+ ---
+
+@@ -27,8 +27,21 @@
+ - Staleness arithmetic: see §2.2.3 Policy Staleness Rule acceptance tests.
+
+ - /status required fields: see §7.0 acceptance tests.
+
+ 
+
++## Patch Summary (P1 — Derivatives Lifecycle + Market-Data Integrity Hardening)
+
++
+
++**Applied:** 2026-01-23
+
++
+
++**What changed (non-normative summary):**
+
++- Added explicit “Zombie Socket” (silent data-freeze) detection via application-level heartbeats (WS ping/pong is not considered market-data liveness).
+
++- Added instrument lifecycle/expiry handling to prevent “Invalid Instrument” crashes at settlement/expiration boundaries.
+
++- Added Mark/Index/Mid basis monitoring to reduce liquidation risk from Mark-vs-Last dislocations.
+
++- Added self-trade feedback-loop guard to prevent “echo chamber” runaway behavior in thin markets.
+
++- Added new RejectReasonCodes and Appendix A defaults for the above.
+
++
+
++**Acceptance Tests added:** AT-947, AT-948, AT-949, AT-950, AT-951, AT-952, AT-953, AT-954.
+
++
+
+ > [!WARNING]
+
+-> **v5.1 F1_CERT Binding Requirement:** This version introduces F1_CERT binding validation (§2.2.1). ALL components that produce or consume `contract_version` MUST be updated to `5.1` in lockstep (F1 cert generator, runtime binary, PolicyGuard). Mismatched versions will force `TradingMode::ReduceOnly` until aligned.
+
++> **v5.2 F1_CERT Binding Requirement:** This version introduces F1_CERT binding validation (§2.2.1). ALL components that produce or consume `contract_version` MUST be updated to `5.2` in lockstep (F1 cert generator, runtime binary, PolicyGuard). Mismatched versions will force `TradingMode::ReduceOnly` until aligned.
+
+ 
+
+ ## Definitions
+
+ 
+
+@@ -40,7 +53,7 @@
+ 
+
+ - **L1TickerSnapshot**: {`instrument_id`, `best_bid`, `best_ask`, `ts_ms`, `source` (REST|WS)} from the ticker feed. Valid only if `best_bid > 0`, `best_ask > 0`, `best_bid <= best_ask`, and `(now_ms - ts_ms) <= l2_book_snapshot_max_age_ms`.
+
+ 
+
+-- **contract_version**: canonical version string `5.1` (numeric only; no codename/tagline).
+
++- **contract_version**: canonical version string `5.2` (numeric only; no codename/tagline).
+
+ 
+
+ - **RiskState** (health/cause layer): `Healthy | Degraded | Maintenance | Kill`
+
+ - **TradingMode** (enforcement layer): `Active | ReduceOnly | Kill`  
+
+@@ -204,6 +217,52 @@
+ - Pass criteria: quantization/sizing uses fetched values.
+
+ - Fail criteria: any hardcoded defaults used.
+
+ 
+
++
+
++#### **1.0.Y Instrument Lifecycle & Expiry Safety (Derivatives Delisting Guard) — MUST implement**
+
++
+
++**Problem this prevents:** Instruments with an `expiration_timestamp` can disappear from APIs at expiry/settlement boundaries (e.g., weekly/monthly futures/options). Any unhandled `"Invalid instrument"` / `not_found` response during shutdown or cleanup can panic-crash the bot and strand *other* live exposure.
+
++
+
++**Lifecycle State Machine (per instrument; deterministic):**
+
++- `Active`: normal trading allowed (subject to all other gates)
+
++- `Expiring`: `now_ms >= (expiration_timestamp_ms - expiry_delist_buffer_s*1000)`
+
++- `Delisted`: `now_ms >= expiration_timestamp_ms` OR exchange reports the instrument/orderbook as closed/expired/not-found
+
++
+
++**Rules (Non‑Negotiable):**
+
++1. Soldier MUST store `expiration_timestamp_ms` for every expiring instrument from metadata (`/public/get_instruments`). If missing/unparseable for an expiring instrument kind, Soldier MUST treat that instrument as **untradable** (reject OPEN) until refreshed.
+
++2. When an instrument enters `Expiring`:
+
++   - Soldier MUST reject any **risk‑increasing** intents on that instrument (OPEN / replace that increases exposure).
+
++   - Rejection MUST use `Rejected(InstrumentExpiredOrDelisted)`.
+
++   - Soldier SHOULD attempt to cancel working orders on that instrument (best-effort), but MUST NOT crash if cancels fail.
+
++3. When an instrument enters `Delisted`:
+
++   - Soldier MUST treat further REST/WS errors indicating expiry/closure as **terminal**, not fatal.
+
++   - Any attempt to place/replace orders on that instrument MUST be rejected with `Rejected(InstrumentExpiredOrDelisted)`.
+
++   - CANCEL intents for that instrument MUST be treated as **idempotent** (NOOP success) if the exchange reports the order/instrument is not found.
+
++4. API error handling (Deribit‑specific but safe):
+
++   - If exchange returns `orderbook_closed` (closed/expired orderbook) or `not_found`/`Invalid instrument` for an instrument:
+
++     - mark instrument state = `Delisted`
+
++     - mark any local working orders for that instrument as `Terminal(ExchangeGone)`
+
++     - continue processing other instruments (no panic / no process exit)
+
++5. Shutdown / “close all positions” logic MUST NOT iterate over a stale internal instrument list.
+
++   - It MUST start from exchange truth (`get_positions`, `get_open_orders`, recent trades) and gracefully skip any instrument that is already Delisted.
+
++
+
++**Observability (minimum):**
+
++- Metric counter: `expired_instrument_errors_total` (count of delist/expiry errors encountered)
+
++- Metric gauge: `expiring_instruments` (count currently in Expiring)
+
++
+
++**Acceptance Tests (REQUIRED):**
+
++AT-949
+
++- Given: an instrument with `expiration_timestamp_ms = T_exp`.
+
++- When: `now_ms = T_exp - (expiry_delist_buffer_s*1000) + 1` and an OPEN intent is evaluated for that instrument.
+
++- Then: the OPEN is rejected with `Rejected(InstrumentExpiredOrDelisted)` and no dispatch occurs.
+
++- Pass criteria: reject_reason_code matches; dispatch count remains 0.
+
++- Fail criteria: dispatch occurs or reason mismatched.
+
++
+
++AT-950
+
++- Given: at `now_ms = T_exp + 1`, the exchange returns `not_found` / `"Invalid instrument"` / `orderbook_closed` for the expired instrument during position/order cleanup.
+
++- When: shutdown cleanup or periodic reconciliation runs.
+
++- Then: the bot does **not** crash; the instrument is marked `Delisted`; other instruments continue to be managed normally.
+
++- Pass criteria: process remains live; Delisted state recorded; other instruments unaffected.
+
++- Fail criteria: panic/crash or global trading halts unnecessarily.
+
+ 
+
+ **OrderSize struct (MUST implement):**
+
+ ```rust
+
+@@ -586,6 +645,42 @@
+ - Then: the 4th attempt is rejected and logged (`ChurnBreakerTrip`), with blacklist TTL enforced.
+
+ - Pass criteria: rejection + log + TTL enforcement.
+
+ - Fail criteria: 4th attempt proceeds or TTL not enforced.
+
++
+
++### **1.2.3 Self-Trade Feedback Loop Guard (Echo Chamber Defense) — MUST implement**
+
++
+
++**Problem this prevents:** The strategy can mistake *its own* market impact for “external momentum,” recursively buying/selling into itself until it hits an exposure or margin wall.
+
++
+
++**Core rule:** The Soldier MUST detect when recent tape/volume is dominated by our own fills and temporarily block new risk on that instrument/strategy key.
+
++
+
++**Definitions (rolling window):**
+
++- Window length: `feedback_loop_window_ms` (Appendix A)
+
++- For each key `K = {strategy_id, instrument_id}` compute over the last window:
+
++  - `self_notional_usd(K)` = sum(notional_usd of fills attributed to us)
+
++  - `total_notional_usd(K)` = sum(notional_usd of all public trades)
+
++  - `self_fraction(K) = self_notional_usd / max(total_notional_usd, ε)`
+
++
+
++**Attribution source-of-truth (deterministic):**
+
++- “Our fills” are identified from private fills (user trades) and/or trade-id reconciliation; the resulting `trade_id` set is authoritative.
+
++- Public trades are marked `is_self_trade=true` iff `trade_id ∈ processed_trade_ids` (or equivalent recent-self-trade registry).
+
++
+
++**Trip conditions (Non‑Negotiable):**
+
++- If either is true for key K:
+
++  1) `self_fraction(K) >= self_trade_fraction_trip` AND `self_notional_usd(K) >= self_trade_min_self_notional_usd`, OR
+
++  2) `self_notional_usd(K) >= self_trade_notional_trip_usd`
+
++- Then: set `feedback_loop_guard_active(K) = true` for `feedback_loop_cooldown_s`.
+
++
+
++**Enforcement while guard is active:**
+
++- For the guarded key K, Soldier MUST reject any OPEN intent that increases exposure (risk‑increasing).
+
++- Rejection MUST use `Rejected(FeedbackLoopGuardActive)`.
+
++- CLOSE/HEDGE/CANCEL intents remain allowed (subject to Kill hard-stop rules).
+
++
+
++**Acceptance Test (REQUIRED):**
+
++AT-953
+
++- Given: `feedback_loop_guard_active(K) == true` for `{strategy_id=S, instrument_id=I}`.
+
++- When: an OPEN intent for `{S,I}` is evaluated.
+
++- Then: the OPEN is rejected with `Rejected(FeedbackLoopGuardActive)`; CLOSE/HEDGE/CANCEL remain dispatchable.
+
++- Pass criteria: reject_reason_code matches; OPEN dispatch count remains 0.
+
++- Fail criteria: OPEN dispatch occurs or reason mismatched.
+
+ 
+
+ ### **1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)**
+
+ 
+
+@@ -939,7 +1034,7 @@
+   - Reject any non-null `linked_order_type` unless `linked_orders_supported == true` **and** feature flag `ENABLE_LINKED_ORDERS_FOR_BOT == true`, with `Rejected(LinkedOrderTypeForbidden)`.
+
+ 
+
+ **Linked orders gating variables (contract-bound definitions):**
+
+-- `linked_orders_supported` (bool): MUST be `false` for v5.1 (see Deribit Venue Facts Addendum F-08: VERIFIED (NOT SUPPORTED)).
+
++- `linked_orders_supported` (bool): MUST be `false` for v5.2 (see Deribit Venue Facts Addendum F-08: VERIFIED (NOT SUPPORTED)).
+
+ - `ENABLE_LINKED_ORDERS_FOR_BOT` (bool): runtime config feature flag; default `false` (fail-closed if missing/unset).
+
+ 
+
+ **Acceptance Test (REQUIRED):**
+
+@@ -1142,7 +1237,7 @@
+ - Fail criteria: `trading_mode` Active while F1_CERT is missing/stale/FAIL.
+
+ 
+
+ AT-012
+
+-- Given: F1_CERT has `contract_version="5.1"` and runtime `contract_version` is `"5.1"`.
+
++- Given: F1_CERT has `contract_version="5.2"` and runtime `contract_version` is `"5.2"`.
+
+ - When: PolicyGuard validates F1_CERT binding checks.
+
+ - Then: `contract_version` comparison passes (no ReduceOnly due to formatting mismatch).
+
+ - Pass criteria: TradingMode not forced to ReduceOnly due solely to `contract_version` formatting.
+
+@@ -1605,7 +1700,7 @@
+ **State fields:**
+
+ - `open_permission_blocked_latch` (bool; `true` means OPEN blocked)
+
+ - `open_permission_reason_codes` (`OpenPermissionReasonCode[]`; MUST be `[]` iff `open_permission_blocked_latch == false`)
+
+-- `open_permission_requires_reconcile` (bool; MUST equal `open_permission_blocked_latch` for v5.1 - all reason codes are reconcile-class)
+
++- `open_permission_requires_reconcile` (bool; MUST equal `open_permission_blocked_latch` for v5.2 - all reason codes are reconcile-class)
+
+ 
+
+ **Acceptance Tests (References):**
+
+ - AT-027 in §7.0 validates `/status` latch field invariants.
+
+@@ -1729,6 +1824,8 @@
+ - `RiskIncreasingCancelReplaceForbidden`
+
+ - `RateLimitBrownout`
+
+ - `LabelTooLong`
+
++- `InstrumentExpiredOrDelisted`
+
++- `FeedbackLoopGuardActive`
+
+ 
+
+ **Acceptance Test (REQUIRED):**
+
+ AT-930
+
+@@ -1847,7 +1944,7 @@
+ 
+
+ **Inputs (export as metrics):**
+
+ - `deribit_http_p95_ms` over last 30s
+
+-- `ws_event_lag_ms` (now - last_ws_msg_ts)
+
++- `ws_event_lag_ms` (now - last_ws_marketdata_event_ts_ms; excludes WS ping/pong frames)
+
+ - `request_timeout_rate` over last 60s
+
+ 
+
+ **Window definition (explicit):** evaluate `deribit_http_p95_ms` once per second over the last 30s rolling window; “3 consecutive windows” means three consecutive evaluations above threshold.
+
+@@ -1913,6 +2010,54 @@
+ - Then: `bunker_mode_active = true` and OPEN intents are blocked.
+
+ - Pass criteria: Bunker Mode entered; opens blocked.
+
+ - Fail criteria: Active mode while required metrics are missing.
+
++
+
++### **2.3.3 Mark/Mid/Index Basis Monitor (Liquidation Risk Guard) — MUST implement**
+
++
+
++**Why this exists:** Derivatives liquidations/margin often use **Mark Price**, not last-trade. When Mark diverges materially from executable prices (mid/last), your “chart” lies about liquidation risk and your strategy can fire false stops.
+
++
+
++**Inputs (minimum; per instrument under management):**
+
++- `mark_price`
+
++- `index_price` (when available)
+
++- `best_bid`, `best_ask`
+
++- freshness timestamps for the above (must be <= `l2_book_snapshot_max_age_ms` for bid/ask sources, and <= `mm_util_max_age_ms`-class freshness for mark/index)
+
++
+
++**Derived metrics:**
+
++- `mid_price = (best_bid + best_ask)/2` (requires both sides)
+
++- `mark_mid_basis_bps = abs(mark_price - mid_price) / max(mark_price, mid_price, ε) * 10_000`
+
++- `mark_index_basis_bps = abs(mark_price - index_price) / max(index_price, ε) * 10_000` (only if `index_price` present)
+
++
+
++**Rules (Non‑Negotiable):**
+
++- If `mark_mid_basis_bps >= basis_reduceonly_bps` OR `mark_index_basis_bps >= basis_reduceonly_bps` continuously for `basis_reduceonly_window_s`:
+
++  - Output `ForceReduceOnly{cooldown_s=spread_depth_cooldown_s}`
+
++- If `mark_mid_basis_bps >= basis_kill_bps` OR `mark_index_basis_bps >= basis_kill_bps` continuously for `basis_kill_window_s`:
+
++  - Output `ForceKill`
+
++
+
++**Missing/Unreachable Handling (Fail‑Closed):**
+
++- If any required input is missing/unparseable/stale for an instrument with active exposure (open position OR working orders): output `ForceReduceOnly`.
+
++
+
++**Where:** `soldier/core/risk/basis_monitor.rs`
+
++
+
++**Acceptance Tests (REQUIRED):**
+
++AT-951
+
++- Given: `mark_mid_basis_bps >= basis_reduceonly_bps` persists for `basis_reduceonly_window_s`.
+
++- When: Basis Monitor evaluates.
+
++- Then: output is `ForceReduceOnly` and TradingMode becomes ReduceOnly (via §2.2.3 precedence) with reason `REDUCEONLY_CORTEX_FORCE_REDUCE_ONLY`.
+
++- Pass criteria: ReduceOnly entered; opens blocked.
+
++- Fail criteria: remains Active or opens allowed.
+
++
+
++AT-952
+
++- Given: `mark_index_basis_bps >= basis_kill_bps` persists for `basis_kill_window_s`.
+
++- When: Basis Monitor evaluates.
+
++- Then: output is `ForceKill` and TradingMode becomes Kill with reason `KILL_CORTEX_FORCE_KILL`.
+
++- Pass criteria: Kill entered.
+
++- Fail criteria: remains ReduceOnly/Active.
+
++
+
++AT-954
+
++- Given: an instrument has a live open position, but `mark_price` (or `best_bid/best_ask`) is missing/stale/unparseable.
+
++- When: Basis Monitor evaluates.
+
++- Then: output is `ForceReduceOnly` (fail‑closed).
+
++- Pass criteria: ReduceOnly enforced.
+
++- Fail criteria: Active mode with missing/stale basis inputs.
+
+ 
+
+ ### **2.4 Durable Intent Ledger (WAL Truth Source)**
+
+ 
+
+@@ -2260,6 +2405,39 @@
+      - MUST set `open_permission_blocked_latch = true` with reason `SESSION_TERMINATION_RECONCILE_REQUIRED`.
+
+   2) Force REST snapshot reconciliation (open orders + positions + recent trades).
+
+   3) Resume only after reconciliation passes.
+
++
+
++**D) Application-Level Heartbeats (“Zombie Socket” defense) — MUST implement:**
+
++- **Do not trust TCP/WebSocket ping/pong** as a market-data liveness signal.
+
++- Soldier MUST maintain application-level heartbeats from **market data payloads**:
+
++  - Order books: `change_id` must update when book updates occur.
+
++  - Trades: stream must advance via `trade_id` and/or exchange timestamps.
+
++  - Ticker: exchange-provided timestamps must advance.
+
++- Soldier MUST compute `ws_event_lag_ms` from the most recent **valid market-data event** (book/trade/ticker) and MUST NOT reset this timer on ping/pong frames.
+
++
+
++**Zombie trip rule (Non-Negotiable):**
+
++- If either condition holds:
+
++  1) `ws_event_lag_ms > ws_zombie_silence_ms` OR
+
++  2) For any instrument with active exposure (open position or working order), its book stream `change_id` has not advanced for `ws_zombie_silence_ms`
+
++- Then Soldier MUST:
+
++  - Set `RiskState::Degraded` immediately and block opens.
+
++  - Set `open_permission_blocked_latch = true` with reason `WS_BOOK_GAP_RECONCILE_REQUIRED` (and `WS_TRADES_GAP_RECONCILE_REQUIRED` if trades stream is also stale).
+
++  - Force WS disconnect/reconnect + resubscribe.
+
++  - Pull full REST snapshots and rebuild local state before resuming opens.
+
++
+
++**Acceptance Tests (REQUIRED):**
+
++AT-947
+
++- Given: WS ping/pong frames continue, but no book/trade/ticker payloads are received for > `ws_zombie_silence_ms`.
+
++- When: zombie detection runs.
+
++- Then: system enters Degraded, forces reconnect + full snapshot rebuild, and opens remain paused until rebuild completes.
+
++- Pass criteria: no OPEN dispatch; latch reason includes `WS_BOOK_GAP_RECONCILE_REQUIRED`.
+
++- Fail criteria: remains Active/Healthy or opens dispatch while stale.
+
++
+
++AT-948
+
++- Given: ping/pong frames are received every second, but no market-data payloads are received.
+
++- When: `ws_event_lag_ms` is computed.
+
++- Then: `ws_event_lag_ms` increases monotonically (ping/pong does not reset it).
+
++- Pass criteria: `ws_event_lag_ms` > 0 and grows; bunker/zombie logic can trip.
+
++- Fail criteria: `ws_event_lag_ms` stays near 0 due to ping/pong.
+
+ 
+
+ **Safety rule during Degraded:** allow reduce-only closes/hedges to proceed; block any risk-increasing cancels/replaces/opens (see definition in §2.2.5).
+
+ 
+
+@@ -2670,7 +2848,7 @@
+ 
+
+ - `truth_capsule_id`, `group_id`, `leg_idx`, `intent_hash`, `strategy_id`, `policy_hash`
+
+ - **Snapshot references:**
+
+-  - `decision_snapshot_id` (decision-time L2 top‑N; REQUIRED). This is the canonical field; `l2_snapshot_id` is legacy and MUST NOT be emitted in v5.1 outputs.
+
++  - `decision_snapshot_id` (decision-time L2 top‑N; REQUIRED). This is the canonical field; `l2_snapshot_id` is legacy and MUST NOT be emitted in v5.2 outputs.
+
+   - `snapshot_bundle_id` (optional: richer bundle if present)
+
+   - `exchange_ts`, `local_ts`, `drift_ms`
+
+ - **Model state references:**
+
+@@ -3059,11 +3237,11 @@
+ - `snapshot_coverage_pct` (MUST be computed over `replay_window_hours`; current computed metric / last window)
+
+ - `atomic_naked_events_24h`, `429_count_5m`, `10028_count_5m`
+
+ - `wal_queue_depth`, `wal_queue_capacity`, `wal_queue_enqueue_failures` (see §2.4.1)
+
+-- `deribit_http_p95_ms`, `ws_event_lag_ms`
+
++- `deribit_http_p95_ms`, `ws_event_lag_ms` (ms since last public market-data event; excludes WS ping/pong frames)
+
+ - `mode_reasons` (ModeReasonCode[]; authoritative explanation of `trading_mode` for this tick; MUST be `[]` iff `trading_mode == Active`)
+
+ - `open_permission_blocked_latch` (bool; true means OPEN blocked; CLOSE/HEDGE/CANCEL allowed only as permitted by §2.2.5)
+
+ - `open_permission_reason_codes` (OpenPermissionReasonCode[]; MUST be [] iff `open_permission_blocked_latch == false`)
+
+-- `open_permission_requires_reconcile` (bool; MUST equal `open_permission_blocked_latch` for v5.1 - all reason codes are reconcile-class)
+
++- `open_permission_requires_reconcile` (bool; MUST equal `open_permission_blocked_latch` for v5.2 - all reason codes are reconcile-class)
+
+ 
+
+ **WAL queue invariants:**
+
+ - `wal_queue_depth` MUST be integer >= 0.
+
+@@ -4244,10 +4422,15 @@
+ | `atomic_qty_epsilon` | `1e-9` | qty units | §1.2 |
+
+ | `contracts_amount_match_tolerance` | `0.001` | relative | §1.0 |
+
+ | `instrument_cache_ttl_s` | `3600` | sec | §1.0.X |
+
++| `expiry_delist_buffer_s` | `60` | sec | §1.0.Y |
+
+ | `inventory_skew_k` | `0.5` | dimensionless | §1.4.2 |
+
+ | `inventory_skew_tick_penalty_max` | `3` | ticks | §1.4.2 |
+
+ | `rescue_cross_spread_ticks` | `2` | ticks | §1.2 |
+
+ | `spread_max_bps` | `25` | bps | §2.3 |
+
++| `basis_reduceonly_bps` | `25` | bps | §2.3.3 |
+
++| `basis_reduceonly_window_s` | `3` | sec | §2.3.3 |
+
++| `basis_kill_bps` | `200` | bps | §2.3.3 |
+
++| `basis_kill_window_s` | `10` | sec | §2.3.3 |
+
+ | `depth_min` | `300_000` | USD | §2.3, §4.1 |
+
+ | `f1_cert_freshness_window_s` | `86400` | sec | §2.2.1 |
+
+ | `mm_util_max_age_ms` | `30000` | ms | §2.2.1.1 |
+
+@@ -4268,10 +4451,16 @@
+ | `parquet_queue_clear_pct` | `0.70` | pct | §2.2.2 |
+
+ | `queue_clear_window_s` | `120` | sec | §2.2.2 |
+
+ | `group_lock_max_wait_ms` | `10` | ms | §1.2.1 |
+
++| `feedback_loop_window_ms` | `1000` | ms | §1.2.3 |
+
++| `self_trade_fraction_trip` | `0.25` | fraction | §1.2.3 |
+
++| `self_trade_min_self_notional_usd` | `25000` | USD | §1.2.3 |
+
++| `self_trade_notional_trip_usd` | `100000` | USD | §1.2.3 |
+
++| `feedback_loop_cooldown_s` | `30` | sec | §1.2.3 |
+
+ | `disk_pause_archives_pct` | `0.80` | pct | §7.2 |
+
+ | `disk_degraded_pct` | `0.85` | pct | §7.2 |
+
+ | `disk_kill_pct` | `0.92` | pct | §7.2 |
+
+ | `bunker_jitter_threshold_ms` | `2000` | ms | §2.3.2 |
+
++| `ws_zombie_silence_ms` | `5000` | ms | §3.4 |
+
+ | `bunker_exit_stable_s` | `120` | sec | §2.3.2 |
+
+ | `time_drift_threshold_ms` | `50` | ms | §4.3 |
+
+ | `max_policy_age_sec` | `300` | sec | §2.2.3 |

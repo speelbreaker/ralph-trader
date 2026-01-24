@@ -1,0 +1,44 @@
+{
+  "project": "Fixture",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-102",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Reason code missing values",
+      "category": "workflow",
+      "description": "Acceptance mentions reason code but values are empty.",
+      "contract_refs": ["CONTRACT.md 0.Y Verification Harness (Non-Negotiable)"],
+      "plan_refs": ["Test harness configured (cargo test --workspace)."],
+      "scope": { "touch": ["plans/verify.sh"], "avoid": ["crates/**"] },
+      "acceptance": ["GIVEN an error THEN a deterministic reason code is reported.", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
+      "evidence": ["plans/verify.sh output"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}

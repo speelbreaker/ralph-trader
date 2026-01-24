@@ -13,10 +13,10 @@ from contract_kernel_lib import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ANCHORS_PATH = ROOT / "docs/contract_anchors.md"
-RULES_PATH = ROOT / "docs/validation_rules.md"
-CONTRACT_PATH = ROOT / "CONTRACT.md"
-PLAN_PATH = ROOT / "IMPLEMENTATION_PLAN.md"
+ANCHORS_PATH = ROOT / "docs/architecture/contract_anchors.md"
+RULES_PATH = ROOT / "docs/architecture/validation_rules.md"
+CONTRACT_PATH = ROOT / "specs/CONTRACT.md"
+PLAN_PATH = ROOT / "specs/IMPLEMENTATION_PLAN.md"
 KERNEL_PATH = ROOT / "docs/contract_kernel.json"
 
 
@@ -80,10 +80,10 @@ def check_kernel(kernel_path: Path) -> None:
     )
 
     expected_paths = {
-        "contract_path": "CONTRACT.md",
-        "anchors_path": "docs/contract_anchors.md",
-        "rules_path": "docs/validation_rules.md",
-        "plan_path": "IMPLEMENTATION_PLAN.md",
+        "contract_path": "specs/CONTRACT.md",
+        "anchors_path": "docs/architecture/contract_anchors.md",
+        "rules_path": "docs/architecture/validation_rules.md",
+        "plan_path": "specs/IMPLEMENTATION_PLAN.md",
     }
     for key, expected in expected_paths.items():
         if sources.get(key) != expected:

@@ -762,12 +762,12 @@ Ensure fetch gets the chosen base ref.
 
 ---
 
-# Plan 5 — Add a “summary console mode” to verify.sh to reduce token/log volume
+# Plan 5 — Add quiet-console summaries to verify.sh to reduce token/log volume
 Status: NOT IMPLEMENTED
 
 ## Elevation (approved fix)
 
-Add a `VERIFY_CONSOLE_MODE=summary` option so verify logs are still captured to artifacts, but console output is limited to a small tail/summary suitable for agent prompts.
+Use the existing `VERIFY_CONSOLE=quiet` path (auto in CI) to emit concise failure summaries, and optionally factor the summary logic into `plans/verify_summary.sh`. Do **not** add `VERIFY_CONSOLE_MODE` or new knob names.
 
 ### Context
 
@@ -795,7 +795,7 @@ verify
 
 ## 1) Outcome & Scope
 
-- When `VERIFY_CONSOLE_MODE=summary`, each step writes full logs to `artifacts/verify/<run_id>/*.log` but prints only:
+- When `VERIFY_CONSOLE=quiet`, each step writes full logs to `artifacts/verify/<run_id>/*.log` but prints only:
     
     - step header
         
@@ -815,68 +815,32 @@ verify
 
 ## 2) Design sketch (minimal)
 
-**Mechanism:** Modify `run_logged()` pipeline:
+**Mechanism:** Keep the current `VERIFY_CONSOLE` switch and make the quiet path the summary path.
 
-- `summary` mode: `tee logfile >/dev/null` then `tail -n N logfile`
-    
-- `full` mode: keep existing tee behavior
-    
+- `quiet` mode: capture logs to artifacts and emit a tail + grep summary on failure.
+- `verbose` mode: keep full streaming output to console.
 
-Also write `verify_summary.txt` containing:
-
-- mode, run_id, artifact dir
-    
-- failing step name + extracted error lines
-    
+Optional: move the summary logic into `plans/verify_summary.sh` and call it from `emit_fail_excerpt` while preserving existing knob names.
 
 **Public interfaces impacted**
 
-- New env vars:
-    
-    - `VERIFY_CONSOLE_MODE=full|summary` (default full)
-        
-    - `VERIFY_CONSOLE_TAIL_LINES` (default e.g. 80)
-        
-    - `VERIFY_SUMMARY_MAX_LINES` (default e.g. 50)
-        
+- Existing env vars only:
+    - `VERIFY_CONSOLE=auto|quiet|verbose`
+    - `VERIFY_FAIL_TAIL_LINES`
+    - `VERIFY_FAIL_SUMMARY_LINES`
 
 ---
 
 ## 3) Change List (patch plan)
 
-1. **Add console mode vars**
-    
+1. **Keep canonical console interface**
     - **Edit:** `plans/verify.sh`
-        
-    - **Add constants:**
-        
-        - `VERIFY_CONSOLE_MODE="${VERIFY_CONSOLE_MODE:-full}"`
-            
-        - `VERIFY_CONSOLE_TAIL_LINES="${VERIFY_CONSOLE_TAIL_LINES:-80}"`
-            
-        - `VERIFY_SUMMARY_FILE="$VERIFY_ARTIFACTS_DIR/verify_summary.txt"`
-            
-2. **Modify `run_logged()`**
-    
-    - **Edit:** `plans/verify.sh`
-        
-    - **Change behavior:**
-        
-        - If `VERIFY_LOG_CAPTURE=1` and `VERIFY_CONSOLE_MODE=summary`:
-            
-            - `run_with_timeout ... | tee "$logfile" >/dev/null`
-                
-            - capture rc via `PIPESTATUS[0]`
-                
-            - `tail -n "$VERIFY_CONSOLE_TAIL_LINES" "$logfile"`
-                
-        - On failure: append key lines to `verify_summary.txt` using `grep -E "FAIL:|error:|FAILED|panicked"` with max lines
-            
-3. **Print a final pointer**
-    
-    - **Edit:** `plans/verify.sh`
-        
-    - End-of-run: print `summary_file=...` and `artifacts_dir=...`
+    - Ensure `VERIFY_CONSOLE=auto|quiet|verbose` remains the only console mode selector.
+    - Use `VERIFY_FAIL_TAIL_LINES` and `VERIFY_FAIL_SUMMARY_LINES` for quiet summaries.
+2. **Optional helper**
+    - **Add:** `plans/verify_summary.sh`
+    - Wire `emit_fail_excerpt` to call it (pass logfile + knob values).
+    - If a `verify_summary.txt` artifact is created, document it; otherwise keep output-only.
         
 
 ---
@@ -886,14 +850,11 @@ Also write `verify_summary.txt` containing:
 **Fast checks**
 
 - `bash -n plans/verify.sh`
-    
 
 **Targeted checks**
 
-- `VERIFY_CONSOLE_MODE=summary ./plans/verify.sh quick`
-    
+- `VERIFY_CONSOLE=quiet ./plans/verify.sh quick`
     - console output is short
-        
     - logs exist under `artifacts/verify/<run_id>/`
         
 
@@ -904,7 +865,8 @@ Also write `verify_summary.txt` containing:
 
 **Expected signals**
 
-- `verify_summary.txt` exists and includes failure summary when a gate fails
+- Quiet mode prints a tail + grep summary on failure
+- `verify_summary.txt` exists only if the helper creates it
     
 
 ---
@@ -953,13 +915,10 @@ Also write `verify_summary.txt` containing:
 
 ## 7) Acceptance Criteria (Definition of Done)
 
--  Summary console mode limits output but preserves full logs in artifacts.
-    
--  `VERIFY_SH_SHA=...` remains first output line.
-    
+- Quiet console output limits noise but preserves full logs in artifacts.
+- `VERIFY_SH_SHA=...` remains first output line.
     verify
-    
--  On failure, a `verify_summary.txt` exists and is useful.
+- If a helper is added, it is wired through `emit_fail_excerpt` and uses existing knob names.
     
 
 ---

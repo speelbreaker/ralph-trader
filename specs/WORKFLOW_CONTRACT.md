@@ -58,6 +58,8 @@ The trading behavior contract is the source of truth. If a plan/story conflicts 
 - [WF-1.12] `plans/workflow_contract_gate.sh` — workflow rule traceability gate
 - [WF-1.13] `plans/workflow_acceptance.sh` — workflow acceptance tests
 - [WF-1.14] `plans/workflow_contract_map.json` — workflow rule enforcement map
+- [WF-1.15] `plans/prd_gate.sh` — deterministic PRD gate (schema + lint + ref check)
+- [WF-1.16] `plans/prd_audit_check.sh` — PRD audit output validator
 
 ### 1.3 Optional but recommended
 - `plans/bootstrap.sh` — one-time harness scaffolding
@@ -145,7 +147,7 @@ Observable gate requirement:
 
 Schema gating (fail closed, enforced by harness preflight):
 - [WF-3.2] Ralph MUST validate required top-level keys exist: project, source, rules, items.
-- [WF-3.3] Ralph MUST validate for every item: required fields per §3 are present; acceptance has ≥ 3 entries; steps has ≥ 5 entries; verify[] contains ./plans/verify.sh.
+- [WF-3.3] Ralph MUST validate for every item: required fields per §3 are present; acceptance has ≥ 3 entries; steps has ≥ 5 entries; evidence has ≥ 1 entry; verify[] contains ./plans/verify.sh and at least one additional targeted check (non-./plans/verify.sh) unless needs_human_decision=true.
   - Thresholds are floors. They may be raised via PRD_SCHEMA_MIN_ACCEPTANCE / PRD_SCHEMA_MIN_STEPS.
   - Lowering below floors requires PRD_SCHEMA_DRAFT_MODE=1 and is blocked from Ralph execution.
 - [WF-3.4] Ralph MUST validate: if needs_human_decision=true then human_blocker object is present.
@@ -185,13 +187,35 @@ steps (string[]) — deterministic, ≥ 5
 
 verify (string[]) — MUST include ./plans/verify.sh
 
-evidence (string[]) — concrete artifacts
+evidence (string[]) — concrete artifacts; must be non-empty
+
+contract_must_evidence (object[]) — required contract MUST evidence entries
+  - quote (string, ≤25 words)
+  - location (string)
+  - anchor (string)
+
+enforcing_contract_ats (string[]) — contract acceptance tests (AT-###)
+
+reason_codes (object)
+  - type (ModeReasonCode|OpenPermissionReasonCode|RejectReason) — empty when not applicable
+  - values (string[]) — exact enum values
+
+enforcement_point (string) — PolicyGuard|EvidenceGuard|DispatcherChokepoint|WAL|AtomicGroupExecutor|StatusEndpoint (empty when not applicable)
+
+failure_mode (string[]) — stall|hang|backpressure|missing|stale|parse_error
+
+observability (object)
+  - metrics (object[]) — {name,type,unit,labels}
+  - status_fields (string[])
+  - status_contract_ats (string[]) — AT-### for /status fields
+
+implementation_tests (string[]) — test paths (unit/integration)
 
 dependencies (string[])
 
 Dependencies must reference existing item ids, must not include self, and must not point to a higher slice.
 
-est_size (XS|S|M) — M should be split
+est_size (XS|S|M) — M must be split before execution (fail closed)
 
 risk (low|med|high)
 
@@ -208,6 +232,17 @@ passes (bool; default false)
   "recommended": "A|B",
   "unblock_steps": ["..."]
 }
+
+[WF-3.7] PRD lint requirements (fail closed; enforced by prd_lint):
+- category execution|risk|durability requires: contract_must_evidence (non-empty), enforcing_contract_ats (non-empty), reason_codes (type+values), enforcement_point.
+- acceptance/steps mentioning reason code require reason_codes.values to be non-empty.
+- acceptance/steps mentioning metrics/counter/gauge/histogram/log or metric tokens require observability.metrics (non-empty).
+- acceptance/steps mentioning /status or operator-visible fields require observability.status_fields + observability.status_contract_ats (non-empty).
+- acceptance/steps mentioning liveness/backpressure require failure_mode + implementation_tests (non-empty).
+- contract_must_evidence.quote must be ≤25 words.
+
+[WF-3.8] PRD placeholder tokens are blocked:
+- TODO/TBD/FIXME/??? are forbidden in description, acceptance, steps, or verify unless needs_human_decision=true.
 
 ---
 

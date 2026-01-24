@@ -20,21 +20,58 @@
       "story_ref": "S1.1",
       "category": "workflow",
       "description": "depends on higher slice",
-      "contract_refs": ["specs/WORKFLOW_CONTRACT.md §3.5"],
-      "plan_refs": ["IMPLEMENTATION_PLAN.md Phase 1"],
+      "contract_refs": [
+        "specs/WORKFLOW_CONTRACT.md \u00a73.5"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Phase 1"
+      ],
       "scope": {
-        "touch": ["plans/prd_schema_check.sh"],
+        "touch": [
+          "plans/prd_schema_check.sh"
+        ],
         "avoid": []
       },
-      "acceptance": ["a", "b", "c"],
-      "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": ["e1"],
-      "dependencies": ["S2-001"],
+      "acceptance": [
+        "a",
+        "b",
+        "c"
+      ],
+      "steps": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "e1"
+      ],
+      "dependencies": [
+        "S2-001"
+      ],
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     },
     {
       "id": "S2-001",
@@ -45,21 +82,56 @@
       "story_ref": "S2.1",
       "category": "workflow",
       "description": "higher slice dependency",
-      "contract_refs": ["specs/WORKFLOW_CONTRACT.md §3.5"],
-      "plan_refs": ["IMPLEMENTATION_PLAN.md Phase 1"],
+      "contract_refs": [
+        "specs/WORKFLOW_CONTRACT.md \u00a73.5"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Phase 1"
+      ],
       "scope": {
-        "touch": ["plans/prd_schema_check.sh"],
+        "touch": [
+          "plans/prd_schema_check.sh"
+        ],
         "avoid": []
       },
-      "acceptance": ["a", "b", "c"],
-      "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": ["e1"],
+      "acceptance": [
+        "a",
+        "b",
+        "c"
+      ],
+      "steps": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "e1"
+      ],
       "dependencies": [],
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     }
   ]
 }

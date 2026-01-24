@@ -4,6 +4,7 @@ import sys
 
 ANCHOR_HEADER_RE = re.compile(r"^##\s+(Anchor-[0-9]+):\s*(.+)$")
 CONTRACT_REF_RE = re.compile(r"\(Contract\s+([^\)]+)\)\s*$")
+SECTION_REF_RE = re.compile(r"(§\s*[0-9]+(?:\.[0-9A-Za-z]+)*)")
 RULE_HEADER_RE = re.compile(r"^##\s+(VR-[A-Za-z0-9]+):\s*(.+)$")
 FIELD_RE = re.compile(r"^\*\*(.+?):\*\*\s*(.*)$")
 GATE_ID_RE = re.compile(r"\bVR-\d{3}[a-z]?\b")
@@ -39,6 +40,16 @@ def parse_contract_version(contract_text: str) -> str:
     return ""
 
 
+def extract_contract_ref(text: str) -> str:
+    match = SECTION_REF_RE.search(text)
+    if match:
+        return match.group(1).replace(" ", "")
+    match = re.search(r"Contract\s+([0-9]+(?:\.[0-9A-Za-z]+)*)", text)
+    if match:
+        return f"§{match.group(1)}"
+    return ""
+
+
 def find_section_line(lines: list[str], section_ref: str) -> int:
     targets = [section_ref]
     if section_ref.startswith("§"):
@@ -53,39 +64,62 @@ def find_section_line(lines: list[str], section_ref: str) -> int:
 def parse_anchors(anchors_text: str, contract_lines: list[str], source: str) -> list[dict]:
     anchors = []
     seen = set()
-    for raw_line in anchors_text.splitlines():
-        line = raw_line.strip()
-        if not line.startswith("## "):
-            continue
-        match = ANCHOR_HEADER_RE.match(line)
-        if not match:
-            continue
-        anchor_id = match.group(1)
-        rest = match.group(2).strip()
-        ref_match = CONTRACT_REF_RE.search(rest)
-        if not ref_match:
-            fail(f"anchor {anchor_id} missing contract ref: {line}")
-        contract_ref = ref_match.group(1).strip()
-        title = rest[: ref_match.start()].rstrip()
-        if not title:
-            fail(f"anchor {anchor_id} missing title: {line}")
-        if anchor_id in seen:
-            fail(f"duplicate anchor id: {anchor_id}")
-        seen.add(anchor_id)
-        line_number = find_section_line(contract_lines, contract_ref)
+    current = None
+
+    def flush() -> None:
+        nonlocal current
+        if current is None:
+            return
+        if not current.get("contract_ref"):
+            fail(f"anchor {current.get('id', '<unknown>')} missing contract ref in {source}")
+        if current["id"] in seen:
+            fail(f"duplicate anchor id: {current['id']}")
+        seen.add(current["id"])
+        line_number = find_section_line(contract_lines, current["contract_ref"])
         if line_number == 0:
-            fail(f"anchor {anchor_id} contract ref not found in CONTRACT.md: {contract_ref}")
+            fail(
+                f"anchor {current['id']} contract ref not found in CONTRACT.md: {current['contract_ref']}"
+            )
         anchors.append(
             {
-                "id": anchor_id,
-                "title": title,
-                "contract_ref": contract_ref,
+                "id": current["id"],
+                "title": current["title"],
+                "contract_ref": current["contract_ref"],
                 "proof": {
-                    "section": contract_ref,
+                    "section": current["contract_ref"],
                     "line": line_number,
                 },
             }
         )
+        current = None
+
+    for raw_line in anchors_text.splitlines():
+        line = raw_line.rstrip()
+        header = ANCHOR_HEADER_RE.match(line.strip())
+        if header:
+            flush()
+            anchor_id = header.group(1)
+            rest = header.group(2).strip()
+            ref_match = CONTRACT_REF_RE.search(rest)
+            contract_ref = ""
+            title = rest
+            if ref_match:
+                contract_ref = ref_match.group(1).strip()
+                title = rest[: ref_match.start()].rstrip()
+            if not title:
+                fail(f"anchor {anchor_id} missing title: {line}")
+            current = {"id": anchor_id, "title": title, "contract_ref": contract_ref}
+            continue
+
+        if current is None:
+            continue
+
+        if not current.get("contract_ref"):
+            ref = extract_contract_ref(line)
+            if ref:
+                current["contract_ref"] = ref
+
+    flush()
     if not anchors:
         fail(f"no anchors parsed from {source}")
     return sorted(anchors, key=lambda item: item["id"])
@@ -154,10 +188,16 @@ def parse_validation_rules(rules_text: str, source: str) -> list[dict]:
             label = field_match.group(1).strip()
             value = field_match.group(2).strip()
             label_lower = label.lower()
-            if label_lower == "contract ref":
-                current["contract_ref"] = value
+            if label_lower in ("contract ref", "contract citation"):
+                current["contract_ref"] = extract_contract_ref(value) or value
                 continue
             if label_lower == "rule":
+                current["rule"] = value
+                continue
+            if label_lower == "trigger" and not current["rule"]:
+                current["rule"] = value
+                continue
+            if label_lower == "failure mode" and not current["rule"]:
                 current["rule"] = value
                 continue
             if label_lower == "gate id":
@@ -183,8 +223,12 @@ def parse_validation_rules(rules_text: str, source: str) -> list[dict]:
                     fail(f"gate id list entry missing VR-XXX value: {line}")
             continue
 
+        if not current["contract_ref"]:
+            ref = extract_contract_ref(line)
+            if ref:
+                current["contract_ref"] = ref
+
     flush()
     if not rules:
         fail(f"no validation rules parsed from {source}")
     return sorted(rules, key=lambda item: item["id"])
-

@@ -1,0 +1,71 @@
+version: 1
+policy:
+  require_lockfile_pin: true
+  require_resolved_features: true
+  require_snapshot_on_lock_change: true
+
+crates:
+  tokio:
+    topics:
+      - spawn
+      - time
+      - sync
+      - select
+      - channels
+  reqwest:
+    topics:
+      - client
+      - timeouts
+      - proxy
+      - tls
+      - retries
+  hyper:
+    topics:
+      - client
+      - server
+      - body
+
+  serde:
+    topics:
+      - derive
+      - attributes
+      - serde_json_interop
+  serde_json:
+    topics:
+      - value
+      - streaming
+      - errors
+  anyhow:
+    topics:
+      - context
+      - error_chain
+  thiserror:
+    topics:
+      - derive
+      - source
+
+  tracing:
+    topics:
+      - instrument
+      - spans
+      - events
+  tracing_subscriber:
+    topics:
+      - fmt
+      - filtering
+      - env_filter
+
+  chrono:
+    topics:
+      - parsing
+      - formatting
+      - timezones
+  rust_decimal:
+    topics:
+      - parsing
+      - rounding
+      - arithmetic
+
+notes:
+  - This list should be derived from artifacts/verify/cargo_tree.features_normal.txt.
+  - Remove anything not used directly by our code (only snapshot what we touch).

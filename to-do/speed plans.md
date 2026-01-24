@@ -77,6 +77,7 @@ Add to `plans/workflow_acceptance.sh`:
 In `specs/WORKFLOW_CONTRACT.md` update **existing WF ids** (avoid new WF ids unless necessary):
 
 - Update **WF‑5.5** (verify summary definition) to reference a summarizer script (e.g., `plans/verify_summary.sh`) instead of hardcoded grep text.
+  Keep the console interface as `VERIFY_CONSOLE=auto|quiet|verbose` with `VERIFY_FAIL_TAIL_LINES` and `VERIFY_FAIL_SUMMARY_LINES`; do **not** introduce `VERIFY_CONSOLE_MODE` or new knob names.
     
     WORKFLOW_CONTRACT
     
@@ -109,7 +110,7 @@ Add fixtures as files:
 - `plans/fixtures/verify_logs/node_fail.log`  
     Acceptance should run:
     
-- `./plans/verify_summary.sh <fixture> > /tmp/summary`
+- `./plans/verify_summary.sh <fixture> > /tmp/summary` (helper reads `VERIFY_FAIL_TAIL_LINES`/`VERIFY_FAIL_SUMMARY_LINES`)
     
 - Assert summary contains known “signature” lines.
     

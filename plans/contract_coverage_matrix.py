@@ -7,8 +7,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PRD_FILE = Path(os.environ.get("PRD_FILE", "plans/prd.json"))
-ANCHORS_FILE = Path(os.environ.get("CONTRACT_ANCHORS", "docs/contract_anchors.md"))
-RULES_FILE = Path(os.environ.get("VALIDATION_RULES", "docs/validation_rules.md"))
+ANCHORS_FILE = Path(
+    os.environ.get("CONTRACT_ANCHORS", "docs/architecture/contract_anchors.md")
+)
+RULES_FILE = Path(
+    os.environ.get("VALIDATION_RULES", "docs/architecture/validation_rules.md")
+)
+KERNEL_FILE = Path(os.environ.get("CONTRACT_KERNEL", "docs/contract_kernel.json"))
 OUT_FILE = Path(os.environ.get("CONTRACT_COVERAGE_OUT", "docs/contract_coverage.md"))
 STRICT = os.environ.get("CONTRACT_COVERAGE_STRICT", "0") == "1"
 
@@ -59,6 +64,25 @@ def parse_rule_ids(md: str) -> list[tuple[str, str]]:
     return dedup(out)
 
 
+def parse_kernel_ids(path: Path) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    anchors: list[tuple[str, str]] = []
+    rules: list[tuple[str, str]] = []
+    for anchor in data.get("anchors", []) or []:
+        anchor_id = anchor.get("id")
+        if not anchor_id:
+            continue
+        title = (anchor.get("title") or "").strip()
+        anchors.append((anchor_id, title))
+    for rule in data.get("validation_rules", []) or []:
+        rule_id = rule.get("id")
+        if not rule_id:
+            continue
+        title = (rule.get("title") or "").strip()
+        rules.append((rule_id, title))
+    return dedup(anchors), dedup(rules)
+
+
 def dedup(items: list[tuple[str, str]]) -> list[tuple[str, str]]:
     seen = set()
     out = []
@@ -90,11 +114,20 @@ def main() -> int:
                 ids_in_prd.add(cid)
                 id_to_stories.setdefault(cid, []).append(sid)
 
-    anchors_text = read_text(ANCHORS_FILE)
-    rules_text = read_text(RULES_FILE)
+    anchors: list[tuple[str, str]] = []
+    rules: list[tuple[str, str]] = []
+    if KERNEL_FILE.exists():
+        try:
+            anchors, rules = parse_kernel_ids(KERNEL_FILE)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"ERROR: invalid contract kernel: {KERNEL_FILE} ({exc})", file=sys.stderr)
+            return 2
 
-    anchors = parse_anchor_ids(anchors_text) if anchors_text else []
-    rules = parse_rule_ids(rules_text) if rules_text else []
+    if not anchors and not rules:
+        anchors_text = read_text(ANCHORS_FILE)
+        rules_text = read_text(RULES_FILE)
+        anchors = parse_anchor_ids(anchors_text) if anchors_text else []
+        rules = parse_rule_ids(rules_text) if rules_text else []
 
     lines: list[str] = []
     lines.append("# Contract Coverage Matrix\n")

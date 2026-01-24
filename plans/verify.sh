@@ -255,11 +255,13 @@ is_workflow_file() {
   case "$1" in
     AGENTS.md|specs/WORKFLOW_CONTRACT.md|CONTRACT.md|IMPLEMENTATION_PLAN.md) return 0 ;;
     verify.sh) return 0 ;;
-    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json) return 0 ;;
+    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json|plans/prd_gate.sh|plans/prd_audit_check.sh|plans/tests/test_workflow_acceptance_fallback.sh) return 0 ;;
     plans/workflow_verify.sh) return 0 ;;
     plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
     plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;
     plans/story_verify_allowlist.txt) return 0 ;;
+    specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml) return 0 ;;
+    tools/vendor_docs_lint_rust.py) return 0 ;;
     scripts/build_contract_kernel.py|scripts/check_contract_kernel.py|scripts/contract_kernel_lib.py|scripts/test_contract_kernel.py) return 0 ;;
     docs/contract_kernel.json|docs/contract_anchors.md|docs/validation_rules.md) return 0 ;;
     *) return 1 ;;
@@ -467,6 +469,7 @@ MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
 CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
 POSTMORTEM_CHECK_TIMEOUT="${POSTMORTEM_CHECK_TIMEOUT:-1m}"
 WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-20m}"
+VENDOR_DOCS_LINT_TIMEOUT="${VENDOR_DOCS_LINT_TIMEOUT:-1m}"
 CONTRACT_COVERAGE_CI_SENTINEL="${CONTRACT_COVERAGE_CI_SENTINEL:-plans/contract_coverage_ci_strict}"
 
 has_playwright_config() {
@@ -528,10 +531,18 @@ echo "mode=$MODE verify_mode=${VERIFY_MODE:-none} root=$ROOT"
 echo "verify_run_id=$VERIFY_RUN_ID artifacts_dir=$VERIFY_ARTIFACTS_DIR"
 if is_ci; then echo "CI=1"; fi
 
-# Dirty tree warning (never fail; Ralph should keep tree clean via commits)
+# Dirty tree enforcement (fail closed in CI; local override with VERIFY_ALLOW_DIRTY=1)
 if command -v git >/dev/null 2>&1; then
-  if [[ -n "$(git status --porcelain 2>/dev/null || true)" ]]; then
-    warn "Working tree is dirty"
+  dirty_status="$(git status --porcelain 2>/dev/null || true)"
+  if [[ -n "$dirty_status" ]]; then
+    if is_ci; then
+      fail "Working tree is dirty in CI"
+    fi
+    if [[ "${VERIFY_ALLOW_DIRTY:-0}" != "1" ]]; then
+      fail "Working tree is dirty (set VERIFY_ALLOW_DIRTY=1 to continue locally)"
+    fi
+    warn "Working tree is dirty (VERIFY_ALLOW_DIRTY=1)"
+    printf '%s\n' "$dirty_status" >&2
   fi
 fi
 
@@ -649,6 +660,19 @@ else
     run_logged "postmortem_check" "$POSTMORTEM_CHECK_TIMEOUT" "$ROOT/plans/postmortem_check.sh"
   else
     fail "Missing postmortem check script: plans/postmortem_check.sh"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# 1c) Rust vendor docs lint
+# -----------------------------------------------------------------------------
+if [[ -f Cargo.toml ]]; then
+  if [[ -f "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml" ]]; then
+    log "1c) Rust vendor docs lint"
+    ensure_python
+    run_logged "vendor_docs_lint_rust" "$VENDOR_DOCS_LINT_TIMEOUT" "$PYTHON_BIN" "tools/vendor_docs_lint_rust.py"
+  else
+    fail "Missing vendor docs config: specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml"
   fi
 fi
 

@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 CUTTER_PROMPT="${CUTTER_PROMPT:-plans/prompts/cutter.md}"
-PRD_LINT_SH="${PRD_LINT_SH:-./plans/prd_lint.sh}"
+PRD_GATE_SH="${PRD_GATE_SH:-./plans/prd_gate.sh}"
 MAX_REPAIR_PASSES="${MAX_REPAIR_PASSES:-5}"
 
 CUTTER_AGENT_CMD="${CUTTER_AGENT_CMD:-codex}"
@@ -23,8 +23,8 @@ if [[ ! -f "$CUTTER_PROMPT" ]]; then
   exit 2
 fi
 
-if [[ ! -f "$PRD_LINT_SH" ]]; then
-  echo "[cut_prd] ERROR: missing lint script: $PRD_LINT_SH" >&2
+if [[ ! -f "$PRD_GATE_SH" ]]; then
+  echo "[cut_prd] ERROR: missing gate script: $PRD_GATE_SH" >&2
   exit 2
 fi
 
@@ -55,11 +55,11 @@ run_cutter() {
   fi
 }
 
-run_lint() {
-  if [[ -x "$PRD_LINT_SH" ]]; then
-    "$PRD_LINT_SH"
+run_gate() {
+  if [[ -x "$PRD_GATE_SH" ]]; then
+    "$PRD_GATE_SH"
   else
-    bash "$PRD_LINT_SH"
+    bash "$PRD_GATE_SH"
   fi
 }
 
@@ -67,14 +67,14 @@ pass=1
 while [[ "$pass" -le "$MAX_REPAIR_PASSES" ]]; do
   echo "[cut_prd] Story Cutter pass $pass/$MAX_REPAIR_PASSES"
   run_cutter
-  echo "[cut_prd] Linting PRD..."
-  if run_lint; then
-    echo "[cut_prd] Lint clean."
+  echo "[cut_prd] Gating PRD..."
+  if run_gate; then
+    echo "[cut_prd] Gate clean."
     exit 0
   fi
-  echo "[cut_prd] Lint failed; retrying." >&2
+  echo "[cut_prd] Gate failed; retrying." >&2
   pass=$((pass + 1))
 done
 
-echo "[cut_prd] ERROR: lint failed after $MAX_REPAIR_PASSES passes" >&2
+echo "[cut_prd] ERROR: gate failed after $MAX_REPAIR_PASSES passes" >&2
 exit 1

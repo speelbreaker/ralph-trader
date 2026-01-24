@@ -223,6 +223,36 @@
       ]
     },
     {
+      "id": "WF-1.15",
+      "title": "plans/prd_gate.sh  deterministic PRD gate (schema + lint + ref check)",
+      "enforcement": [
+        "plans/prd_gate.sh",
+        "plans/prd_pipeline.sh"
+      ],
+      "artifacts": [
+        "plans/prd_gate.sh"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12)",
+        "plans/tests/test_prd_gate.sh"
+      ]
+    },
+    {
+      "id": "WF-1.16",
+      "title": "plans/prd_audit_check.sh  PRD audit output validator",
+      "enforcement": [
+        "plans/prd_audit_check.sh",
+        "plans/run_prd_auditor.sh"
+      ],
+      "artifacts": [
+        "plans/prd_audit.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 12)",
+        "plans/tests/test_prd_audit_check.sh"
+      ]
+    },
+    {
       "id": "WF-2.1",
       "title": "1) Contract alignment is mandatory.",
       "enforcement": [
@@ -401,10 +431,11 @@
     },
     {
       "id": "WF-3.3",
-      "title": "Ralph MUST validate for every item required fields per 3 are present; acceptance has  3 entries; steps has  5 entries; verify[] contains ./plans/verify.sh.",
+      "title": "Ralph MUST validate for every item required fields per 3 are present; acceptance has >=3 entries; steps has >=5 entries; evidence has >=1 entry; verify[] contains ./plans/verify.sh plus a targeted check unless needs_human_decision=true.",
       "enforcement": [
         "plans/prd_schema_check.sh",
-        "plans/ralph.sh (preflight)"
+        "plans/ralph.sh (preflight)",
+        "plans/prd_gate.sh"
       ],
       "artifacts": [
         "plans/prd.json"
@@ -432,7 +463,8 @@
       "title": "Each item MUST include",
       "enforcement": [
         "plans/prd_schema_check.sh",
-        "plans/ralph.sh (preflight)"
+        "plans/ralph.sh (preflight)",
+        "plans/prd_gate.sh"
       ],
       "artifacts": [
         "plans/prd.json"
@@ -453,6 +485,35 @@
       ],
       "tests": [
         "plans/workflow_acceptance.sh (Test 14)"
+      ]
+    },
+    {
+      "id": "WF-3.7",
+      "title": "PRD lint requirements (execution/risk/durability evidence, observability, liveness)",
+      "enforcement": [
+        "plans/prd_lint.sh",
+        "plans/prd_gate.sh"
+      ],
+      "artifacts": [
+        "plans/prd.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0h)",
+        "plans/tests/test_prd_gate.sh"
+      ]
+    },
+    {
+      "id": "WF-3.8",
+      "title": "PRD placeholder tokens blocked unless needs_human_decision=true",
+      "enforcement": [
+        "plans/prd_schema_check.sh",
+        "plans/prd_gate.sh"
+      ],
+      "artifacts": [
+        "plans/prd.json"
+      ],
+      "tests": [
+        "plans/tests/test_prd_gate.sh"
       ]
     },
     {

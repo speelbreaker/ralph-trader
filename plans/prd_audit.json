@@ -1,18 +1,18 @@
 {
   "project": "StoicTrader",
-  "prd_sha256": "cf81ad6292c1ca884baa13f2c2909773130faaab5d448fa52eba76aef2141897",
+  "prd_sha256": "7b12584665070bf61e7b8fa794a02be0f5a313b7fbba5971a236ecefec018313",
   "inputs": {
     "prd": "plans/prd.json",
     "contract": "CONTRACT.md",
     "plan": "IMPLEMENTATION_PLAN.md",
-    "workflow_contract": "specs/WORKFLOW_CONTRACT.md"
+    "workflow_contract": "WORKFLOW_CONTRACT.md"
   },
   "summary": {
-    "items_total": 14,
-    "items_pass": 14,
-    "items_fail": 0,
-    "items_blocked": 0,
-    "must_fix_count": 0
+    "items_total": 11,
+    "items_pass": 2,
+    "items_fail": 7,
+    "items_blocked": 2,
+    "must_fix_count": 7
   },
   "global_findings": {
     "must_fix": [],
@@ -27,7 +27,9 @@
       "reasons": [],
       "schema_check": {
         "missing_fields": [],
-        "notes": []
+        "notes": [
+          "Schema ok: required fields present; acceptance >= 3 and steps >= 5."
+        ]
       },
       "contract_check": {
         "refs_present": true,
@@ -35,32 +37,88 @@
         "contract_refs_resolved": true,
         "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Contract refs map to verification harness and evidence guardrail; acceptance checks cargo test and check_vq_evidence."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
         "has_targeted_checks": true,
         "evidence_concrete": true,
-        "notes": []
+        "notes": [
+          "Targeted checks include bash -n and rg assertions in verify.sh."
+        ]
       },
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "scope.touch limited to plans/verify.sh."
+        ]
       },
       "dependency_check": {
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "No dependencies."
+        ]
+      },
+      "patch_suggestions": []
+    },
+    {
+      "id": "S1-010",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": {
+        "missing_fields": [],
+        "notes": [
+          "Schema ok: required fields present; acceptance >= 3 and steps >= 5."
+        ]
+      },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "contract_refs_resolved": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": [
+          "Appendix A defaults and AT-341/AT-040 are covered in acceptance."
+        ]
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": [
+          "Targeted cargo test present for soldier_infra defaults."
+        ]
+      },
+      "scope_check": {
+        "too_broad": false,
+        "est_size_too_large": false,
+        "notes": [
+          "scope.touch constrained to soldier_infra crate."
+        ]
+      },
+      "dependency_check": {
+        "invalid": false,
+        "forward_dep": false,
+        "cycle": false,
+        "notes": [
+          "Depends on S1-001 which is present in slice."
+        ]
       },
       "patch_suggestions": []
     },
     {
       "id": "S1-001",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: scope.touch spans workspace root, both crates, and plans/verify.sh; split or move verify.sh changes into S1-000."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -80,23 +138,33 @@
         "notes": []
       },
       "scope_check": {
-        "too_broad": false,
+        "too_broad": true,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Touch list includes multiple subsystems (workspace, core, infra, and workflow harness)."
+        ]
       },
       "dependency_check": {
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-000 and is within slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Remove plans/verify.sh from S1-001 scope.touch/acceptance/steps and keep verify.sh changes in S1-000.",
+        "If verify.sh changes are required here, split into a separate workflow story and keep S1-001 scoped to workspace + crates only."
+      ]
     },
     {
       "id": "S1-002",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: enforcing_contract_ats lists AT-000 which is not in the contract digest; replace with AT-333 and any applicable ATs.",
+        "MUST_FIX: scope.touch spans soldier_core and soldier_infra; split into separate stories or narrow scope."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -107,7 +175,9 @@
         "contract_refs_resolved": true,
         "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Normalize contract_refs naming to match instrument_kind and linear perpetuals in Definitions."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -116,23 +186,32 @@
         "notes": []
       },
       "scope_check": {
-        "too_broad": false,
+        "too_broad": true,
         "est_size_too_large": false,
-        "notes": []
+        "notes": [
+          "Touch list crosses core and infra crates."
+        ]
       },
       "dependency_check": {
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-001 which is present in slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Replace enforcing_contract_ats with AT-333 (instrument metadata) and any other relevant ATs.",
+        "Split scope into two stories: infra Deribit public instrument structs and core InstrumentKind/RiskState mapping."
+      ]
     },
     {
       "id": "S1-003",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: enforcing_contract_ats lists AT-000 which is not in the contract digest; use AT-104 for TTL stale gating."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -160,15 +239,22 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-002 which is present in slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Replace enforcing_contract_ats with AT-104 (instrument cache TTL stale blocks opens)."
+      ]
     },
     {
       "id": "S1-006",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: observability.metrics omits instrument_cache_refresh_errors_total while acceptance requires it.",
+        "MUST_FIX: enforcing_contract_ats lists AT-000 which is not in the contract digest; use AT-104 or the observability ATs tied to TTL."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -179,7 +265,9 @@
         "contract_refs_resolved": true,
         "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Contract-required observability includes instrument_cache_refresh_errors_total when refresh fails."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -196,15 +284,22 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-003 which is present in slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Add instrument_cache_refresh_errors_total to observability.metrics.",
+        "Replace enforcing_contract_ats with AT-104 (and any observability ATs tied to TTL)."
+      ]
     },
     {
       "id": "S1-004",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: enforcing_contract_ats lists AT-000 which is not in the contract digest; map to the OrderSize-related ATs (e.g., AT-277/AT-920 as applicable)."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -232,15 +327,22 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-002 and S1-008 which are present in slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Replace enforcing_contract_ats with the specific ATs tied to OrderSize invariants (for example AT-277 and AT-920 as applicable)."
+      ]
     },
     {
       "id": "S1-005",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: acceptance says reduce_only must not be derived from TradingMode, which contradicts contract Deribit facts F-07 (ReduceOnly/Kill requires reduce_only=true).",
+        "MUST_FIX: enforcing_contract_ats lists AT-000 which is not in the contract digest; use AT-277 and any relevant ATs."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -249,9 +351,11 @@
         "refs_present": true,
         "refs_specific": true,
         "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": []
+        "acceptance_enforces_invariant": false,
+        "contradiction": true,
+        "notes": [
+          "Contract F-07 requires reduce_only=true in ReduceOnly/Kill; acceptance forbids TradingMode-derived reduce_only."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -268,15 +372,23 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-004 and S1-009 which are present in slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Update acceptance to require reduce_only=true when TradingMode is ReduceOnly/Kill and include F-07 in contract_refs.",
+        "Replace enforcing_contract_ats with AT-277 and any ATs tied to reduce_only enforcement."
+      ]
     },
     {
       "id": "S1-007",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "FAIL",
+      "reasons": [
+        "MUST_FIX: acceptance requires Rejected(ContractsAmountMismatch) but reason_codes.values lists DispatchRejectReason::UnitMismatch; align reason_codes with acceptance.",
+        "MUST_FIX: enforcing_contract_ats lists AT-000 which is not in the contract digest; use AT-920 and AT-280 (tolerance) if applicable."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -287,7 +399,9 @@
         "contract_refs_resolved": true,
         "acceptance_enforces_invariant": true,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Normalize contract_refs naming for contracts_amount_match_tolerance."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -304,15 +418,22 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "Depends on S1-005 which is present in slice."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Align reason_codes.values with the acceptance reason (Rejected(ContractsAmountMismatch)).",
+        "Replace enforcing_contract_ats with AT-920 (mismatch reject) and AT-280 if tolerance default is asserted."
+      ]
     },
     {
       "id": "S1-008",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "NEEDS_HUMAN_DECISION: acceptance is documentation-only and does not enforce any invariant implied by contract_refs."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -321,9 +442,11 @@
         "refs_present": true,
         "refs_specific": true,
         "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
+        "acceptance_enforces_invariant": false,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Discovery-only acceptance does not enforce contract invariants; clarify if this is allowed."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -340,15 +463,22 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "No dependencies."
+        ]
       },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Set needs_human_decision=true and add human_blocker clarifying whether discovery-only stories can cite contract invariants.",
+        "Alternatively move the contract_refs to implementation stories or add acceptance that maps each contract invariant to required tests."
+      ]
     },
     {
       "id": "S1-009",
       "slice": 1,
-      "status": "PASS",
-      "reasons": [],
+      "status": "BLOCKED",
+      "reasons": [
+        "NEEDS_HUMAN_DECISION: acceptance is documentation-only and does not enforce any invariant implied by contract_refs."
+      ],
       "schema_check": {
         "missing_fields": [],
         "notes": []
@@ -357,9 +487,11 @@
         "refs_present": true,
         "refs_specific": true,
         "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
+        "acceptance_enforces_invariant": false,
         "contradiction": false,
-        "notes": []
+        "notes": [
+          "Discovery-only acceptance does not enforce contract invariants; clarify if this is allowed."
+        ]
       },
       "verify_check": {
         "has_verify_sh": true,
@@ -376,153 +508,14 @@
         "invalid": false,
         "forward_dep": false,
         "cycle": false,
-        "notes": []
+        "notes": [
+          "No dependencies."
+        ]
       },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S2-000",
-      "slice": 2,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": []
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": []
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": []
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": []
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": []
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S2-001",
-      "slice": 2,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": []
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": []
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": []
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": []
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": []
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S2-002",
-      "slice": 2,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": []
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": []
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": []
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": []
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": []
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S2-003",
-      "slice": 2,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": []
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": []
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": []
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": []
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": []
-      },
-      "patch_suggestions": []
+      "patch_suggestions": [
+        "Set needs_human_decision=true and add human_blocker clarifying whether discovery-only stories can cite contract invariants.",
+        "Alternatively move the contract_refs to implementation stories or add acceptance that maps each contract invariant to required tests."
+      ]
     }
   ]
 }

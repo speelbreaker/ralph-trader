@@ -13,6 +13,8 @@ PRD_CUTTER_CMD="${PRD_CUTTER_CMD:-}"
 PRD_CUTTER_ARGS="${PRD_CUTTER_ARGS:-}"
 PRD_AUTOFIX_CMD="${PRD_AUTOFIX_CMD:-}"
 PRD_AUTOFIX_ARGS="${PRD_AUTOFIX_ARGS:-}"
+PRD_GATE_CMD="${PRD_GATE_CMD:-}"
+PRD_GATE_ARGS="${PRD_GATE_ARGS:-}"
 PRD_AUDITOR_CMD="${PRD_AUDITOR_CMD:-}"
 PRD_AUDITOR_ARGS="${PRD_AUDITOR_ARGS:-}"
 PRD_PATCHER_CMD="${PRD_PATCHER_CMD:-}"
@@ -91,6 +93,8 @@ append_progress_note() {
 write_blocked() {
   local reason="$1"
   local detail="$2"
+  local audit_json="${3:-}"
+  local audit_stdout="${4:-}"
   local prd_hash
   prd_hash="$(sha256_file "$PRD_FILE")"
   mkdir -p "$(dirname "$PRD_PIPELINE_BLOCKED_JSON")"
@@ -100,10 +104,12 @@ write_blocked() {
     --arg prd_file "$PRD_FILE" \
     --arg prd_hash "$prd_hash" \
     --arg lint_json "$PRD_LINT_JSON" \
+    --arg audit_json "$audit_json" \
+    --arg audit_stdout "$audit_stdout" \
     --arg schema_check "./plans/prd_schema_check.sh" \
     --argjson max_repair_passes "$MAX_REPAIR_PASSES" \
     --arg timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-    '{reason:$reason, detail:$detail, prd_file:$prd_file, prd_hash:$prd_hash, lint_json:$lint_json, schema_check:$schema_check, max_repair_passes:$max_repair_passes, timestamp:$timestamp}' \
+    '{reason:$reason, detail:$detail, prd_file:$prd_file, prd_hash:$prd_hash, lint_json:$lint_json, audit_json:$audit_json, audit_stdout:$audit_stdout, schema_check:$schema_check, max_repair_passes:$max_repair_passes, timestamp:$timestamp}' \
     > "$PRD_PIPELINE_BLOCKED_JSON"
 }
 
@@ -114,21 +120,21 @@ run_cmd() {
   local cmd_arr=()
   if [[ -z "$cmd" ]]; then
     echo "ERROR: $label command not set. Export ${label}_CMD." >&2
-    exit 2
+    return 2
   fi
   if [[ "$cmd" == *" "* ]]; then
     echo "ERROR: $label command must be a single executable path (no spaces). Use ${label}_ARGS for arguments." >&2
-    exit 2
+    return 2
   fi
   if [[ "$cmd" == /* || "$cmd" == ./* || "$cmd" == ../* ]]; then
     if [[ ! -x "$cmd" ]]; then
       echo "ERROR: $label command not executable: $cmd" >&2
-      exit 2
+      return 2
     fi
   else
     if ! command -v "$cmd" >/dev/null 2>&1; then
       echo "ERROR: $label command not found in PATH: $cmd" >&2
-      exit 2
+      return 2
     fi
   fi
   cmd_arr+=("$cmd")
@@ -140,6 +146,19 @@ run_cmd() {
   fi
   echo "==> $label" >&2
   "${cmd_arr[@]}"
+  return $?
+}
+
+run_gate() {
+  if [[ -z "$PRD_GATE_CMD" ]]; then
+    echo "ERROR: PRD_GATE_CMD not set and ./plans/prd_gate.sh missing." >&2
+    return 2
+  fi
+  PRD_FILE="$PRD_FILE" \
+    PRD_LINT_JSON="$PRD_LINT_JSON" \
+    PRD_REF_CHECK_ENABLED="${PRD_REF_CHECK_ENABLED:-1}" \
+    PRD_GATE_ALLOW_REF_SKIP="${PRD_GATE_ALLOW_REF_SKIP:-0}" \
+    run_cmd PRD_GATE "$PRD_GATE_CMD" "$PRD_GATE_ARGS"
 }
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -153,8 +172,11 @@ fi
 if [[ -z "$PRD_AUTOFIX_CMD" && -x "./plans/prd_autofix.sh" ]]; then
   PRD_AUTOFIX_CMD="./plans/prd_autofix.sh"
 fi
+if [[ -z "$PRD_GATE_CMD" && -x "./plans/prd_gate.sh" ]]; then
+  PRD_GATE_CMD="./plans/prd_gate.sh"
+fi
 
-# Stage A: Story Cutter + lint/repair loop
+# Stage A: Story Cutter + gate/repair loop
 pass=0
 for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
   echo "==> Stage A (repair pass $i/$MAX_REPAIR_PASSES)" >&2
@@ -165,7 +187,7 @@ for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
     exit 4
   fi
 
-  if ./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"; then
+  if run_gate; then
     pass=1
     break
   fi
@@ -178,16 +200,16 @@ for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
       echo "ERROR: PRD schema check failed after autofix on pass $i." >&2
       exit 4
     fi
-    if ./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"; then
+    if run_gate; then
       pass=1
       break
     fi
   fi
 
   if [[ -z "$PRD_CUTTER_CMD" ]]; then
-    write_blocked "LINT_FAIL" "PRD lint failing and PRD_CUTTER_CMD not set after pass $i."
+    write_blocked "GATE_FAIL" "PRD gate failing and PRD_CUTTER_CMD not set after pass $i."
     echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
-    echo "ERROR: PRD lint failing and PRD_CUTTER_CMD not set after pass $i." >&2
+    echo "ERROR: PRD gate failing and PRD_CUTTER_CMD not set after pass $i." >&2
     exit 5
   fi
 
@@ -196,9 +218,9 @@ for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
   run_cmd PRD_CUTTER "$PRD_CUTTER_CMD" "$PRD_CUTTER_ARGS"
   post_hash="$(sha256_file "$PRD_FILE")"
   if [[ -n "$pre_hash" && "$pre_hash" == "$post_hash" ]]; then
-    write_blocked "NO_PROGRESS" "PRD_CUTTER produced no changes on pass $i; see lint at $PRD_LINT_JSON."
+    write_blocked "NO_PROGRESS" "PRD_CUTTER produced no changes on pass $i; see lint output at $PRD_LINT_JSON."
     echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
-    echo "ERROR: PRD_CUTTER produced no changes on pass $i; see lint at $PRD_LINT_JSON." >&2
+    echo "ERROR: PRD_CUTTER produced no changes on pass $i; see lint output at $PRD_LINT_JSON." >&2
     exit 6
   fi
   if ! ./plans/prd_schema_check.sh "$PRD_FILE"; then
@@ -207,19 +229,19 @@ for ((i=1; i<=MAX_REPAIR_PASSES; i++)); do
     echo "ERROR: PRD schema check failed after cutter on pass $i." >&2
     exit 4
   fi
-  if ./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"; then
+  if run_gate; then
     pass=1
     break
   fi
 
-  echo "Lint errors detected. Continuing repair loop..." >&2
+  echo "Gate errors detected. Continuing repair loop..." >&2
   sleep 0.2
 done
 
 if [[ "$pass" != "1" ]]; then
-  write_blocked "LINT_FAIL" "PRD lint still failing after $MAX_REPAIR_PASSES passes. Cutter should mark needs_human_decision for unresolved items."
+  write_blocked "GATE_FAIL" "PRD gate still failing after $MAX_REPAIR_PASSES passes. Cutter should mark needs_human_decision for unresolved items."
   echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
-  echo "ERROR: PRD lint still failing after $MAX_REPAIR_PASSES passes. Cutter should mark needs_human_decision for unresolved items." >&2
+  echo "ERROR: PRD gate still failing after $MAX_REPAIR_PASSES passes. Cutter should mark needs_human_decision for unresolved items." >&2
   exit 5
 fi
 
@@ -227,12 +249,6 @@ if [[ "${PRD_REF_CHECK_ENABLED:-1}" == "0" ]]; then
   msg="PRD ref check skipped: PRD_REF_CHECK_ENABLED=0."
   echo "WARN: $msg" >&2
   append_progress_note "$msg" "./plans/prd_pipeline.sh" "Set PRD_REF_CHECK_ENABLED=1 to enforce reference checks."
-elif [[ -x "./plans/prd_ref_check.sh" ]]; then
-  ./plans/prd_ref_check.sh "$PRD_FILE"
-else
-  msg="PRD ref check skipped: ./plans/prd_ref_check.sh not found or not executable."
-  echo "WARN: $msg" >&2
-  append_progress_note "$msg" "./plans/prd_pipeline.sh" "Add or restore plans/prd_ref_check.sh to enforce reference checks."
 fi
 
 export AUDIT_SCOPE
@@ -241,7 +257,18 @@ export AUDIT_SLICE
 # Stage B: Auditor
 if [[ -n "$PRD_AUDITOR_CMD" ]]; then
   echo "==> Stage B (Auditor)" >&2
+  set +e
   run_cmd PRD_AUDITOR "$PRD_AUDITOR_CMD" "$PRD_AUDITOR_ARGS"
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    audit_json="${AUDIT_OUTPUT_JSON:-plans/prd_audit.json}"
+    audit_stdout="${AUDIT_STDOUT_LOG:-.context/prd_auditor_stdout.log}"
+    write_blocked "AUDIT_FAIL" "PRD auditor failed; see audit outputs for details." "$audit_json" "$audit_stdout"
+    echo "<promise>BLOCKED_PRD_PIPELINE</promise>" >&2
+    echo "ERROR: PRD auditor failed; see audit outputs for details." >&2
+    exit 7
+  fi
 else
   echo "WARN: PRD_AUDITOR_CMD not set; skipping auditor." >&2
 fi
@@ -253,7 +280,6 @@ if [[ -n "$PRD_PATCHER_CMD" ]]; then
 fi
 
 # Stage C: Gate
-./plans/prd_schema_check.sh "$PRD_FILE"
-./plans/prd_lint.sh --json "$PRD_LINT_JSON" "$PRD_FILE"
+run_gate
 
 echo "PRD pipeline complete"

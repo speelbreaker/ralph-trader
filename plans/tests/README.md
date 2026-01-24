@@ -10,5 +10,7 @@ Run lint/update_task checks:
 
 ```bash
 ./plans/tests/test_prd_lint.sh
+./plans/tests/test_prd_gate.sh
+./plans/tests/test_prd_audit_check.sh
 ./plans/tests/test_update_task.sh
 ```

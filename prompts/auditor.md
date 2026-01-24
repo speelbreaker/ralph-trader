@@ -73,6 +73,13 @@ Each item MUST include ALL fields:
 - steps (string[] length >= 5)
 - verify (string[]; MUST include "./plans/verify.sh")
 - evidence (non-empty string[])
+- contract_must_evidence (object[]; quote/location/anchor)
+- enforcing_contract_ats (string[]; AT-###)
+- reason_codes (object; type + values)
+- enforcement_point (string; PolicyGuard|EvidenceGuard|DispatcherChokepoint|WAL|AtomicGroupExecutor|StatusEndpoint)
+- failure_mode (string[]; stall|hang|backpressure|missing|stale|parse_error)
+- observability { metrics[], status_fields[], status_contract_ats[] }
+- implementation_tests (string[])
 - dependencies (string[])
 - est_size ("XS"|"S"|"M")
 - risk ("low"|"med"|"high")
@@ -94,6 +101,15 @@ Mark FAIL if any item:
 - scope.touch is overly broad (e.g., "crates/**") without justification (treat as FAIL and require splitting)
 - est_size == "M" without split recommendation (treat as FAIL)
 - dependencies are invalid within the provided input (if clearly contradictory)
+- category execution|risk|durability missing contract_must_evidence/enforcing_contract_ats/reason_codes/enforcement_point
+- acceptance/steps mention reason code but reason_codes.values is empty
+- acceptance/steps mention metrics/logs but observability.metrics is empty
+- acceptance/steps mention /status or operator-visible fields but observability.status_fields/status_contract_ats are empty
+- acceptance/steps mention liveness/backpressure but failure_mode/implementation_tests are empty
+
+Output integrity requirements (non-negotiable):
+- If status is FAIL or BLOCKED: reasons[] and patch_suggestions[] must be non-empty.
+- If status is PASS: include at least one non-empty note in any of schema_check.notes, contract_check.notes, verify_check.notes, scope_check.notes, or dependency_check.notes (prove checks were run).
 
 Mark BLOCKED (not PASS) if:
 - contract_refs exist but are too vague to validate (e.g., “contract section about risk” without a specific section label)

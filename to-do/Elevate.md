@@ -108,8 +108,8 @@
 
 
 3. ==Verbose vs quiete== 
-- Add a new workflow rule under §5.5 (e.g., `WF-5.5.2`) in `specs/WORKFLOW_CONTRACT.md` stating that `plans/verify.sh` must support `VERIFY_CONSOLE=auto|quiet|verbose`, default `auto` → `quiet` in CI, and in quiet mode must print a failure tail + grep summary controlled by `VERIFY_FAIL_TAIL_LINES` and `VERIFY_FAIL_SUMMARY_LINES`.
-- Add the matching rule entry to `plans/workflow_contract_map.json` with enforcement in `plans/verify.sh` and tests in `plans/workflow_acceptance.sh`.
+- Update WF-5.5 in `specs/WORKFLOW_CONTRACT.md` to document `VERIFY_CONSOLE=auto|quiet|verbose` (auto -> quiet in CI) and the existing quiet-mode knobs `VERIFY_FAIL_TAIL_LINES` + `VERIFY_FAIL_SUMMARY_LINES`. Do **not** add `VERIFY_CONSOLE_MODE` or new knob names.
+- Update the WF-5.5 entry in `plans/workflow_contract_map.json` with enforcement in `plans/verify.sh` and tests in `plans/workflow_acceptance.sh`.
 
 **Outcome & Scope**
 
@@ -119,14 +119,15 @@
 
 **Design Sketch**
 
-- `plans/verify.sh` uses `VERIFY_CONSOLE` to choose verbose vs quiet; quiet always captures logs and calls `emit_fail_excerpt`.
-- `emit_fail_excerpt` uses `VERIFY_FAIL_TAIL_LINES` and `VERIFY_FAIL_SUMMARY_LINES` to show concise failure context.
-- `plans/workflow_acceptance.sh` adds static checks (grep/awk) to assert the quiet-mode wiring and header docs are present and consistent.
+- `plans/verify.sh` uses `VERIFY_CONSOLE` to choose verbose vs quiet; quiet always captures logs and calls `emit_fail_excerpt`.
+- `emit_fail_excerpt` uses `VERIFY_FAIL_TAIL_LINES` and `VERIFY_FAIL_SUMMARY_LINES` to show concise failure context.
+- If a helper is introduced (e.g., `plans/verify_summary.sh`), it must read the same knobs; do not add new env vars.
+- `plans/workflow_acceptance.sh` adds static checks (grep/awk) to assert the quiet-mode wiring and header docs are present and consistent.
 
 **Change List (patch plan)**
 
-- `specs/WORKFLOW_CONTRACT.md`: add `WF-5.5.2` text under verify gates/output discipline describing `VERIFY_CONSOLE` and excerpt knobs.
-- `plans/workflow_contract_map.json`: add `WF-5.5.2` mapping to `plans/verify.sh` and the new acceptance test location.
+- `specs/WORKFLOW_CONTRACT.md`: update WF-5.5 text under verify gates/output discipline describing `VERIFY_CONSOLE` and excerpt knobs.
+- `plans/workflow_contract_map.json`: update the WF-5.5 mapping to `plans/verify.sh` and the new acceptance test location.
 - `plans/verify.sh`:
     - Ensure the header “Logging/timeouts” block lists `VERIFY_CONSOLE`, `VERIFY_FAIL_TAIL_LINES`, `VERIFY_FAIL_SUMMARY_LINES`.
     - Ensure quiet mode path calls `emit_fail_excerpt` and that `emit_fail_excerpt` reads both env knobs.
@@ -151,7 +152,7 @@
 
 **Failure Modes & Rollback**
 
-- New WF rule added but map not updated → workflow contract gate fails; rollback by syncing `plans/workflow_contract_map.json` or reverting the WF rule.
+- WF-5.5 updated but map not updated → workflow contract gate fails; rollback by syncing `plans/workflow_contract_map.json` or reverting the WF-5.5 edit.
 - Acceptance grep/awk too brittle → workflow acceptance fails; rollback by loosening pattern or moving checks next to existing verify.sh checks.
 - Header docs drift from behavior → acceptance fails; rollback by re-aligning header text with actual env var usage.
 
@@ -162,11 +163,11 @@
 
 **Acceptance Criteria (Definition of Done)**
 
-- `specs/WORKFLOW_CONTRACT.md` includes `WF-5.5.2` (or equivalent) for verify quiet mode + excerpts.
-- `plans/workflow_contract_map.json` includes the new WF rule and test mapping.
-- `plans/verify.sh` header documents `VERIFY_CONSOLE`, `VERIFY_FAIL_TAIL_LINES`, `VERIFY_FAIL_SUMMARY_LINES`, and quiet mode uses them.
-- `plans/workflow_acceptance.sh` enforces the quiet-mode wiring and header docs.
-- `./plans/verify.sh full` passes (includes workflow acceptance).
+- `specs/WORKFLOW_CONTRACT.md` includes updated WF-5.5 text for verify quiet mode + excerpts.
+- `plans/workflow_contract_map.json` includes the WF-5.5 rule mapping and test reference.
+- `plans/verify.sh` header documents `VERIFY_CONSOLE`, `VERIFY_FAIL_TAIL_LINES`, `VERIFY_FAIL_SUMMARY_LINES`, and quiet mode uses them.
+- `plans/workflow_acceptance.sh` enforces the quiet-mode wiring and header docs.
+- `./plans/verify.sh full` passes (includes workflow acceptance).
 
 
 

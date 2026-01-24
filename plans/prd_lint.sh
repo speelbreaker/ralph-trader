@@ -30,6 +30,7 @@ fi
 
 prd_file="${PRD_FILE:-${prd_arg:-plans/prd.json}}"
 strict_heuristics="${PRD_LINT_STRICT_HEURISTICS:-0}"
+schema_bypass="${PRD_LINT_ALLOW_SCHEMA_BYPASS:-0}"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "ERROR: jq required for PRD lint" >&2
@@ -93,6 +94,25 @@ if [[ ! -f "$prd_file" ]]; then
   finish
 fi
 
+if [[ "$schema_bypass" == "1" ]]; then
+  if [[ -n "${CI:-}" ]]; then
+    report_error SCHEMA_BYPASS_FORBIDDEN GLOBAL "PRD schema bypass is not allowed in CI"
+    finish
+  fi
+  report_warn SCHEMA_BYPASS GLOBAL "PRD schema check skipped (PRD_LINT_ALLOW_SCHEMA_BYPASS=1)"
+else
+  if [[ ! -x "./plans/prd_schema_check.sh" ]]; then
+    report_error SCHEMA_CHECK_MISSING GLOBAL "missing ./plans/prd_schema_check.sh"
+    finish
+  fi
+  schema_output=""
+  if ! schema_output="$(./plans/prd_schema_check.sh "$prd_file" 2>&1)"; then
+    report_error SCHEMA_FAIL GLOBAL "PRD schema check failed"
+    printf '%s\n' "$schema_output" >&2
+    finish
+  fi
+fi
+
 if ! jq -e . "$prd_file" >/dev/null 2>&1; then
   report_error INVALID_JSON GLOBAL "PRD file is not valid JSON: $prd_file"
   finish
@@ -145,6 +165,11 @@ is_allowlisted() {
 has_glob_chars() {
   local value="$1"
   [[ "$value" == *"*"* || "$value" == *"?"* || "$value" == *"["* || "$value" == *"]"* ]]
+}
+
+normalize_path() {
+  local value="$1"
+  printf '%s' "${value#./}"
 }
 
 python_missing=0
@@ -246,6 +271,12 @@ while IFS= read -r entry; do
     item_id="ITEM_$idx"
   fi
   item_category=$(printf '%s' "$item_json" | jq -r '.category // empty')
+  item_text=$(printf '%s' "$item_json" | jq -r '[.description // "", (.acceptance // [])[], (.steps // [])[]] | join(" ")')
+  item_text_lc=$(printf '%s' "$item_text" | tr '[:upper:]' '[:lower:]')
+  gate_required=0
+  if [[ "$item_category" == "execution" || "$item_category" == "risk" || "$item_category" == "durability" ]]; then
+    gate_required=1
+  fi
 
   check_required '.id | type == "string" and length > 0' 'id'
   check_required '.slice | type == "number"' 'slice'
@@ -305,34 +336,34 @@ while IFS= read -r entry; do
   if printf '%s' "$item_json" | jq -e '.scope.touch | type == "array"' >/dev/null 2>&1; then
     while IFS= read -r touch; do
       [[ -z "$touch" ]] && continue
-      check_path_convention "$item_id" "$touch"
+      touch_norm="$(normalize_path "$touch")"
+      check_path_convention "$item_id" "$touch_norm"
 
-      if [[ "$touch" == *".DS_Store"* ]]; then
+      if [[ "$touch_norm" == *".DS_Store"* ]]; then
         report_warn JUNK_PATH "$item_id" "scope.touch contains .DS_Store"
       fi
 
-      if [[ "$item_category" == "workflow" && "$touch" == crates/* ]]; then
+      if [[ "$item_category" == "workflow" && "$touch_norm" == crates/* ]]; then
         report_error WORKFLOW_TOUCHES_CRATES "$item_id" "workflow story must not touch crates/"
       fi
 
-      if [[ ( "$item_category" == "execution" || "$item_category" == "risk" ) && "$touch" == plans/* ]]; then
+      if [[ ( "$item_category" == "execution" || "$item_category" == "risk" ) && "$touch_norm" == plans/* ]]; then
         report_error EXECUTION_TOUCHES_PLANS "$item_id" "execution/risk story must not touch plans/"
       fi
 
-      if has_glob_chars "$touch"; then
-        count=$(count_glob_matches "$touch") || true
+      if has_glob_chars "$touch_norm"; then
+        count=$(count_glob_matches "$touch_norm") || true
         if [[ -n "$count" ]]; then
           if (( count > glob_fail )); then
-            report_error GLOB_TOO_BROAD "$item_id" "glob '$touch' matches $count files (>${glob_fail})"
+            report_error GLOB_TOO_BROAD "$item_id" "glob '$touch_norm' matches $count files (>${glob_fail})"
           elif (( count > glob_warn )); then
-            report_warn GLOB_BROAD "$item_id" "glob '$touch' matches $count files (>${glob_warn})"
+            report_warn GLOB_BROAD "$item_id" "glob '$touch_norm' matches $count files (>${glob_warn})"
           fi
         fi
       else
-        rel_path="${touch#./}"
-        full_path="$repo_root/$rel_path"
+        full_path="$repo_root/$touch_norm"
         if [[ ! -e "$full_path" ]]; then
-          report_error MISSING_PATH "$item_id" "path does not exist: $touch"
+          report_error MISSING_PATH "$item_id" "path does not exist: $touch_norm"
         fi
       fi
     done <<< "$(printf '%s' "$item_json" | jq -r '.scope.touch[]')"
@@ -341,26 +372,36 @@ while IFS= read -r entry; do
   if printf '%s' "$item_json" | jq -e '.scope.avoid | type == "array"' >/dev/null 2>&1; then
     while IFS= read -r avoid; do
       [[ -z "$avoid" ]] && continue
-      check_path_convention "$item_id" "$avoid"
+      avoid_norm="$(normalize_path "$avoid")"
+      check_path_convention "$item_id" "$avoid_norm"
     done <<< "$(printf '%s' "$item_json" | jq -r '.scope.avoid[]')"
   fi
 
   if (( ${#create_paths[@]} > 0 )); then
     for create_path in "${create_paths[@]}"; do
-      check_path_convention "$item_id" "$create_path"
-      if has_glob_chars "$create_path"; then
-        report_error CREATE_PATH_GLOB "$item_id" "scope.create path contains glob characters: $create_path"
+      create_norm="$(normalize_path "$create_path")"
+      check_path_convention "$item_id" "$create_norm"
+
+      if [[ "$item_category" == "workflow" && "$create_norm" == crates/* ]]; then
+        report_error WORKFLOW_TOUCHES_CRATES "$item_id" "workflow story must not touch crates/"
+      fi
+
+      if [[ ( "$item_category" == "execution" || "$item_category" == "risk" ) && "$create_norm" == plans/* ]]; then
+        report_error EXECUTION_TOUCHES_PLANS "$item_id" "execution/risk story must not touch plans/"
+      fi
+
+      if has_glob_chars "$create_norm"; then
+        report_error CREATE_PATH_GLOB "$item_id" "scope.create path contains glob characters: $create_norm"
         continue
       fi
-      rel_create="${create_path#./}"
-      full_create="$repo_root/$rel_create"
+      full_create="$repo_root/$create_norm"
       if [[ -e "$full_create" ]]; then
-        report_error CREATE_PATH_EXISTS "$item_id" "scope.create path already exists: $create_path"
+        report_error CREATE_PATH_EXISTS "$item_id" "scope.create path already exists: $create_norm"
         continue
       fi
       parent_dir="$(dirname "$full_create")"
       if [[ ! -d "$parent_dir" ]]; then
-        report_error CREATE_PARENT_MISSING "$item_id" "scope.create parent directory missing for: $create_path"
+        report_error CREATE_PARENT_MISSING "$item_id" "scope.create parent directory missing for: $create_norm"
       fi
     done
   fi
@@ -417,6 +458,125 @@ while IFS= read -r entry; do
       else
         report_warn FORWARD_KEYWORD "$item_id" "forward-dependency keyword found; add dependency, move to later slice, or remove premature acceptance"
       fi
+    fi
+  fi
+
+  if [[ "$gate_required" == "1" ]]; then
+    contract_evidence_count=$(printf '%s' "$item_json" | jq -r '.contract_must_evidence | length')
+    if ! [[ "$contract_evidence_count" =~ ^[0-9]+$ ]]; then
+      contract_evidence_count=0
+    fi
+    if (( contract_evidence_count < 1 )); then
+      report_error MISSING_CONTRACT_MUST_EVIDENCE "$item_id" "contract_must_evidence required for execution/risk/durability items"
+    fi
+
+    enforcing_ats_count=$(printf '%s' "$item_json" | jq -r '.enforcing_contract_ats | length')
+    if ! [[ "$enforcing_ats_count" =~ ^[0-9]+$ ]]; then
+      enforcing_ats_count=0
+    fi
+    if (( enforcing_ats_count < 1 )); then
+      report_error MISSING_ENFORCING_ATS "$item_id" "enforcing_contract_ats required for execution/risk/durability items"
+    fi
+
+    reason_type="$(printf '%s' "$item_json" | jq -r '.reason_codes.type // ""')"
+    reason_values_count="$(printf '%s' "$item_json" | jq -r '.reason_codes.values | length')"
+    if [[ -z "$reason_type" ]]; then
+      report_error MISSING_REASON_CODES "$item_id" "reason_codes.type required for execution/risk/durability items"
+    fi
+    if ! [[ "$reason_values_count" =~ ^[0-9]+$ ]]; then
+      reason_values_count=0
+    fi
+    if (( reason_values_count < 1 )); then
+      report_error MISSING_REASON_CODES "$item_id" "reason_codes.values required for execution/risk/durability items"
+    fi
+
+    enforcement_point="$(printf '%s' "$item_json" | jq -r '.enforcement_point // ""')"
+    if [[ -z "$enforcement_point" ]]; then
+      report_error MISSING_ENFORCEMENT_POINT "$item_id" "enforcement_point required for execution/risk/durability items"
+    fi
+  fi
+
+  quotes="$(printf '%s' "$item_json" | jq -r '.contract_must_evidence[]?.quote // empty')"
+  if [[ -n "$quotes" ]]; then
+    while IFS= read -r quote; do
+      [[ -z "$quote" ]] && continue
+      word_count="$(printf '%s' "$quote" | wc -w | tr -d ' ')"
+      if [[ "$word_count" =~ ^[0-9]+$ && "$word_count" -gt 25 ]]; then
+        report_error CONTRACT_QUOTE_TOO_LONG "$item_id" "contract_must_evidence.quote must be <=25 words"
+      fi
+    done <<< "$quotes"
+  fi
+
+  reason_mention=0
+  if printf '%s' "$item_text_lc" | grep -Eq '(^|[^a-z0-9_])(reason code|modereasoncode|openpermissionreasoncode|rejectreason)([^a-z0-9_]|$)'; then
+    reason_mention=1
+  fi
+  if [[ "$reason_mention" == "1" ]]; then
+    reason_values_count="$(printf '%s' "$item_json" | jq -r '.reason_codes.values | length')"
+    if ! [[ "$reason_values_count" =~ ^[0-9]+$ ]]; then
+      reason_values_count=0
+    fi
+    if (( reason_values_count < 1 )); then
+      report_error REASON_CODES_EMPTY "$item_id" "reason_codes.values required when acceptance/steps mention reason code"
+    fi
+  fi
+
+  metrics_mention=0
+  if printf '%s' "$item_text_lc" | grep -Eq '(^|[^a-z0-9_])(metric|counter|gauge|histogram|log)([^a-z0-9_]|$)'; then
+    metrics_mention=1
+  fi
+  if printf '%s' "$item_text_lc" | grep -Eq '(^|[^a-z0-9_])[a-z0-9_]+_(total|pct|ms|s)([^a-z0-9_]|$)'; then
+    metrics_mention=1
+  fi
+  if [[ "$metrics_mention" == "1" ]]; then
+    metrics_count="$(printf '%s' "$item_json" | jq -r '.observability.metrics | length')"
+    if ! [[ "$metrics_count" =~ ^[0-9]+$ ]]; then
+      metrics_count=0
+    fi
+    if (( metrics_count < 1 )); then
+      report_error MISSING_OBSERVABILITY_METRICS "$item_id" "observability.metrics required when metrics/logs are mentioned"
+    fi
+  fi
+
+  status_mention=0
+  if printf '%s' "$item_text_lc" | grep -Eq '/status|status endpoint|status field|/api/v1/status|operator visible|operator-visible'; then
+    status_mention=1
+  fi
+  if [[ "$status_mention" == "1" ]]; then
+    status_fields_count="$(printf '%s' "$item_json" | jq -r '.observability.status_fields | length')"
+    status_ats_count="$(printf '%s' "$item_json" | jq -r '.observability.status_contract_ats | length')"
+    if ! [[ "$status_fields_count" =~ ^[0-9]+$ ]]; then
+      status_fields_count=0
+    fi
+    if ! [[ "$status_ats_count" =~ ^[0-9]+$ ]]; then
+      status_ats_count=0
+    fi
+    if (( status_fields_count < 1 )); then
+      report_error MISSING_STATUS_FIELDS "$item_id" "observability.status_fields required when status fields are referenced"
+    fi
+    if (( status_ats_count < 1 )); then
+      report_error MISSING_STATUS_ATS "$item_id" "observability.status_contract_ats required when status fields are referenced"
+    fi
+  fi
+
+  liveness_mention=0
+  if printf '%s' "$item_text_lc" | grep -Eq '(^|[^a-z0-9_])(backpressure|stall|hang|queue|lag|latency)([^a-z0-9_]|$)'; then
+    liveness_mention=1
+  fi
+  if [[ "$liveness_mention" == "1" ]]; then
+    failure_mode_count="$(printf '%s' "$item_json" | jq -r '.failure_mode | length')"
+    impl_tests_count="$(printf '%s' "$item_json" | jq -r '.implementation_tests | length')"
+    if ! [[ "$failure_mode_count" =~ ^[0-9]+$ ]]; then
+      failure_mode_count=0
+    fi
+    if ! [[ "$impl_tests_count" =~ ^[0-9]+$ ]]; then
+      impl_tests_count=0
+    fi
+    if (( failure_mode_count < 1 )); then
+      report_error MISSING_FAILURE_MODE "$item_id" "failure_mode required when liveness/backpressure is mentioned"
+    fi
+    if (( impl_tests_count < 1 )); then
+      report_error MISSING_IMPLEMENTATION_TESTS "$item_id" "implementation_tests required when liveness/backpressure is mentioned"
     fi
   fi
 

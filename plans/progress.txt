@@ -440,3 +440,14 @@ Summary: Added workflow acceptance runner controls (list/only/fast/resume), fast
 Commands: ./plans/verify.sh full.
 Evidence: plans/workflow_acceptance.sh; specs/WORKFLOW_CONTRACT.md; plans/workflow_contract_map.json; artifacts/verify/20260117_101902.
 Next: None.
+Date: 2026-01-22
+Summary: Added strict PRD gate + audit output validator, enforced schema/evidence/verify rules, added fixtures/tests, updated workflow contract/map + acceptance coverage.
+Commands: ./plans/verify.sh full (failed: workflow acceptance worktree creation; exit 128).
+Evidence: artifacts/verify/20260122_134000/contract_coverage.log; artifacts/verify/20260122_134000/workflow_acceptance.log; artifacts/verify/20260122_134000/postmortem_check.log; artifacts/verify/20260122_134000/rust_tests_full.log.
+Next: Fix git worktree permission issue to rerun ./plans/verify.sh full.
+Story: workflow-maintenance
+Date: 2026-01-22
+Summary: Added PRD schema fields (contract evidence, observability, reason codes), lint rules + fixtures/tests, and updated PRD/stubs accordingly.
+Commands: ./plans/tests/test_prd_gate.sh; ./plans/verify.sh full (failed: workflow acceptance worktree creation; exit 128).
+Evidence: plans/prd.json; plans/prd_schema_check.sh; plans/prd_lint.sh; plans/tests/test_prd_gate.sh; artifacts/verify/20260122_142555/workflow_acceptance.log.
+Next: Fix git worktree permission issue to rerun ./plans/verify.sh full.

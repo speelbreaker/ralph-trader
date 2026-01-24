@@ -16,17 +16,19 @@
       "priority": 100,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.0 Verify harness baseline",
       "category": "workflow",
       "description": "Confirm plans/verify.sh is the canonical verification script and runnable.",
       "contract_refs": [
         "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)",
+        "CONTRACT.md Deribit Venue Facts Addendum (Artifact-Backed)",
+        "CONTRACT.md CI guardrail: python scripts/check_vq_evidence.py must pass, or build fails.",
         "Anchor-002",
         "VR-001"
       ],
       "plan_refs": [
-        "Test harness configured (cargo test \\--workspace)."
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.0 \u2014 Repo verification harness (plans/verify.sh) + safety-critical config defaults (Appendix A)"
       ],
       "scope": {
         "touch": [
@@ -41,11 +43,13 @@
       "acceptance": [
         "GIVEN plans/verify.sh exists WHEN running `bash -n plans/verify.sh` THEN it exits 0.",
         "GIVEN plans/verify.sh is executable WHEN running `./plans/verify.sh` THEN it completes without error on a clean workspace.",
-        "GIVEN plans/verify.sh defines the test gate WHEN inspecting its contents THEN it includes `cargo test --workspace`."
+        "GIVEN plans/verify.sh defines the test gate WHEN inspecting its contents THEN it includes `cargo test --workspace`.",
+        "GIVEN plans/verify.sh defines the evidence guardrail WHEN inspecting its contents THEN it invokes `python scripts/check_vq_evidence.py`."
       ],
       "steps": [
         "Check that plans/verify.sh exists in the repo root.",
         "Inspect plans/verify.sh for the Rust test command and compare with the plan entry criteria.",
+        "Ensure plans/verify.sh invokes `python scripts/check_vq_evidence.py` and propagates non-zero exit codes.",
         "Add or update the `cargo test --workspace` command in plans/verify.sh if missing.",
         "Ensure plans/verify.sh is executable (chmod +x).",
         "Run `bash -n plans/verify.sh` to validate shell syntax.",
@@ -54,34 +58,120 @@
       "verify": [
         "./plans/verify.sh",
         "bash -n plans/verify.sh",
-        "rg -n \"cargo test --workspace\" plans/verify.sh"
+        "rg -n \"cargo test --workspace\" plans/verify.sh",
+        "rg -n \"check_vq_evidence.py\" plans/verify.sh"
       ],
       "evidence": [
         "bash -n plans/verify.sh output",
         "Execution output of ./plans/verify.sh",
-        "rg output showing cargo test --workspace present in plans/verify.sh"
+        "rg output showing cargo test --workspace present in plans/verify.sh",
+        "rg output showing check_vq_evidence.py present in plans/verify.sh"
       ],
       "dependencies": [],
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
+    },
+    {
+      "id": "S1-010",
+      "priority": 88,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
+      "story_ref": "S1.0 Appendix A config defaults",
+      "category": "infra",
+      "description": "Apply Appendix A safety-critical defaults in infra config and verify missing-value behavior.",
+      "contract_refs": [
+        "CONTRACT.md Appendix A: Configuration Defaults (Safety-Critical Thresholds)",
+        "CONTRACT.md AT-341",
+        "CONTRACT.md AT-040"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.0 \u2014 Repo verification harness (plans/verify.sh) + safety-critical config defaults (Appendix A)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_infra"
+        ],
+        "avoid": [
+          "plans/**",
+          "crates/soldier_core/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN config omits instrument_cache_ttl_s WHEN defaults are applied THEN the TTL uses the Appendix A default of 3600s.",
+        "GIVEN config omits the global evidence cooldown setting WHEN defaults are applied THEN the cooldown uses the Appendix A default of 120s.",
+        "GIVEN config omits mm_util_kill WHEN defaults are applied THEN the kill threshold uses the Appendix A default of 0.95.",
+        "GIVEN a safety-critical gate references a parameter without an Appendix A default WHEN the parameter is missing THEN the gate fails closed with a deterministic reason."
+      ],
+      "steps": [
+        "Define a centralized defaults table covering Appendix A safety-critical parameters, including instrument_cache_ttl_s, evidenceguard_global_cooldown, and mm_util_kill.",
+        "Create a config loader in crates/soldier_infra that applies Appendix A defaults when values are missing.",
+        "Add a fail-closed path for safety-critical parameters that lack Appendix A defaults, surfacing a deterministic error.",
+        "Create crates/soldier_infra/tests/test_config_defaults.rs with a test for missing instrument_cache_ttl_s and the global evidence cooldown applying defaults.",
+        "Add a test case for missing mm_util_kill applying the Appendix A default.",
+        "Add a test case for a missing non-Appendix A parameter to assert fail-closed behavior."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_infra --test test_config_defaults"
+      ],
+      "evidence": [
+        "cargo test -p soldier_infra --test test_config_defaults output"
+      ],
+      "dependencies": [
+        "S1-001"
+      ],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     },
     {
       "id": "S1-001",
       "priority": 90,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.0 Workspace scaffolding",
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
       "contract_refs": [
         "CONTRACT.md 0.X Repository Layout & Canonical Module Mapping (Non-Negotiable)",
+        "CONTRACT.md AT-905",
         "Anchor-001"
       ],
       "plan_refs": [
-        "Rust workspace exists with crates/soldier\\_core, crates/soldier\\_infra."
+        "IMPLEMENTATION_PLAN.md C) Entry Criteria"
       ],
       "scope": {
         "touch": [
@@ -100,8 +190,9 @@
         ]
       },
       "acceptance": [
-        "GIVEN the workspace is configured WHEN running `cargo test --workspace` THEN it builds and exits 0.",
+        "GIVEN the repo layout WHEN inspected THEN crates/soldier_core and crates/soldier_infra directories exist.",
         "GIVEN Cargo.toml is inspected WHEN reading workspace members THEN it includes crates/soldier_core and crates/soldier_infra.",
+        "GIVEN the workspace is configured WHEN running `cargo test --workspace` THEN it builds and exits 0.",
         "GIVEN plans/verify.sh is run WHEN invoked from repo root THEN it executes `cargo test --workspace` and passes."
       ],
       "steps": [
@@ -126,26 +217,39 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     },
     {
       "id": "S1-002",
       "priority": 80,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 InstrumentKind and RiskState",
       "category": "execution",
       "description": "Implement InstrumentKind derivation and RiskState enum per contract definitions.",
       "contract_refs": [
-        "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
-        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
-        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract) — MUST implement",
-        "Anchor-010",
-        "VR-010"
+        "CONTRACT.md instrumentkind",
+        "CONTRACT.md Linear Perpetuals",
+        "CONTRACT.md RiskState (health/cause layer)",
+        "CONTRACT.md AT-333"
       ],
       "plan_refs": [
-        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -161,21 +265,22 @@
           "crates/soldier_infra/Cargo.toml"
         ],
         "avoid": [
-          "crates/soldier_core/execution/**",
+          "crates/soldier_core/src/execution/**",
           "crates/soldier_core/policy/**"
         ]
       },
       "acceptance": [
         "GIVEN Deribit metadata for a USDC-margined perpetual WHEN deriving InstrumentKind THEN it returns linear_future.",
         "GIVEN metadata for option, perpetual, inverse_future, and linear_future instruments WHEN deriving InstrumentKind THEN it maps to the contract enum values.",
+        "GIVEN instrument metadata from /public/get_instruments WHEN mapping to internal fields THEN tick_size, amount_step, min_amount, and contract_multiplier match the fetched values (test_instrument_metadata_uses_get_instruments).",
         "GIVEN the RiskState enum WHEN compiled THEN it includes Healthy, Degraded, Maintenance, and Kill variants."
       ],
       "steps": [
         "Define the RiskState enum in crates/soldier_core/risk/state.rs with the contract variants.",
         "Define the InstrumentKind enum in crates/soldier_core/venue/types.rs with contract values.",
-        "Define the minimal Deribit public instrument structs needed for mapping in crates/soldier_infra/deribit/public.",
-        "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual → linear_future.",
-        "Add unit tests in crates/soldier_core/tests/test_instrument_kind_mapping.rs for mapping behavior.",
+        "Define the minimal Deribit public instrument structs needed for mapping in crates/soldier_infra/deribit/public, including tick_size, amount_step, min_amount, and contract_multiplier.",
+        "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual \u2192 linear_future and metadata field passthrough.",
+        "Add unit tests in crates/soldier_core/tests/test_instrument_kind_mapping.rs for mapping behavior and metadata passthrough (test_instrument_metadata_uses_get_instruments).",
         "Wire any required imports so the new enums are accessible where used."
       ],
       "verify": [
@@ -191,25 +296,52 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
+          "location": "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
+          "anchor": "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata)."
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_instrument_kind_mapping.rs"
+      ]
     },
     {
       "id": "S1-003",
       "priority": 70,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL",
       "category": "risk",
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+        "CONTRACT.md RiskState (health/cause layer)",
+        "CONTRACT.md AT-104",
         "Anchor-011",
         "VR-011"
       ],
       "plan_refs": [
-        "S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -218,20 +350,23 @@
           "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
         ],
         "avoid": [
-          "crates/soldier_core/execution/**",
+          "crates/soldier_core/src/execution/**",
           "crates/soldier_infra/**"
         ]
       },
       "acceptance": [
         "GIVEN cached instrument metadata older than the configured TTL WHEN accessed THEN RiskState::Degraded is returned for that lookup (test_stale_instrument_cache_sets_degraded).",
         "GIVEN cached metadata within TTL WHEN accessed THEN RiskState::Healthy is returned alongside the metadata.",
+        "GIVEN instrument_cache_age_s > instrument_cache_ttl_s and an OPEN intent WHEN dispatch eligibility is checked THEN the OPEN is rejected and CLOSE/HEDGE/CANCEL remain allowed (test_instrument_cache_ttl_blocks_opens_allows_closes).",
         "GIVEN cache access WHEN processing THEN the cache age is compared against instrument_cache_ttl_s deterministically."
       ],
       "steps": [
         "Locate or create the InstrumentCache structure in crates/soldier_core/venue.",
         "Add timestamp tracking for cache insert/update and compute cache age on read; record instrument_cache_age_s and increment instrument_cache_hits_total.",
         "Compare cache age to TTL and return RiskState::Degraded when stale.",
+        "Expose the cache freshness signal to dispatch eligibility checks so OPEN is rejected and CLOSE/HEDGE/CANCEL remain allowed when stale.",
         "Add unit tests in crates/soldier_core/tests/test_instrument_cache_ttl.rs for fresh vs stale behavior.",
+        "Add a unit test for stale metadata blocking OPEN while allowing CLOSE/HEDGE/CANCEL.",
         "Add or update a test to assert cache age comparisons against instrument_cache_ttl_s are deterministic."
       ],
       "verify": [
@@ -241,6 +376,7 @@
       "evidence": [
         "cargo test -p soldier_core --test test_instrument_cache_ttl output",
         "Unit test asserts RiskState::Degraded on stale metadata",
+        "Unit test asserts OPEN blocked and CLOSE/HEDGE/CANCEL allowed when metadata is stale",
         "Unit test asserts instrument_cache_ttl_s comparison is deterministic"
       ],
       "dependencies": [
@@ -249,24 +385,63 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "location": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "anchor": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "ModeReasonCode",
+        "values": [
+          "REDUCEONLY_INPUT_MISSING_OR_STALE"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "instrument_cache_hits_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          },
+          {
+            "name": "instrument_cache_age_s",
+            "type": "gauge",
+            "unit": "s",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "RiskState::Degraded",
+        "RiskState::Healthy",
+        "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
+      ]
     },
     {
       "id": "S1-006",
       "priority": 65,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL observability",
       "category": "risk",
       "description": "Add required TTL observability hooks for instrument cache freshness.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-        "Anchor-011",
-        "VR-011"
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.1 — InstrumentKind derivation \\+ instrument cache TTL (fail‑closed)"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -275,20 +450,22 @@
           "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
         ],
         "avoid": [
-          "crates/soldier_core/execution/**",
+          "crates/soldier_core/src/execution/**",
           "crates/soldier_infra/**"
         ]
       },
       "acceptance": [
         "GIVEN a TTL breach WHEN processing THEN a structured log InstrumentCacheTtlBreach{instrument_id, age_s, ttl_s} is emitted.",
         "GIVEN any cache access WHEN processing THEN instrument_cache_hits_total increments and instrument_cache_age_s is updated.",
-        "GIVEN a stale access WHEN processing THEN instrument_cache_stale_total increments."
+        "GIVEN a stale access WHEN processing THEN instrument_cache_stale_total increments.",
+        "GIVEN a metadata refresh failure WHEN processing THEN instrument_cache_refresh_errors_total increments."
       ],
       "steps": [
         "Emit a structured log InstrumentCacheTtlBreach with instrument_id, age_s, ttl_s on staleness.",
         "Increment instrument_cache_hits_total on every cache access.",
         "Update instrument_cache_age_s gauge with computed cache age.",
         "Increment instrument_cache_stale_total on staleness.",
+        "Increment instrument_cache_refresh_errors_total when a metadata refresh fails.",
         "Add test assertions in crates/soldier_core/tests/test_instrument_cache_ttl.rs for the log event.",
         "Add test assertions for metric increments and gauge updates using an in-memory metrics registry or mock."
       ],
@@ -300,6 +477,7 @@
         "cargo test -p soldier_core --test test_instrument_cache_ttl output",
         "Log capture shows InstrumentCacheTtlBreach with instrument_id, age_s, ttl_s",
         "Unit test asserts instrument_cache_hits_total and instrument_cache_stale_total increments",
+        "Unit test asserts instrument_cache_refresh_errors_total increment",
         "Unit test asserts instrument_cache_age_s gauge update"
       ],
       "dependencies": [
@@ -308,25 +486,72 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "location": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "anchor": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "ModeReasonCode",
+        "values": [
+          "REDUCEONLY_INPUT_MISSING_OR_STALE"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "instrument_cache_hits_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          },
+          {
+            "name": "instrument_cache_age_s",
+            "type": "gauge",
+            "unit": "s",
+            "labels": []
+          },
+          {
+            "name": "instrument_cache_stale_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_instrument_cache_ttl.rs"
+      ]
     },
     {
       "id": "S1-004",
       "priority": 60,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize canonical sizing",
       "category": "execution",
       "description": "Implement OrderSize canonical sizing with deterministic notional_usd using the discovery report.",
       "contract_refs": [
         "CONTRACT.md OrderSize struct (MUST implement):",
         "CONTRACT.md Canonical internal units (single source of truth):",
+        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract)",
+        "Anchor-010",
         "Anchor-012",
         "VR-010"
       ],
       "plan_refs": [
-        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.2 \u2014 OrderSize canonical sizing + notional invariant"
       ],
       "scope": {
         "touch": [
@@ -337,11 +562,12 @@
         ],
         "avoid": [
           "crates/soldier_infra/**",
-          "crates/soldier_core/venue/**"
+          "crates/soldier_core/src/venue/**"
         ]
       },
       "acceptance": [
         "GIVEN instrument_kind option or linear_future WHEN building OrderSize THEN qty_coin is canonical and notional_usd = qty_coin * index_price.",
+        "GIVEN instrument_kind option WHEN building OrderSize THEN qty_usd is unset.",
         "GIVEN instrument_kind perpetual or inverse_future WHEN building OrderSize THEN qty_usd is canonical and notional_usd = qty_usd.",
         "GIVEN any OrderSize WHEN built THEN notional_usd is always populated and internal fields are consistent with the contract invariants."
       ],
@@ -350,6 +576,7 @@
         "Create crates/soldier_core/execution/order_size.rs if missing.",
         "Define the OrderSize struct with contracts, qty_coin, qty_usd, and notional_usd.",
         "Implement a constructor/builder that computes canonical units based on InstrumentKind.",
+        "Ensure option sizing uses qty_coin and leaves qty_usd unset.",
         "Populate notional_usd deterministically using index_price for coin-sized instruments.",
         "Add a debug log OrderSizeComputed{instrument_kind, notional_usd}.",
         "Add unit tests in crates/soldier_core/tests/test_order_size.rs for canonical sizing."
@@ -368,24 +595,56 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md OrderSize struct (MUST implement):",
+          "location": "CONTRACT.md OrderSize struct (MUST implement):",
+          "anchor": "CONTRACT.md OrderSize struct (MUST implement):"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "order_size_computed_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_order_size.rs"
+      ]
     },
     {
       "id": "S1-005",
       "priority": 50,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher amount mapping",
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts using the discovery report.",
       "contract_refs": [
         "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
-        "Anchor-010",
-        "VR-010"
+        "CONTRACT.md reduceonly (venue order flag)"
       ],
       "plan_refs": [
-        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping + mismatch reject\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -395,20 +654,22 @@
           "crates/soldier_core/tests/test_dispatch_map.rs"
         ],
         "avoid": [
-          "crates/soldier_core/risk/**",
+          "crates/soldier_core/src/risk/**",
           "crates/soldier_infra/**"
         ]
       },
       "acceptance": [
         "GIVEN option or linear_future OrderSize WHEN mapping to an outbound Deribit request THEN it sets exactly one amount field using qty_coin.",
         "GIVEN perpetual or inverse_future OrderSize WHEN mapping to an outbound Deribit request THEN it sets exactly one amount field using qty_usd.",
-        "GIVEN any OrderSize WHEN mapping THEN exactly one canonical amount field is set and the other is unset."
+        "GIVEN any OrderSize WHEN mapping THEN exactly one canonical amount field is set and the other is unset.",
+        "GIVEN intent classification CLOSE/HEDGE WHEN mapping THEN reduce_only=true; GIVEN OPEN THEN reduce_only=false or omitted."
       ],
       "steps": [
         "Review docs/dispatch_map_discovery.md for current gaps and proposed tests.",
         "Create or update crates/soldier_core/execution/dispatch_map.rs with OrderSize mapping logic.",
         "Implement the rule: exactly one canonical amount field is sent per instrument_kind.",
         "Ensure outbound request uses qty_coin for option/linear_future and qty_usd for perpetual/inverse_future.",
+        "Map reduce_only from intent classification only (CLOSE/HEDGE=true, OPEN=false or omitted).",
         "Add unit tests in crates/soldier_core/tests/test_dispatch_map.rs for amount field selection.",
         "Add a negative test asserting no second amount field is set."
       ],
@@ -417,7 +678,8 @@
         "cargo test -p soldier_core --test test_dispatch_map"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_dispatch_map output"
+        "cargo test -p soldier_core --test test_dispatch_map output",
+        "Unit test asserts reduce_only mapping by intent classification"
       ],
       "dependencies": [
         "S1-004",
@@ -426,25 +688,50 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
+          "location": "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
+          "anchor": "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_dispatch_map.rs"
+      ]
     },
     {
       "id": "S1-007",
       "priority": 55,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mismatch rejection",
       "category": "execution",
       "description": "Reject contract/amount mismatches and emit mismatch metrics.",
       "contract_refs": [
-        "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`",
-        "CONTRACT.md RiskState (health/cause layer): `Healthy | Degraded | Maintenance | Kill`",
-        "Anchor-010",
-        "VR-010"
+        "CONTRACT.md If a mismatch is detected: reject the intent and set RiskState::Degraded",
+        "CONTRACT.md AT-920",
+        "CONTRACT.md contractsamountmatchtolerance"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 1 — Instrument Units \\+ Dispatcher Invariants / S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping + mismatch reject\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -455,17 +742,17 @@
           "crates/soldier_core/tests/test_order_size.rs"
         ],
         "avoid": [
-          "crates/soldier_core/risk/**",
+          "crates/soldier_core/src/risk/**",
           "crates/soldier_infra/**"
         ]
       },
       "acceptance": [
-        "GIVEN contracts and canonical amount mismatch WHEN mapping THEN the intent is rejected and RiskState::Degraded is returned (fail-closed).",
+        "GIVEN contracts and canonical amount mismatch beyond contracts_amount_match_tolerance=0.001 WHEN mapping THEN the intent is rejected with Rejected(ContractsAmountMismatch) and RiskState::Degraded is returned (fail-closed).",
         "GIVEN a mismatch rejection WHEN processing THEN order_intent_reject_unit_mismatch_total increments.",
         "GIVEN a mismatch rejection WHEN processing THEN the error is surfaced to callers with a deterministic reason code."
       ],
       "steps": [
-        "Validate contracts vs canonical amount and return an error with RiskState::Degraded on mismatch.",
+        "Validate contracts vs canonical amount using contracts_amount_match_tolerance=0.001 and return an error with RiskState::Degraded on mismatch.",
         "Define a deterministic error reason for unit mismatches to surface to callers.",
         "Increment order_intent_reject_unit_mismatch_total for mismatch rejections.",
         "Add unit tests in crates/soldier_core/tests/test_dispatch_map.rs for mismatch rejection behavior.",
@@ -480,7 +767,8 @@
       "evidence": [
         "cargo test -p soldier_core --test test_dispatch_map output",
         "cargo test -p soldier_core --test test_order_size output",
-        "Unit test asserts order_intent_reject_unit_mismatch_total increment"
+        "Unit test asserts order_intent_reject_unit_mismatch_total increment",
+        "Unit test asserts contracts_amount_match_tolerance=0.001 applied"
       ],
       "dependencies": [
         "S1-005"
@@ -488,27 +776,62 @@
       "est_size": "XS",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`",
+          "location": "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`",
+          "anchor": "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "DispatchRejectReason::UnitMismatch"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "order_intent_reject_unit_mismatch_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "RiskState::Degraded",
+        "crates/soldier_core/tests/test_dispatch_map.rs",
+        "crates/soldier_core/tests/test_order_size.rs"
+      ]
     },
     {
       "id": "S1-008",
       "priority": 95,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize discovery",
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "1.0 Instrument Units",
-        "Anchor-012"
+        "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract)",
+        "CONTRACT.md OrderSize struct (MUST implement):"
       ],
       "plan_refs": [
-        "S1.2 — OrderSize canonical sizing \\+ notional invariant"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.2 \u2014 OrderSize canonical sizing + notional invariant"
       ],
       "scope": {
         "touch": [
-          "docs/**"
+          "docs/order_size_discovery.md"
         ],
         "avoid": []
       },
@@ -536,27 +859,40 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     },
     {
       "id": "S1-009",
       "priority": 85,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mapping discovery",
       "category": "qa",
       "description": "Discover current dispatcher mapping logic and document gaps vs contract before implementation.",
       "contract_refs": [
-        "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
-        "Anchor-010"
+        "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
-        "S1.3 — Dispatcher amount mapping \\+ mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping + mismatch reject\u2192Degraded"
       ],
       "scope": {
         "touch": [
-          "docs/**"
+          "docs/dispatch_map_discovery.md"
         ],
         "avoid": [
           "crates/**",
@@ -587,14 +923,28 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
     },
     {
       "id": "S2-000",
       "priority": 100,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.1 Quantization rounding",
       "category": "execution",
       "description": "Implement deterministic quantization for qty and limit price with safe rounding.",
@@ -604,7 +954,7 @@
         "VR-020"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.1 — Integer tick/step quantization (safer direction)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.1 \u2014 Integer tick/step quantization (safer direction)"
       ],
       "scope": {
         "touch": [
@@ -642,14 +992,47 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)",
+          "location": "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)",
+          "anchor": "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "quantization_reject_too_small_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_quantize.rs"
+      ]
     },
     {
       "id": "S2-001",
       "priority": 90,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.2 Intent hash from quantized fields",
       "category": "durability",
       "description": "Compute intent_hash from quantized fields only and exclude timestamps.",
@@ -660,7 +1043,7 @@
         "VR-020"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.2 — Intent hash from quantized fields only"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.2 \u2014 Intent hash from quantized fields only"
       ],
       "scope": {
         "touch": [
@@ -698,24 +1081,50 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.1 Labeling & Idempotency Contract",
+          "location": "CONTRACT.md 1.1 Labeling & Idempotency Contract",
+          "anchor": "CONTRACT.md 1.1 Labeling & Idempotency Contract"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "WAL",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_idempotency.rs"
+      ]
     },
     {
       "id": "S2-002",
       "priority": 80,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.3 Compact label schema",
       "category": "durability",
       "description": "Implement compact label encode/decode with 64-character limit enforcement.",
       "contract_refs": [
-        "CONTRACT.md §1.1 Labeling & Idempotency Contract",
+        "CONTRACT.md Canonical Outbound Format (MUST implement):",
         "Anchor-020",
         "VR-021"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.3 — Compact label schema encode/decode (≤64 chars)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.3 \u2014 Compact label schema encode/decode (\u226464 chars)"
       ],
       "scope": {
         "touch": [
@@ -727,13 +1136,13 @@
         ]
       },
       "acceptance": [
-        "GIVEN strat_id, group_id, leg_idx, and intent_hash WHEN encoding THEN the label matches s4:{sid8}:{gid12}:{li}:{ih16} and is ≤ 64 chars.",
+        "GIVEN strat_id, group_id, leg_idx, and intent_hash WHEN encoding THEN the label matches s4:{sid8}:{gid12}:{li}:{ih16} and is \u2264 64 chars.",
         "GIVEN a compact label WHEN decoding THEN sid8, gid12, leg_idx, and ih16 are parsed correctly.",
         "GIVEN an overlength label WHEN encoding THEN only hashed fields are truncated and structural fields remain intact."
       ],
       "steps": [
         "Implement label encoding in crates/soldier_core/execution/label.rs to produce sid8, gid12, and ih16.",
-        "Enforce the ≤64 character limit and truncate only hashed components when required.",
+        "Enforce the \u226464 character limit and truncate only hashed components when required.",
         "Implement label decoding to parse sid8, gid12, leg_idx, and ih16.",
         "Add counter label_truncated_total for truncation events.",
         "Add unit tests in crates/soldier_core/tests/test_label.rs for length limits and parsing.",
@@ -753,14 +1162,47 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md Canonical Outbound Format (MUST implement):",
+          "location": "CONTRACT.md Canonical Outbound Format (MUST implement):",
+          "anchor": "CONTRACT.md Canonical Outbound Format (MUST implement):"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "WAL",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "label_truncated_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_label.rs"
+      ]
     },
     {
       "id": "S2-003",
       "priority": 70,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.4 Label match disambiguation",
       "category": "risk",
       "description": "Disambiguate label matches deterministically and degrade on ambiguity.",
@@ -771,7 +1213,7 @@
         "VR-022"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.4 — Label match disambiguation; ambiguity→Degraded"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.4 \u2014 Label match disambiguation; ambiguity\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -808,14 +1250,48 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.1.2 Label Parse + Disambiguation (Collision-Safe)",
+          "location": "CONTRACT.md 1.1.2 Label Parse + Disambiguation (Collision-Safe)",
+          "anchor": "CONTRACT.md 1.1.2 Label Parse + Disambiguation (Collision-Safe)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "ModeReasonCode",
+        "values": [
+          "REDUCEONLY_INPUT_MISSING_OR_STALE"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "label_match_ambiguity_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "RiskState::Degraded",
+        "crates/soldier_core/tests/test_label_match.rs"
+      ]
     },
     {
       "id": "S3-000",
       "priority": 100,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed)",
       "story_ref": "S3.1 Preflight guard",
       "category": "execution",
       "description": "Implement order-type preflight rules for market/stop/linked orders across instruments.",
@@ -826,7 +1302,7 @@
         "VR-030"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.1 — Preflight guard (market/stop/linked rules)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed) / S3.1 \u2014 Preflight guard (market/stop/linked rules)"
       ],
       "scope": {
         "touch": [
@@ -872,14 +1348,49 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+          "location": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+          "anchor": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "preflight_reject_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": [
+              "reason"
+            ]
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_preflight.rs"
+      ]
     },
     {
       "id": "S3-001",
       "priority": 90,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed)",
       "story_ref": "S3.2 Post-only crossing guard",
       "category": "execution",
       "description": "Reject post-only orders that would cross the book deterministically.",
@@ -889,7 +1400,7 @@
         "VR-030"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.2 — Post‑only crossing guard"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed) / S3.2 \u2014 Post\u2011only crossing guard"
       ],
       "scope": {
         "touch": [
@@ -929,14 +1440,47 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+          "location": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+          "anchor": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "post_only_cross_reject_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_post_only_guard.rs"
+      ]
     },
     {
       "id": "S3-002",
       "priority": 80,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed)",
       "story_ref": "S3.3 Capabilities matrix + feature flags",
       "category": "execution",
       "description": "Implement venue capabilities to gate linked/OCO orders behind explicit flags.",
@@ -947,7 +1491,7 @@
         "VR-030"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.3 — Capabilities matrix \\+ feature flags"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed) / S3.3 \u2014 Capabilities matrix \\+ feature flags"
       ],
       "scope": {
         "touch": [
@@ -989,14 +1533,40 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+          "location": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)",
+          "anchor": "CONTRACT.md 1.4.4 Deribit Order-Type Preflight Guard (Artifact-Backed)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_capabilities.rs"
+      ]
     },
     {
       "id": "S4-000",
       "priority": 100,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.1 WAL append + replay no-resend",
       "category": "durability",
       "description": "Persist intents to a durable WAL and replay without resending after crash.",
@@ -1009,7 +1579,7 @@
         "VR-041"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.1 — WAL append \\+ replay no-resend"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.1 \u2014 WAL append \\+ replay no-resend"
       ],
       "scope": {
         "touch": [
@@ -1048,14 +1618,40 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
+          "location": "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
+          "anchor": "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "WAL",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_infra/tests/test_ledger_replay.rs"
+      ]
     },
     {
       "id": "S4-001",
       "priority": 90,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.2 TLSM out-of-order events",
       "category": "execution",
       "description": "Handle fill-before-ack and out-of-order TLSM events without panic.",
@@ -1065,7 +1661,7 @@
         "Anchor-040"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.2 — TLSM out‑of‑order events (fill-before-ack)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.2 \u2014 TLSM out\u2011of\u2011order events (fill-before-ack)"
       ],
       "scope": {
         "touch": [
@@ -1109,14 +1705,40 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 2.1 Trade Lifecycle State Machine (TLSM)",
+          "location": "CONTRACT.md 2.1 Trade Lifecycle State Machine (TLSM)",
+          "anchor": "CONTRACT.md 2.1 Trade Lifecycle State Machine (TLSM)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_tlsm.rs"
+      ]
     },
     {
       "id": "S4-002",
       "priority": 80,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.3 Trade-ID registry dedupe",
       "category": "durability",
       "description": "Persist processed trade IDs to prevent duplicate processing.",
@@ -1126,7 +1748,7 @@
         "VR-042"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.3 — Trade‑ID registry dedupe"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.3 \u2014 Trade\u2011ID registry dedupe"
       ],
       "scope": {
         "touch": [
@@ -1163,14 +1785,47 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)",
+          "location": "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)",
+          "anchor": "CONTRACT.md Trade-ID Idempotency Registry (Ghost-Race Hardening)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "WAL",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "trade_id_duplicates_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_infra/tests/test_trade_id_registry.rs"
+      ]
     },
     {
       "id": "S4-003",
       "priority": 70,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.4 Dispatch requires durable WAL barrier",
       "category": "durability",
       "description": "Block dispatch until WAL durability marker when configured.",
@@ -1180,7 +1835,7 @@
         "VR-040"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.4 — Dispatch requires durable WAL barrier (when configured)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.4 \u2014 Dispatch requires durable WAL barrier (when configured)"
       ],
       "scope": {
         "touch": [
@@ -1224,7 +1879,40 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md RecordedBeforeDispatch",
+          "location": "CONTRACT.md RecordedBeforeDispatch",
+          "anchor": "CONTRACT.md RecordedBeforeDispatch"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "WAL",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "wal_durability_barrier_wait_ms",
+            "type": "histogram",
+            "unit": "ms",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_infra/tests/test_dispatch_durability.rs"
+      ]
     }
   ]
 }

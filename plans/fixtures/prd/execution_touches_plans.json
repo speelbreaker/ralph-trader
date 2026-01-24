@@ -1,0 +1,85 @@
+{
+  "project": "Fixture",
+  "source": {
+    "implementation_plan_path": "IMPLEMENTATION_PLAN.md",
+    "contract_path": "CONTRACT.md"
+  },
+  "rules": {
+    "one_story_per_iteration": true,
+    "one_commit_per_story": true,
+    "no_prd_rewrite": true,
+    "passes_only_flips_after_verify_green": true
+  },
+  "items": [
+    {
+      "id": "S1-904",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1",
+      "story_ref": "Execution touches plans",
+      "category": "execution",
+      "description": "Fixture with execution category touching plans.",
+      "contract_refs": [
+        "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)"
+      ],
+      "plan_refs": [
+        "Test harness configured (cargo test --workspace)."
+      ],
+      "scope": {
+        "touch": [
+          "./plans/verify.sh"
+        ],
+        "avoid": []
+      },
+      "acceptance": [
+        "a",
+        "b",
+        "c"
+      ],
+      "steps": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "bash -n plans/verify.sh output"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)",
+          "location": "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)",
+          "anchor": "CONTRACT.md 0.Y Verification Harness (Non-Negotiable)"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-000"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::Unspecified"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": []
+    }
+  ]
+}

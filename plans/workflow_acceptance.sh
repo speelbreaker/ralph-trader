@@ -326,15 +326,131 @@ require_tools() {
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 require_tools git jq mktemp find wc tr sed awk stat sort head tail date grep
 mkdir -p "$ROOT/.ralph"
+WORKFLOW_ACCEPTANCE_MODE="${WORKFLOW_ACCEPTANCE_MODE:-auto}"
+WORKFLOW_ACCEPTANCE_SETUP_ONLY="${WORKFLOW_ACCEPTANCE_SETUP_ONLY:-0}"
+WORKTREE_MODE=""
+WORKTREE_ERR=""
 WORKTREE="$(mktemp -d "${ROOT}/.ralph/workflow_acceptance_XXXXXX")"
 
 cleanup() {
-  git -C "$ROOT" worktree remove -f "$WORKTREE" >/dev/null 2>&1 || true
+  if [[ "$WORKTREE_MODE" == "worktree" ]]; then
+    git -C "$ROOT" worktree remove -f "$WORKTREE" >/dev/null 2>&1 || true
+  fi
   rm -rf "$WORKTREE"
 }
 trap cleanup EXIT
 
-git -C "$ROOT" worktree add -f "$WORKTREE" HEAD >/dev/null
+git_dir_abs="$(git -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)"
+if [[ -n "$git_dir_abs" && ! -w "$git_dir_abs" ]]; then
+  echo "WARN: git dir not writable: $git_dir_abs" >&2
+fi
+
+dirty_status="$(git -C "$ROOT" status --porcelain 2>/dev/null || true)"
+if [[ -n "$dirty_status" ]]; then
+  if [[ -n "${CI:-}" ]]; then
+    echo "FAIL: working tree is dirty in CI" >&2
+    echo "$dirty_status" >&2
+    exit 1
+  fi
+  if [[ "${VERIFY_ALLOW_DIRTY:-0}" != "1" ]]; then
+    echo "FAIL: working tree is dirty; set VERIFY_ALLOW_DIRTY=1 to continue" >&2
+    echo "$dirty_status" >&2
+    exit 1
+  fi
+  echo "WARN: working tree is dirty (VERIFY_ALLOW_DIRTY=1)" >&2
+  echo "$dirty_status" >&2
+fi
+
+setup_worktree() {
+  local mode="$1"
+  local err_file
+  err_file="$(mktemp)"
+  case "$mode" in
+    worktree)
+      if git -C "$ROOT" worktree add -f "$WORKTREE" HEAD >/dev/null 2>"$err_file"; then
+        WORKTREE_MODE="worktree"
+        rm -f "$err_file"
+        return 0
+      fi
+      WORKTREE_ERR="$(cat "$err_file" 2>/dev/null || true)"
+      rm -f "$err_file"
+      rm -rf "$WORKTREE"
+      return 1
+      ;;
+    clone)
+      rm -rf "$WORKTREE"
+      if git clone --no-hardlinks "$ROOT" "$WORKTREE" >/dev/null 2>"$err_file"; then
+        WORKTREE_MODE="clone"
+        rm -f "$err_file"
+        return 0
+      fi
+      WORKTREE_ERR="$(cat "$err_file" 2>/dev/null || true)"
+      rm -f "$err_file"
+      rm -rf "$WORKTREE"
+      return 1
+      ;;
+    archive)
+      rm -rf "$WORKTREE"
+      mkdir -p "$WORKTREE"
+      if ! command -v tar >/dev/null 2>&1; then
+        WORKTREE_ERR="tar not available for archive fallback"
+        rm -rf "$WORKTREE"
+        return 1
+      fi
+      if ! git -C "$ROOT" archive HEAD 2>"$err_file" | tar -x -C "$WORKTREE"; then
+        WORKTREE_ERR="$(cat "$err_file" 2>/dev/null || true)"
+        rm -f "$err_file"
+        rm -rf "$WORKTREE"
+        return 1
+      fi
+      rm -f "$err_file"
+      if [[ -d "$ROOT/.git" ]]; then
+        cp -R "$ROOT/.git" "$WORKTREE/.git"
+      elif [[ -f "$ROOT/.git" && -n "$git_dir_abs" && -d "$git_dir_abs" ]]; then
+        cp -R "$git_dir_abs" "$WORKTREE/.git"
+      fi
+      WORKTREE_MODE="archive"
+      return 0
+      ;;
+    *)
+      WORKTREE_ERR="unknown workflow acceptance mode: $mode"
+      return 1
+      ;;
+  esac
+}
+
+select_worktree_mode() {
+  case "$WORKFLOW_ACCEPTANCE_MODE" in
+    worktree|clone|archive)
+      if ! setup_worktree "$WORKFLOW_ACCEPTANCE_MODE"; then
+        echo "FAIL: workflow acceptance setup failed (mode=$WORKFLOW_ACCEPTANCE_MODE): $WORKTREE_ERR" >&2
+        exit 1
+      fi
+      ;;
+    auto)
+      if setup_worktree "worktree"; then
+        :
+      elif setup_worktree "clone"; then
+        :
+      elif setup_worktree "archive"; then
+        :
+      else
+        echo "FAIL: workflow acceptance setup failed (auto): $WORKTREE_ERR" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "FAIL: invalid WORKFLOW_ACCEPTANCE_MODE=$WORKFLOW_ACCEPTANCE_MODE (expected auto|worktree|clone|archive)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+select_worktree_mode
+echo "workflow acceptance mode: ${WORKTREE_MODE:-unknown}"
+if [[ "$WORKFLOW_ACCEPTANCE_SETUP_ONLY" == "1" ]]; then
+  exit 0
+fi
 
 run_in_worktree() {
   (cd "$WORKTREE" && "$@")
@@ -407,9 +523,12 @@ OVERLAY_FILES=(
   "plans/prd.json"
   "plans/prd_schema_check.sh"
   "plans/prd_lint.sh"
+  "plans/prd_gate.sh"
   "plans/prd_pipeline.sh"
   "plans/prd_autofix.sh"
   "plans/run_prd_auditor.sh"
+  "plans/prd_audit_check.sh"
+  "prompts/auditor.md"
   "plans/build_markdown_digest.sh"
   "plans/build_contract_digest.sh"
   "plans/build_plan_digest.sh"
@@ -422,9 +541,28 @@ OVERLAY_FILES=(
   "plans/postmortem_check.sh"
   "plans/workflow_contract_gate.sh"
   "plans/workflow_contract_map.json"
+  "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml"
+  "tools/vendor_docs_lint_rust.py"
+  "plans/tests/test_prd_gate.sh"
+  "plans/tests/test_prd_audit_check.sh"
+  "plans/tests/test_contract_coverage_matrix.sh"
+  "plans/tests/test_workflow_acceptance_fallback.sh"
   "plans/fixtures/prd/deps_order_same_slice.json"
   "plans/fixtures/prd/deps_cycle_same_slice.json"
   "plans/fixtures/prd/deps_forward_slice.json"
+  "plans/fixtures/prd/missing_plan_refs.json"
+  "plans/fixtures/prd/workflow_touches_crates_touch.json"
+  "plans/fixtures/prd/workflow_touches_crates_create.json"
+  "plans/fixtures/prd/execution_touches_plans.json"
+  "plans/fixtures/prd/acceptance_too_short.json"
+  "plans/fixtures/prd/unresolved_contract_ref.json"
+  "plans/fixtures/prd/empty_evidence.json"
+  "plans/fixtures/prd/missing_targeted_verify.json"
+  "plans/fixtures/prd/missing_contract_must_evidence.json"
+  "plans/fixtures/prd/missing_observability_metrics.json"
+  "plans/fixtures/prd/reason_code_missing_values.json"
+  "plans/fixtures/prd/missing_failure_mode.json"
+  "plans/fixtures/prd/placeholder_todo.json"
   "specs/WORKFLOW_CONTRACT.md"
   "docs/schemas/artifacts.schema.json"
 )
@@ -458,9 +596,11 @@ scripts_to_chmod=(
   "update_task.sh"
   "prd_schema_check.sh"
   "prd_lint.sh"
+  "prd_gate.sh"
   "prd_pipeline.sh"
   "prd_autofix.sh"
   "run_prd_auditor.sh"
+  "prd_audit_check.sh"
   "build_markdown_digest.sh"
   "build_contract_digest.sh"
   "build_plan_digest.sh"
@@ -474,6 +614,9 @@ scripts_to_chmod=(
   "workflow_contract_gate.sh"
   "prd_ref_check.sh"
   "prd_ref_index.sh"
+  "tests/test_prd_gate.sh"
+  "tests/test_prd_audit_check.sh"
+  "tests/test_workflow_acceptance_fallback.sh"
 )
 for script in "${scripts_to_chmod[@]}"; do
   if [[ -f "$WORKTREE/plans/$script" ]]; then
@@ -522,8 +665,15 @@ if test_start "0f" "prd_pipeline logs skipped ref check"; then
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["log"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -534,7 +684,7 @@ if test_start "0f" "prd_pipeline logs skipped ref check"; then
 }
 JSON
   progress="$tmpdir/progress.txt"
-  PRD_FILE="$prd" PROGRESS_FILE="$progress" PRD_CUTTER_CMD="/bin/true" PRD_AUDITOR_ENABLED=0 PRD_REF_CHECK_ENABLED=0 ./plans/prd_pipeline.sh >/dev/null 2>&1
+  PRD_FILE="$prd" PROGRESS_FILE="$progress" PRD_CUTTER_CMD="/bin/true" PRD_AUDITOR_ENABLED=0 PRD_REF_CHECK_ENABLED=0 PRD_GATE_ALLOW_REF_SKIP=1 ./plans/prd_pipeline.sh >/dev/null 2>&1
   if ! grep -q "PRD ref check skipped" "$progress"; then
     echo "FAIL: expected progress log to note skipped prd_ref_check" >&2
     exit 1
@@ -637,12 +787,7 @@ if test_start "0j" "shell safety checks (bash -n, shellcheck optional)" 1; then
 fi
 
 if test_start "0k" "workflow preflight checks"; then
-  run_in_worktree ./plans/prd_lint.sh "plans/prd.json" >/dev/null 2>&1
-  if run_in_worktree test -x "./plans/prd_ref_check.sh"; then
-    run_in_worktree ./plans/prd_ref_check.sh "plans/prd.json" >/dev/null 2>&1
-  else
-    echo "WARN: prd_ref_check.sh missing; skipping ref check"
-  fi
+  run_in_worktree ./plans/prd_gate.sh "plans/prd.json" >/dev/null 2>&1
   run_in_worktree mkdir -p ".ralph"
   cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
   export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
@@ -709,6 +854,16 @@ if test_start "0k" "workflow preflight checks"; then
     exit 1
   fi
 
+  if ! run_in_worktree test -x "plans/prd_gate.sh"; then
+    echo "FAIL: plans/prd_gate.sh not executable" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree test -x "plans/prd_audit_check.sh"; then
+    echo "FAIL: plans/prd_audit_check.sh not executable" >&2
+    exit 1
+  fi
+
   if ! run_in_worktree test -x "plans/prd_autofix.sh"; then
     echo "FAIL: plans/prd_autofix.sh not executable" >&2
     exit 1
@@ -727,16 +882,16 @@ if test_start "0k" "workflow preflight checks"; then
   if ! run_in_worktree awk '
   /Stage A/ {in_stage=1}
   in_stage && /Stage B/ {exit}
-  in_stage && /prd_lint.sh/ && lint==0 {lint=NR}
+  in_stage && /prd_gate.sh/ && gate==0 {gate=NR}
   in_stage && /run_cmd PRD_CUTTER/ && cutter==0 {cutter=NR}
   END {
-    if (lint==0 || cutter==0) exit 1
-    if (lint > cutter) exit 1
+    if (gate==0 || cutter==0) exit 1
+    if (gate > cutter) exit 1
   }
 ' "plans/prd_pipeline.sh"; then
-    echo "FAIL: prd_pipeline Stage A must run lint before PRD_CUTTER" >&2
-    exit 1
-  fi
+  echo "FAIL: prd_pipeline Stage A must run gate before PRD_CUTTER" >&2
+  exit 1
+fi
 
   if ! run_in_worktree awk '/PRD_AUTOFIX/ {found=1} END {exit found?0:1}' "plans/prd_pipeline.sh"; then
     echo "FAIL: prd_pipeline must support PRD_AUTOFIX in Stage A" >&2
@@ -854,6 +1009,11 @@ if test_start "0k" "workflow preflight checks"; then
     exit 1
   fi
 
+  if ! run_in_worktree grep -q "vendor_docs_lint_rust.py" "plans/verify.sh"; then
+    echo "FAIL: verify must run Rust vendor docs lint" >&2
+    exit 1
+  fi
+
   if ! run_in_worktree grep -q "postmortem_check.sh" "plans/verify.sh"; then
     echo "FAIL: verify must run postmortem check gate" >&2
     exit 1
@@ -927,10 +1087,12 @@ if ! run_in_worktree awk '
   in_block && index($0, "plans/workflow_acceptance.sh") {has_accept=1}
   in_block && index($0, "plans/workflow_verify.sh") {has_workflow_verify=1}
   in_block && index($0, "plans/story_verify_allowlist.txt") {has_story=1}
+  in_block && index($0, "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml") {has_vendor_docs=1}
+  in_block && index($0, "tools/vendor_docs_lint_rust.py") {has_vendor_lint=1}
   in_block && index($0, "specs/WORKFLOW_CONTRACT.md") {has_contract=1}
   in_block && index($0, "scripts/check_contract_kernel.py") {has_kernel=1}
   in_block && index($0, "docs/validation_rules.md") {has_rules=1}
-  END { exit (has_root && has_verify && has_accept && has_workflow_verify && has_story && has_contract && has_kernel && has_rules) ? 0 : 1 }
+  END { exit (has_root && has_verify && has_accept && has_workflow_verify && has_story && has_vendor_docs && has_vendor_lint && has_contract && has_kernel && has_rules) ? 0 : 1 }
 ' "plans/verify.sh"; then
   echo "FAIL: workflow allowlist must include core workflow files (including root verify.sh)" >&2
   exit 1
@@ -1068,6 +1230,26 @@ bad_scope_patterns="$(run_in_worktree jq -r '.items[].scope.touch[]?, .items[].s
     exit 1
   fi
   test_pass "0k"
+fi
+
+if test_start "0k.1" "prd gate fixtures"; then
+  run_in_worktree ./plans/tests/test_prd_gate.sh >/dev/null 2>&1
+  test_pass "0k.1"
+fi
+
+if test_start "0k.2" "prd audit check fixtures"; then
+  run_in_worktree ./plans/tests/test_prd_audit_check.sh >/dev/null 2>&1
+  test_pass "0k.2"
+fi
+
+if test_start "0k.3" "contract coverage matrix fixtures"; then
+  run_in_worktree ./plans/tests/test_contract_coverage_matrix.sh >/dev/null 2>&1
+  test_pass "0k.3"
+fi
+
+if test_start "0k.4" "workflow acceptance clone fallback"; then
+  run_in_worktree ./plans/tests/test_workflow_acceptance_fallback.sh >/dev/null 2>&1
+  test_pass "0k.4"
 fi
 
 if test_start "0l" "--list prints test ids"; then
@@ -1246,8 +1428,15 @@ write_valid_prd() {
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["log"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -1292,8 +1481,15 @@ write_invalid_prd() {
       },
       "acceptance": ["a"],
       "steps": ["1", "2", "3", "4"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": [],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
+      "evidence": ["e1"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -1805,8 +2001,15 @@ if test_start "0a" "auditor cache skip avoids agent call"; then
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["docs/order_size_discovery.md"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -1849,7 +2052,7 @@ JSON
       "slice": 1,
       "status": "PASS",
       "reasons": [],
-      "schema_check": { "missing_fields": [], "notes": [] },
+      "schema_check": { "missing_fields": [], "notes": ["checked schema"] },
       "contract_check": {
         "refs_present": true,
         "refs_specific": true,
@@ -1924,8 +2127,15 @@ if test_start "0b" "slice preflight blocks unresolved refs"; then
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["docs/order_size_discovery.md"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -1987,8 +2197,15 @@ if test_start "0c" "ref check blocks unresolved refs"; then
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["docs/order_size_discovery.md"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -2057,8 +2274,15 @@ if test_start "0d" "ref check resolves slash + parenthetical variants"; then
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["docs/order_size_discovery.md"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -2116,8 +2340,15 @@ cat > "$contract_test_root/prd.json" <<'JSON'
       },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
       "evidence": ["docs/order_size_discovery.md"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -3887,8 +4118,15 @@ cat > "$valid_prd_16" <<'JSON'
       "scope": { "touch": ["acceptance_tick.txt"], "avoid": [] },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": [],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
+      "evidence": ["e1"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
@@ -3909,8 +4147,15 @@ cat > "$valid_prd_16" <<'JSON'
       "scope": { "touch": ["acceptance_tick.txt"], "avoid": [] },
       "acceptance": ["a", "b", "c"],
       "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh"],
-      "evidence": [],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
+      "evidence": ["e1"],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": { "type": "", "values": [] },
+      "enforcement_point": "",
+      "failure_mode": [],
+      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",

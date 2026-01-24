@@ -14,10 +14,10 @@ from contract_kernel_lib import (
 
 ROOT = Path(__file__).resolve().parents[1]
 
-ANCHORS_PATH = ROOT / "docs/contract_anchors.md"
-RULES_PATH = ROOT / "docs/validation_rules.md"
-CONTRACT_PATH = ROOT / "CONTRACT.md"
-PLAN_PATH = ROOT / "IMPLEMENTATION_PLAN.md"
+ANCHORS_PATH = ROOT / "docs/architecture/contract_anchors.md"
+RULES_PATH = ROOT / "docs/architecture/validation_rules.md"
+CONTRACT_PATH = ROOT / "specs/CONTRACT.md"
+PLAN_PATH = ROOT / "specs/IMPLEMENTATION_PLAN.md"
 
 
 def sha256_file(path: Path) -> str:
@@ -40,13 +40,13 @@ def build_kernel():
     rules = parse_validation_rules(rules_text, str(RULES_PATH))
 
     sources = {
-        "contract_path": "CONTRACT.md",
+        "contract_path": "specs/CONTRACT.md",
         "contract_sha256": sha256_file(CONTRACT_PATH),
-        "anchors_path": "docs/contract_anchors.md",
+        "anchors_path": "docs/architecture/contract_anchors.md",
         "anchors_sha256": sha256_file(ANCHORS_PATH),
-        "rules_path": "docs/validation_rules.md",
+        "rules_path": "docs/architecture/validation_rules.md",
         "rules_sha256": sha256_file(RULES_PATH),
-        "plan_path": "IMPLEMENTATION_PLAN.md",
+        "plan_path": "specs/IMPLEMENTATION_PLAN.md",
         "plan_sha256": sha256_file(PLAN_PATH),
     }
 

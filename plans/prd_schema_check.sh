@@ -49,6 +49,15 @@ errors="$(
     def missing_fields($obj; $fields):
       [$fields[] as $f | select($obj | has($f) | not) | $f];
 
+    def text_blob($it):
+      ([($it.description // "")] + ($it.acceptance // []) + ($it.steps // []) + ($it.verify // []))
+      | map(tostring)
+      | join(" ");
+
+    def has_placeholders($it):
+      (text_blob($it)
+        | test("(^|[^A-Za-z0-9_])(TODO|TBD|FIXME)([^A-Za-z0-9_]|$)|\\?\\?\\?"; "i"));
+
     def check_dependencies($it; $ids; $by_id):
       ($it.id // "<no id>") as $id
       | (
@@ -92,6 +101,8 @@ errors="$(
       | (missing_fields($it; [
           "id","priority","phase","slice","slice_ref","story_ref","category","description",
           "contract_refs","plan_refs","scope","acceptance","steps","verify","evidence",
+          "contract_must_evidence","enforcing_contract_ats","reason_codes","enforcement_point",
+          "failure_mode","observability","implementation_tests",
           "dependencies","est_size","risk","needs_human_decision","passes"
         ])
         | map(err($id; "missing field " + .)))
@@ -128,6 +139,88 @@ errors="$(
         else [] end
       )
       + (
+        if ($it.verify|type)=="array" then
+          ([ $it.verify[] | select(. != "./plans/verify.sh") ] | length) as $extra
+          | if ($extra < 1) then
+              if ($it.needs_human_decision == true) then [] else [err($id; "verify must include at least one targeted check (non-./plans/verify.sh) or needs_human_decision=true")] end
+            else [] end
+        else [] end
+      )
+      + (
+        if ($it.evidence|type)!="array" then [err($id; "evidence must be array")]
+        elif ([ $it.evidence[] | select(type!="string") ] | length) > 0 then [err($id; "evidence must be array of strings")]
+        elif ($it.evidence|length < 1) then [err($id; "evidence must have >=1 items")]
+        else [] end
+      )
+      + (
+        if ($it.contract_must_evidence|type)!="array" then [err($id; "contract_must_evidence must be array")]
+        elif ([ $it.contract_must_evidence[] | select(type!="object") ] | length) > 0 then [err($id; "contract_must_evidence must contain objects")]
+        elif ([ $it.contract_must_evidence[] | select((.quote|type)!="string" or (.location|type)!="string" or (.anchor|type)!="string") ] | length) > 0 then [err($id; "contract_must_evidence entries must include quote/location/anchor strings")]
+        elif ([ $it.contract_must_evidence[] | select((.quote|length)==0 or (.location|length)==0 or (.anchor|length)==0) ] | length) > 0 then [err($id; "contract_must_evidence entries must be non-empty strings")]
+        else [] end
+      )
+      + (
+        if ($it.enforcing_contract_ats|type)!="array" then [err($id; "enforcing_contract_ats must be array")]
+        elif ([ $it.enforcing_contract_ats[] | select(type!="string") ] | length) > 0 then [err($id; "enforcing_contract_ats must be array of strings")]
+        elif ([ $it.enforcing_contract_ats[] | select(length==0) ] | length) > 0 then [err($id; "enforcing_contract_ats entries must be non-empty strings")]
+        elif ([ $it.enforcing_contract_ats[] | select(test("^AT-[0-9]+$")|not) ] | length) > 0 then [err($id; "enforcing_contract_ats entries must match AT-###")]
+        else [] end
+      )
+      + (
+        if ($it.reason_codes|type)!="object" then [err($id; "reason_codes must be object")]
+        elif ($it.reason_codes.type|type)!="string" then [err($id; "reason_codes.type must be string")]
+        elif (($it.reason_codes.type|length>0) and ($it.reason_codes.type|test("^(ModeReasonCode|OpenPermissionReasonCode|RejectReason)$")|not)) then [err($id; "reason_codes.type must be ModeReasonCode|OpenPermissionReasonCode|RejectReason when set")]
+        elif ($it.reason_codes.values|type)!="array" then [err($id; "reason_codes.values must be array")]
+        elif ([ $it.reason_codes.values[] | select(type!="string") ] | length) > 0 then [err($id; "reason_codes.values must be array of strings")]
+        else [] end
+      )
+      + (
+        if ($it.enforcement_point|type)!="string" then [err($id; "enforcement_point must be string")]
+        elif (($it.enforcement_point|length>0) and ($it.enforcement_point|test("^(PolicyGuard|EvidenceGuard|DispatcherChokepoint|WAL|AtomicGroupExecutor|StatusEndpoint)$")|not)) then [err($id; "enforcement_point must be a known enforcement point when set")]
+        else [] end
+      )
+      + (
+        if ($it.failure_mode|type)!="array" then [err($id; "failure_mode must be array")]
+        elif ([ $it.failure_mode[] | select(type!="string") ] | length) > 0 then [err($id; "failure_mode must be array of strings")]
+        elif ([ $it.failure_mode[] | select(length==0) ] | length) > 0 then [err($id; "failure_mode entries must be non-empty strings")]
+        elif ([ $it.failure_mode[] | select(test("^(stall|hang|backpressure|missing|stale|parse_error)$")|not) ] | length) > 0 then [err($id; "failure_mode entries must be stall|hang|backpressure|missing|stale|parse_error")]
+        else [] end
+      )
+      + (
+        if ($it.observability|type)!="object" then [err($id; "observability must be object")]
+        else
+          (missing_fields($it.observability; ["metrics","status_fields","status_contract_ats"])
+            | map(err($id; "missing observability." + .)))
+        end
+      )
+      + (
+        if ($it.observability.metrics|type)!="array" then [err($id; "observability.metrics must be array")]
+        elif ([ $it.observability.metrics[] | select(type!="object") ] | length) > 0 then [err($id; "observability.metrics must contain objects")]
+        elif ([ $it.observability.metrics[] | select((.name|type)!="string" or (.type|type)!="string" or (.unit|type)!="string" or (.labels|type)!="array") ] | length) > 0 then [err($id; "observability.metrics entries must include name/type/unit/labels")]
+        elif ([ $it.observability.metrics[] | select((.type|test("^(counter|gauge|histogram)$")|not)) ] | length) > 0 then [err($id; "observability.metrics.type must be counter|gauge|histogram")]
+        elif ([ $it.observability.metrics[] | select((.unit|test("^(count|ms|pct|s)$")|not)) ] | length) > 0 then [err($id; "observability.metrics.unit must be count|ms|pct|s")]
+        elif ([ $it.observability.metrics[] | select((.labels|type)!="array") ] | length) > 0 then [err($id; "observability.metrics.labels must be array")]
+        elif ([ $it.observability.metrics[] | select((.labels|map(select(type!="string"))|length)>0) ] | length) > 0 then [err($id; "observability.metrics.labels must be strings")]
+        else [] end
+      )
+      + (
+        if ($it.observability.status_fields|type)!="array" then [err($id; "observability.status_fields must be array")]
+        elif ([ $it.observability.status_fields[] | select(type!="string") ] | length) > 0 then [err($id; "observability.status_fields must be array of strings")]
+        else [] end
+      )
+      + (
+        if ($it.observability.status_contract_ats|type)!="array" then [err($id; "observability.status_contract_ats must be array")]
+        elif ([ $it.observability.status_contract_ats[] | select(type!="string") ] | length) > 0 then [err($id; "observability.status_contract_ats must be array of strings")]
+        elif ([ $it.observability.status_contract_ats[] | select(length==0) ] | length) > 0 then [err($id; "observability.status_contract_ats entries must be non-empty strings")]
+        elif ([ $it.observability.status_contract_ats[] | select(test("^AT-[0-9]+$")|not) ] | length) > 0 then [err($id; "observability.status_contract_ats entries must match AT-###")]
+        else [] end
+      )
+      + (
+        if ($it.implementation_tests|type)!="array" then [err($id; "implementation_tests must be array")]
+        elif ([ $it.implementation_tests[] | select(type!="string") ] | length) > 0 then [err($id; "implementation_tests must be array of strings")]
+        else [] end
+      )
+      + (
         if ($it.contract_refs|type)!="array" or ($it.contract_refs|length==0) then [err($id; "contract_refs must be non-empty array")] else [] end
       )
       + (
@@ -143,7 +236,14 @@ errors="$(
         else [] end
       )
       + (
-        if ($it.est_size|type)!="string" or ($it.est_size|test("^(XS|S|M)$")|not) then [err($id; "est_size must be XS|S|M")] else [] end
+        if ($it.needs_human_decision == true) then [] else
+          if has_placeholders($it) then [err($id; "placeholder tokens TODO/TBD/FIXME/??? require needs_human_decision=true")] else [] end
+        end
+      )
+      + (
+        if ($it.est_size|type)!="string" or ($it.est_size|test("^(XS|S|M)$")|not) then [err($id; "est_size must be XS|S|M")]
+        elif ($it.est_size=="M") then [err($id; "est_size=M must be split (use XS|S)")]
+        else [] end
       )
       + (
         if ($it.risk|type)!="string" or ($it.risk|test("^(low|med|high)$")|not) then [err($id; "risk must be low|med|high")] else [] end
@@ -161,17 +261,6 @@ if [[ -n "$errors" ]]; then
   echo "PRD schema violations:" >&2
   echo "$errors" >&2
   exit 5
-fi
-
-# Soft warnings (non-fatal)
-warnings="$(
-  jq -r '
-    (.items | if type=="array" then . else [] end)[] | select(.est_size=="M") | "WARN: \(.id): est_size=M (should be split)"
-  ' "$PRD_FILE"
-)"
-
-if [[ -n "$warnings" ]]; then
-  echo "$warnings" >&2
 fi
 
 echo "PRD schema OK"

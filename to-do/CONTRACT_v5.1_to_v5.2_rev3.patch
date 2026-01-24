@@ -1,0 +1,515 @@
+--- specs/CONTRACT.md
++++ specs/CONTRACT.md
+@@ -1,6 +1,6 @@
+ This is the canonical contract path. Do not edit other copies.
+ 
+-# **Version: 5.1 (The "Antifragile" Standard)**
++# **Version: 5.2 (The "Antifragile" Standard)**
+ **Status**: FINAL ARCHITECTURE **Objective**: Net Profit via Structural Arbitrage using **Atomic Group Execution**, **Fee-Aware IOC Limits**, and **Closed-Loop Optimization**. **Architecture**: "The Iron Monolith v4.0" (Rust Execution/Risk \+ Python Policy \+ **Automated Policy Tuner**)
+ 
+ ---
+@@ -28,9 +28,30 @@
+ - /status required fields: see §7.0 acceptance tests.
+ 
+ > [!WARNING]
+-> **v5.1 F1_CERT Binding Requirement:** This version introduces F1_CERT binding validation (§2.2.1). ALL components that produce or consume `contract_version` MUST be updated to `5.1` in lockstep (F1 cert generator, runtime binary, PolicyGuard). Mismatched versions will force `TradingMode::ReduceOnly` until aligned.
++> **v5.2 F1_CERT Binding Requirement:** This version introduces F1_CERT binding validation (§2.2.1). ALL components that produce or consume `contract_version` MUST be updated to `5.2` in lockstep (F1 cert generator, runtime binary, PolicyGuard). Mismatched versions will force `TradingMode::ReduceOnly` until aligned.
+ 
+ ## Definitions
++
++### Acceptance Test Isolation Requirements (Normative)
++
++For any **new guard** (a rule, latch, monitor, or gate) that can block an OPEN, change TradingMode, or emit a SafetyOverride:
++
++1) You MUST add a **paired** acceptance test set:
++   - **TRIP AT**: the guard activates and is the *sole* reason an otherwise-valid OPEN is blocked / mode changes.
++   - **NON-TRIP AT**: the guard does not activate and an otherwise-valid OPEN proceeds to dispatch.
++
++2) Every TRIP/NON-TRIP AT for a guard MUST explicitly declare:
++   - **All other gates forced pass** (Liquidity Gate pass, NetEdge pass, quantization pass, no unrelated latches, etc.).
++   - Any required “normal” preconditions (fresh feeds, RiskState normal, no other cortex overrides).
++
++3) “Downstream-only” tests (e.g., “if flag is already true…”) do NOT satisfy activation coverage.
++
++4) Pass criteria MUST prove causality via at least one of:
++   - dispatch count (0 vs 1),
++   - specific reject reason code,
++   - specific latch reason code,
++   - specific `cortex_override` value.
++
+ 
+ - **instrument_kind**: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).
+   - **Linear Perpetuals (USDC‑margined)**: treat as `linear_future` for sizing (canonical `qty_coin`), even if their venue symbol says "PERPETUAL".
+@@ -40,7 +61,7 @@
+ 
+ - **L1TickerSnapshot**: {`instrument_id`, `best_bid`, `best_ask`, `ts_ms`, `source` (REST|WS)} from the ticker feed. Valid only if `best_bid > 0`, `best_ask > 0`, `best_bid <= best_ask`, and `(now_ms - ts_ms) <= l2_book_snapshot_max_age_ms`.
+ 
+-- **contract_version**: canonical version string `5.1` (numeric only; no codename/tagline).
++- **contract_version**: canonical version string `5.2` (numeric only; no codename/tagline).
+ 
+ - **RiskState** (health/cause layer): `Healthy | Degraded | Maintenance | Kill`
+ - **TradingMode** (enforcement layer): `Active | ReduceOnly | Kill`  
+@@ -203,6 +224,105 @@
+ - Then: values come from fetched metadata (no hardcoded defaults).
+ - Pass criteria: quantization/sizing uses fetched values.
+ - Fail criteria: any hardcoded defaults used.
++
++#### **1.0.Y Instrument Lifecycle & Expiry Safety (Expiry Cliff Guard) — MUST implement**
++
++**Purpose:** Instruments expire/delist. After expiry, venue APIs may return "invalid instrument"/"not_found"/"orderbook_closed".
++These are **expected terminal lifecycle events**, not fatal system errors. The Soldier MUST remain panic-free and MUST protect
++the rest of the portfolio from a single instrument disappearing.
++
++**Required instrument fields (from venue metadata; cached under §1.0.X):**
++- `expiration_timestamp_ms: Option<i64>` (epoch ms; null for perps)
++- `is_active: bool` (or equivalent venue state)
++- `instrument_state: enum { Active, DelistingSoon, ExpiredOrDelisted }` (derived)
++
++**Delist buffer rule (fail-closed for opens):**
++- If `expiration_timestamp_ms` is present and `now_ms >= expiration_timestamp_ms - (expiry_delist_buffer_s * 1000)`:
++  - NEW OPEN intents for that instrument MUST be rejected before dispatch with `Rejected(InstrumentExpiredOrDelisted)`.
++  - CLOSE/HEDGE/CANCEL intents remain allowed (subject to Kill hard-stop and other gates).
++
++**Terminal error classification (panic-free):**
++- Any venue response that semantically maps to {`invalid_instrument`, `not_found`, `orderbook_closed`, `instrument_not_open`}
++  for an instrument with `expiration_timestamp_ms` present and `now_ms >= expiration_timestamp_ms` MUST be classified as:
++  - `Terminal(InstrumentExpiredOrDelisted)`
++  - MUST NOT panic
++  - MUST NOT force process restart
++  - MUST trigger reconciliation for that instrument only (ledger/orders/trades/positions) and then mark `instrument_state=ExpiredOrDelisted`.
++
++**Idempotent cancel rule (expiry-safe):**
++- If a CANCEL is issued for an order on an expired/delisted instrument and the venue returns a terminal lifecycle error,
++  the CANCEL MUST be treated as **idempotently successful** (order is considered gone).
++
++**Portfolio-wide reconcile/flatten (expiry-safe):**
++- During any portfolio-wide reconcile/flatten procedure (restart reconcile, emergency flatten, operator shutdown flow),
++  terminal lifecycle errors for expired/delisted instruments MUST NOT abort the procedure.
++- The procedure MUST continue managing other instruments normally.
++- If venue truth (positions snapshot) indicates no remaining position for the expired/delisted instrument, the system MUST
++  mark `instrument_state=ExpiredOrDelisted` and MUST NOT enter a retry loop for that instrument.
++
++**Acceptance Tests (REQUIRED):**
++AT-949
++- Given: `expiration_timestamp_ms = Texp`, `now_ms = Texp + 1000`, and a CANCEL is attempted on that instrument.
++  - All other gates are configured to pass (this test isolates expiry-safe idempotent cancel handling).
++- When: venue returns a terminal lifecycle error (e.g., invalid instrument / not found / orderbook_closed).
++- Then: the system does not panic; the cancel is treated as idempotently successful; the instrument is marked `ExpiredOrDelisted`;
++  other instruments continue to be managed normally.
++- Pass criteria: no crash; instrument_state updated; other instrument loop continues.
++- Fail criteria: panic/crash or global trading halted solely due to this instrument error.
++
++AT-950
++- Given: `expiration_timestamp_ms = Texp`, `expiry_delist_buffer_s = 60`, and `now_ms = Texp - 30_000`.
++  - All other gates are configured to pass (this test isolates expiry delist OPEN block).
++- When: an OPEN intent for that instrument is evaluated.
++- Then: the intent is rejected with `Rejected(InstrumentExpiredOrDelisted)` before dispatch; CLOSE/HEDGE/CANCEL remain allowed.
++- Pass criteria: OPEN dispatch count remains 0 and reject reason matches.
++- Fail criteria: OPEN dispatch occurs or reason missing/mismatched.
++
++AT-965
++- Given:
++  - `expiration_timestamp_ms = Texp`, `expiry_delist_buffer_s = 60`
++  - `now_ms = Texp - 120_000` (outside the delist buffer)
++  - instrument is active (not expired/delisted)
++  - All other gates are configured to pass (this test isolates the expiry delist OPEN block)
++- When: an OPEN intent for that instrument is evaluated.
++- Then: it MUST NOT be rejected with `InstrumentExpiredOrDelisted`; it proceeds to dispatch.
++- Pass criteria: dispatch count becomes 1 and there is no `Rejected(InstrumentExpiredOrDelisted)`.
++- Fail criteria: OPEN rejected/blocked by the lifecycle guard despite being outside the delist buffer.
++
++AT-966
++- Given:
++  - instrument is active (outside delist buffer; not expired/delisted)
++  - a CANCEL intent for an existing order is handled and the venue returns success (or a normal non-terminal “already closed/canceled” response)
++  - All other gates are configured to pass (this test isolates expiry-safe idempotent cancel logic)
++- When: the CANCEL response is processed.
++- Then: the system MUST NOT mark the instrument `ExpiredOrDelisted`; it treats the cancel as a normal success path.
++- Pass criteria: instrument_state remains Active (or equivalent non-expired state).
++- Fail criteria: instrument is incorrectly marked `ExpiredOrDelisted` from a non-terminal cancel result.
++
++
++AT-960
++- Given: a CANCEL intent on an expired/delisted instrument returns `Terminal(InstrumentExpiredOrDelisted)` at T0.
++  - All other gates are configured to pass (this test isolates expiry-safe idempotent cancel handling).
++- When: the same CANCEL intent is retried (duplicate) at T0+1.
++- Then: the second attempt is a NOOP (idempotent success) and does not change ledger correctness.
++- Pass criteria: no extra dispatch; ledger remains consistent.
++- Fail criteria: repeated cancels cause errors, state corruption, or repeated network dispatch.
++
++AT-961
++- Given: a portfolio-wide reconcile/flatten is invoked with two instruments:
++  - Instrument A is expired/delisted (`expiration_timestamp_ms = Texp`, `now_ms = Texp + 1000`)
++  - Instrument B is active and has an open position requiring management
++  - All other gates are configured to pass (this test isolates expiry-safe portfolio reconciliation).
++- When: reconcile attempts cancel/close actions and instrument A returns a terminal lifecycle error, while instrument B proceeds normally.
++- Then: the system MUST NOT panic; it MUST continue the procedure for instrument B; and it MUST NOT globally halt solely due to A.
++- Pass criteria: B continues to be managed; no crash; A marked `ExpiredOrDelisted`.
++- Fail criteria: global halt, crash, or B management stops because A expired.
++
++AT-962
++- Given: instrument A returns a terminal lifecycle error as above.
++  - All other gates are configured to pass (this test isolates expiry-safe reconcile termination).
++- When: a positions snapshot (venue truth) shows no remaining position for instrument A.
++- Then: the system marks A `ExpiredOrDelisted` and MUST NOT retry cancel/close in a loop for A.
++- Pass criteria: retry count for A remains 0 after reconciliation finalizes; state marked expired.
++- Fail criteria: infinite/extended retries or repeated dispatch attempts for A after venue truth indicates no position.
++
++
++
+ 
+ 
+ **OrderSize struct (MUST implement):**
+@@ -586,6 +706,83 @@
+ - Then: the 4th attempt is rejected and logged (`ChurnBreakerTrip`), with blacklist TTL enforced.
+ - Pass criteria: rejection + log + TTL enforcement.
+ - Fail criteria: 4th attempt proceeds or TTL not enforced.
++
++### **1.2.3 Self-Impact Feedback Loop Guard (Echo Chamber Breaker)**
++
++**Goal:** Prevent the bot from reacting to its own impact and recursively increasing exposure (“echo chamber”).
++This is a **safety guard**, not a strategy feature.
++
++**Where:** `soldier/core/risk/self_impact_guard.rs`
++
++**Inputs (minimum):**
++- Rolling public market volume estimate over `feedback_loop_window_s` (USD notional): `public_notional_usd`
++- Rolling self trade notional over the same window (USD notional): `self_notional_usd`
++- `public_trades_last_update_ts_ms` (epoch ms; freshness timestamp for public trade feed aggregation)
++- `now_ms`
++- Intended action classification (OPEN vs CLOSE/HEDGE/CANCEL)
++
++**Freshness precondition (non-negotiable):**
++- If `now_ms - public_trades_last_update_ts_ms > public_trade_feed_max_age_ms` OR the field is missing/unparseable:
++  - The Self-Impact guard MUST NOT compute `self_fraction`.
++  - Instead, the system MUST treat this as a trades-feed liveness failure:
++    - Set `RiskState::Degraded`
++    - Set Open Permission Latch reason `WS_TRADES_GAP_RECONCILE_REQUIRED`
++    - Block opens until reconciliation clears the latch.
++
++**Computation (only when feed is fresh):**
++- `self_fraction = self_notional_usd / max(public_notional_usd, epsilon)`
++- Trip condition (any):
++  A) `self_fraction >= self_trade_fraction_trip` AND `self_notional_usd >= self_trade_min_self_notional_usd`
++  B) `self_notional_usd >= self_trade_notional_trip_usd`
++- If trip condition is met for a proposed OPEN in the same direction as recent self trades:
++  - Reject the OPEN intent before dispatch with `Rejected(FeedbackLoopGuardActive)`
++  - Apply cooldown: block further OPENs for `feedback_loop_cooldown_s` for the affected `{strategy_id, structure_fingerprint}` key.
++
++**Acceptance Tests (REQUIRED):**
++AT-953
++- Given: `public_trades_last_update_ts_ms` is stale beyond `public_trade_feed_max_age_ms`.
++  - All other gates are configured to pass (this test isolates stale-feed handling for the Self-Impact guard).
++- When: the Self-Impact guard evaluates a new OPEN intent.
++- Then: it does NOT compute `self_fraction`; it sets `RiskState::Degraded` and sets Open Permission Latch reason `WS_TRADES_GAP_RECONCILE_REQUIRED`.
++- Pass criteria: OPEN blocked due to latch; no `Rejected(FeedbackLoopGuardActive)` is emitted.
++- Fail criteria: FeedbackLoopGuard trips (or computes) while trade feed is stale OR OPEN dispatch occurs.
++
++AT-955
++- Given:
++  - `feedback_loop_window_s = 10`
++  - trade feed is fresh: `public_trades_last_update_ts_ms = now_ms - 1000` and `public_trade_feed_max_age_ms = 5000`
++  - `self_trade_fraction_trip = 0.25` and `self_trade_min_self_notional_usd = 10_000`
++  - `public_notional_usd = 100_000` and `self_notional_usd = 40_000` (so `self_fraction = 0.40`)
++  - Proposed action is an **OPEN** in the same direction as recent self trades
++  - All other gates are configured to pass (this test isolates the Self-Impact guard)
++- When: an OPEN intent is evaluated.
++- Then: the intent is rejected with `Rejected(FeedbackLoopGuardActive)` and no dispatch occurs.
++- Pass criteria: rejection reason matches; dispatch count remains 0.
++- Fail criteria: dispatch occurs, rejection missing/mismatched, or guard fails to compute trip from the provided notional inputs.
++
++AT-956
++- Given:
++  - trade feed is fresh (as above)
++  - `self_trade_notional_trip_usd = 150_000`
++  - `public_notional_usd = 10_000_000` and `self_notional_usd = 200_000` (so self_fraction is small but notional is large)
++  - Proposed action is an **OPEN** in the same direction as recent self trades
++  - All other gates are configured to pass
++- When: an OPEN intent is evaluated.
++- Then: the intent is rejected with `Rejected(FeedbackLoopGuardActive)` via the notional-trip rule.
++- Pass criteria: rejection reason matches; dispatch count remains 0.
++- Fail criteria: dispatch occurs or the guard ignores the notional-trip path.
++
++AT-957
++- Given:
++  - trade feed is fresh (as above)
++  - `self_trade_fraction_trip = 0.25` and `self_trade_min_self_notional_usd = 10_000`
++  - `self_trade_notional_trip_usd = 150_000`
++  - `public_notional_usd = 200_000` and `self_notional_usd = 20_000` (so `self_fraction = 0.10`, below threshold; notional below trip)
++  - All other gates are configured to pass (isolate Self-Impact guard)
++- When: an OPEN intent is evaluated.
++- Then: the Self-Impact guard MUST NOT reject with `FeedbackLoopGuardActive`; the intent proceeds to dispatch.
++- Pass criteria: dispatch count becomes 1 and there is no `Rejected(FeedbackLoopGuardActive)`.
++- Fail criteria: guard rejects despite being below thresholds.
++
+ 
+ ### **1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)**
+ 
+@@ -1142,7 +1339,7 @@
+ - Fail criteria: `trading_mode` Active while F1_CERT is missing/stale/FAIL.
+ 
+ AT-012
+-- Given: F1_CERT has `contract_version="5.1"` and runtime `contract_version` is `"5.1"`.
++- Given: F1_CERT has `contract_version="5.2"` and runtime `contract_version` is `"5.2"`.
+ - When: PolicyGuard validates F1_CERT binding checks.
+ - Then: `contract_version` comparison passes (no ReduceOnly due to formatting mismatch).
+ - Pass criteria: TradingMode not forced to ReduceOnly due solely to `contract_version` formatting.
+@@ -1624,6 +1821,7 @@
+ - `RESTART_RECONCILE_REQUIRED`
+ - `WS_BOOK_GAP_RECONCILE_REQUIRED`
+ - `WS_TRADES_GAP_RECONCILE_REQUIRED`
++- `WS_DATA_STALE_RECONCILE_REQUIRED`
+ - `INVENTORY_MISMATCH_RECONCILE_REQUIRED`
+ - `SESSION_TERMINATION_RECONCILE_REQUIRED`
+ 
+@@ -1728,6 +1926,8 @@
+ - `PostOnlyWouldCross`
+ - `RiskIncreasingCancelReplaceForbidden`
+ - `RateLimitBrownout`
++- `InstrumentExpiredOrDelisted`
++- `FeedbackLoopGuardActive`
+ - `LabelTooLong`
+ 
+ **Acceptance Test (REQUIRED):**
+@@ -1913,6 +2113,68 @@
+ - Then: `bunker_mode_active = true` and OPEN intents are blocked.
+ - Pass criteria: Bunker Mode entered; opens blocked.
+ - Fail criteria: Active mode while required metrics are missing.
++
++### **2.3.3 Mark/Index/Last Basis Monitor (Liquidation Reality Guard)**
++
++**Purpose:** Liquidation/margin risk is driven by reference prices (e.g., mark), not necessarily last trade. Large basis
++divergence is a microstructure failure mode; the bot MUST fail-closed for new risk when basis blows out.
++
++**Where:** `soldier/core/risk/basis_monitor.rs`
++
++**Inputs (per instrument, minimum):**
++- `mark_price` (float, >0) + `mark_price_ts_ms`
++- `index_price` (float, >0) + `index_price_ts_ms`
++- `last_price` OR `mid_price` (float, >0) + `last_price_ts_ms`
++- `now_ms`
++
++**Derived metrics:**
++- `basis_mark_last_bps = abs(mark_price - last_price) / mark_price * 10_000`
++- `basis_mark_index_bps = abs(mark_price - index_price) / mark_price * 10_000`
++- `basis_is_fresh = max(now_ms - mark_price_ts_ms, now_ms - index_price_ts_ms, now_ms - last_price_ts_ms) <= basis_price_max_age_ms`
++
++**Fail-closed missing/stale handling:**
++- If any required price is missing/unparseable OR `basis_is_fresh == false`:
++  - emit `ForceReduceOnly{cooldown_s=basis_reduceonly_cooldown_s}` (producer output) until fresh data recovers.
++
++**Trip rules (deterministic):**
++- If `max(basis_mark_last_bps, basis_mark_index_bps) >= basis_kill_bps` for `basis_kill_window_s`:
++  - emit `ForceKill`
++- Else if `max(...) >= basis_reduceonly_bps` for `basis_reduceonly_window_s`:
++  - emit `ForceReduceOnly{cooldown_s=basis_reduceonly_cooldown_s}`
++
++**Acceptance Tests (REQUIRED):**
++AT-951
++- Given: `basis_reduceonly_bps=50`, `basis_reduceonly_window_s=5`, and basis exceeds 50 bps for >=5s.
++  - All other gates are configured to pass (this test isolates Basis Monitor reduce-only trip).
++- When: Basis Monitor evaluates and PolicyGuard computes TradingMode.
++- Then: `cortex_override==ForceReduceOnly{cooldown_s=basis_reduceonly_cooldown_s}` and OPENs are blocked.
++- Pass criteria: ReduceOnly enforced; cooldown uses basis-specific cooldown param.
++- Fail criteria: no ReduceOnly OR cooldown uses unrelated parameters.
++
++AT-952
++- Given: `basis_kill_bps=150`, `basis_kill_window_s=5`, and basis exceeds 150 bps for >=5s.
++  - All other gates are configured to pass (this test isolates Basis Monitor kill trip).
++- When: Basis Monitor evaluates and PolicyGuard computes TradingMode.
++- Then: `cortex_override==ForceKill` and TradingMode enters Kill.
++- Pass criteria: Kill enforced within one tick after window.
++- Fail criteria: Kill not enforced.
++
++AT-954
++- Given: required basis price inputs are missing or stale (age > `basis_price_max_age_ms`).
++  - All other gates are configured to pass (this test isolates Basis Monitor stale-input fail-closed).
++- When: Basis Monitor evaluates.
++- Then: it emits ForceReduceOnly (fail-closed) and OPENs are blocked.
++- Pass criteria: ReduceOnly enforced due solely to missing/stale basis inputs.
++- Fail criteria: Active mode while basis inputs are missing/stale.
++
++AT-963
++- Given:
++  - `basis_reduceonly_bps=50`, `basis_kill_bps=150`
++  - mark/index/last are present and fresh (`basis_is_fresh == true`)
++  - `max(basis_mark_last_bps, basis_mark_index_bps) < 50 bps` continuously for >= `basis_reduceonly_window_s`
++  - All other gates are configured to pass (this test isolates the Basis Monitor)
++- When: Basis Monitor evaluates and PolicyGuard computes TradingMode for an OPEN intent.
++- Then: Basis Monitor MUST NOT emit `ForceReduceOnly` or `ForceKill`; no basis-driven override is present; the OPEN proceeds to dispatch.
++- Pass criteria: dispatch count becomes 1 and there is no basis-driven override.
++- Fail criteria: ReduceOnly/Kill (or OPEN blocked) attributable to Basis Monitor despite basis being within threshold and inputs fresh.
++
+ 
+ ### **2.4 Durable Intent Ledger (WAL Truth Source)**
+ 
+@@ -2260,6 +2522,60 @@
+      - MUST set `open_permission_blocked_latch = true` with reason `SESSION_TERMINATION_RECONCILE_REQUIRED`.
+   2) Force REST snapshot reconciliation (open orders + positions + recent trades).
+   3) Resume only after reconciliation passes.
++
++**D) Application-Level WS Data Liveness (Zombie Socket Detection) — MUST implement:**
++- **Key rule:** TCP/WS ping/pong or heartbeats are not sufficient evidence of market-data liveness.
++- Track `last_marketdata_event_ts_ms`: updated ONLY on application market-data payloads (book/trades/ticker), excluding heartbeat/ping/test frames.
++- Compute `ws_marketdata_event_lag_ms = now_ms - last_marketdata_event_ts_ms`.
++
++**Trip condition (stalled feed; gated to avoid illiquid false-trips):**
++Trip `WS_DATA_STALE_RECONCILE_REQUIRED` only if BOTH are true:
++1) `ws_marketdata_event_lag_ms > ws_zombie_silence_ms`, AND
++2) (EITHER)
++   - `has_open_exposure == true` (any open position OR any in-flight/open orders), OR
++   - `had_recent_marketdata_activity == true` where `had_recent_marketdata_activity := (now_ms - last_marketdata_event_ts_ms) <= ws_zombie_activity_window_ms` evaluated at the last time the feed was known-good.
++
++**On trip (deterministic corrective actions):**
++1) Set `RiskState::Degraded` and pause opens.
++2) Set Open Permission Latch reason: `WS_DATA_STALE_RECONCILE_REQUIRED`.
++3) Force WS reconnect/resubscribe.
++4) Fetch REST snapshots (orders + positions + recent trades) and run reconciliation.
++5) Resume only when reconciliation succeeds and latch clears.
++
++**Explicit exclusion (avoid false-trip loops):**
++- This Zombie Socket rule is based on *market-data event silence* (`ws_marketdata_event_lag_ms`) and MUST NOT trip solely
++  because an individual instrument’s book `change_id` fails to advance.
++- If ticker/trades (or any other marketdata payload) are still arriving such that `ws_marketdata_event_lag_ms` is within
++  threshold, the system MUST NOT set `WS_DATA_STALE_RECONCILE_REQUIRED` (no global reconnect loop).
++- Per-instrument book quietness is handled by existing L2 staleness + Liquidity Gate and/or per-channel resubscribe logic;
++  it is not a “zombie socket” unless market-data as a whole has stalled.
++
++**Acceptance Tests (REQUIRED):**
++AT-946
++- Given: an illiquid instrument’s book `change_id` does not advance for > `ws_zombie_silence_ms`, but ticker (or trades)
++  payloads for any subscribed market-data channel continue to arrive such that `ws_marketdata_event_lag_ms <= ws_zombie_silence_ms`.
++  `has_open_exposure == true`.
++  - All other gates are configured to pass; no unrelated Open Permission Latch reasons are set (test isolates Zombie Socket rule).
++- When: WS liveness monitor evaluates.
++- Then: it MUST NOT set `WS_DATA_STALE_RECONCILE_REQUIRED` (no global reconnect loop); the monitor remains non-tripped.
++- Pass criteria: latch not set by this rule.
++- Fail criteria: latch set or Degraded loops triggered solely by per-instrument book stagnation while other marketdata is live.
++
++AT-947
++- Given: `ws_marketdata_event_lag_ms > ws_zombie_silence_ms` and `has_open_exposure == true`, while WS ping/pong continues.
++  - All other gates are configured to pass; no unrelated Open Permission Latch reasons are set (test isolates Zombie Socket rule).
++- When: WS liveness monitor evaluates.
++- Then: `RiskState::Degraded` and Open Permission Latch sets `WS_DATA_STALE_RECONCILE_REQUIRED`; opens are blocked until reconcile clears.
++- Pass criteria: latch set; OPEN blocked; reconnect + reconcile path invoked.
++- Fail criteria: OPEN allowed or latch not set.
++
++AT-948
++- Given: an illiquid instrument with no marketdata events for > `ws_zombie_silence_ms`, but `has_open_exposure == false` and `had_recent_marketdata_activity == false`.
++  - All other gates are configured to pass; no unrelated Open Permission Latch reasons are set (test isolates Zombie Socket rule).
++- When: WS liveness monitor evaluates.
++- Then: it MUST NOT set `WS_DATA_STALE_RECONCILE_REQUIRED` (no reconnect loop from legitimate quiet markets).
++- Pass criteria: latch not set by this rule.
++- Fail criteria: latch set or Degraded loops triggered solely by quiet book.
+ 
+ **Safety rule during Degraded:** allow reduce-only closes/hedges to proceed; block any risk-increasing cancels/replaces/opens (see definition in §2.2.5).
+ 
+@@ -3051,7 +3367,7 @@
+ **/status response MUST include (minimum):**
+ - `status_schema_version` (integer; current version = 1)
+ - `trading_mode`, `risk_state`, `evidence_chain_state`, `bunker_mode_active`
+-- `connectivity_degraded` (bool; true iff `bunker_mode_active == true` OR `open_permission_reason_codes` contains `RESTART_RECONCILE_REQUIRED`, `WS_BOOK_GAP_RECONCILE_REQUIRED`, `WS_TRADES_GAP_RECONCILE_REQUIRED`, `INVENTORY_MISMATCH_RECONCILE_REQUIRED`, or `SESSION_TERMINATION_RECONCILE_REQUIRED`)
++- `connectivity_degraded` (bool; true iff `bunker_mode_active == true` OR `open_permission_reason_codes` contains `RESTART_RECONCILE_REQUIRED`, `WS_BOOK_GAP_RECONCILE_REQUIRED`, `WS_TRADES_GAP_RECONCILE_REQUIRED`, `WS_DATA_STALE_RECONCILE_REQUIRED`, `INVENTORY_MISMATCH_RECONCILE_REQUIRED`, or `SESSION_TERMINATION_RECONCILE_REQUIRED`)
+ - `policy_age_sec`, `last_policy_update_ts` (epoch ms; MUST equal `python_policy_generated_ts_ms` from PolicyGuard inputs)
+ - `f1_cert_state` + `f1_cert_expires_at`
+ - `disk_used_pct` (ratio in [0,1]), `disk_used_last_update_ts_ms` (epoch ms; see §2.2.1.1)
+@@ -3820,6 +4136,38 @@
+ - Pass criteria: opens blocked for full cooldown.
+ - Fail criteria: opens allowed early.
+ 
++**`basis_price_max_age_ms`** (§2.3.3 Basis Monitor)
++- **Default**: `5000` ms
++- **Purpose**: Max allowed staleness across mark/index/last timestamps before failing closed (ReduceOnly).
++AT-958
++- Given: any basis input timestamp is older than 5000ms.
++- When: Basis Monitor evaluates.
++- Then: it emits ForceReduceOnly.
++- Pass criteria: ReduceOnly enforced due to stale basis inputs.
++- Fail criteria: Active mode with stale basis inputs.
++
++**`basis_reduceonly_bps`** (§2.3.3 Basis Monitor)
++- **Default**: `50` bps
++- **Purpose**: Basis divergence threshold that forces ReduceOnly.
++**`basis_reduceonly_window_s`**
++- **Default**: `5` seconds
++**`basis_reduceonly_cooldown_s`**
++- **Default**: `300` seconds
++- **Purpose**: Dedicated cooldown for basis ReduceOnly; MUST NOT reuse `spread_depth_cooldown_s`.
++AT-959
++- Given: basis exceeds 50 bps for 5s.
++- When: cooldown is applied.
++- Then: opens remain blocked for 300s (basis cooldown).
++- Pass criteria: 300s basis cooldown enforced.
++- Fail criteria: cooldown differs or reuses unrelated params.
++
++**`basis_kill_bps`** (§2.3.3 Basis Monitor)
++- **Default**: `150` bps
++- **Purpose**: Extreme divergence threshold that forces Kill.
++**`basis_kill_window_s`**
++- **Default**: `5` seconds
++
++
+ ---
+ 
+ ### **A.2.1 F1 Certification & Critical Inputs**
+@@ -3898,6 +4246,39 @@
+ - Then: `cortex_override = ForceReduceOnly`; opens blocked.
+ - Pass criteria: ForceReduceOnly set; OPEN blocked.
+ - Fail criteria: remains Active.
++**`ws_zombie_silence_ms`** (§3.4 WS Data Liveness)
++- **Default**: `15000` ms
++- **Purpose**: Threshold for application-level marketdata silence before suspecting a zombie socket (gated by exposure/activity; see §3.4.D).
++
++**`ws_zombie_activity_window_ms`** (§3.4 WS Data Liveness)
++- **Default**: `60000` ms
++- **Purpose**: Window used to determine `had_recent_marketdata_activity` (avoids false-trips on legitimately quiet books).
++
++**`public_trade_feed_max_age_ms`** (§1.2.3 Self-Impact Guard)
++- **Default**: `5000` ms
++- **Purpose**: Max allowed staleness for the public trades aggregation used by self-impact detection; stale => treat as WS trades gap (fail-closed for opens).
++
++**`feedback_loop_window_s`** (§1.2.3 Self-Impact Guard)
++- **Default**: `10` seconds
++- **Purpose**: Rolling window to compute `public_notional_usd` and `self_notional_usd`.
++
++**`self_trade_fraction_trip`** (§1.2.3 Self-Impact Guard)
++- **Default**: `0.50`
++- **Purpose**: Self fraction threshold above which opens are blocked (echo chamber protection).
++
++**`self_trade_min_self_notional_usd`** (§1.2.3 Self-Impact Guard)
++- **Default**: `5000` USD
++- **Purpose**: Minimum self notional required for the fraction trip to be meaningful.
++
++**`self_trade_notional_trip_usd`** (§1.2.3 Self-Impact Guard)
++- **Default**: `20000` USD
++- **Purpose**: Absolute self-notional trip for extreme impact even if fraction is unreliable.
++
++**`feedback_loop_cooldown_s`** (§1.2.3 Self-Impact Guard)
++- **Default**: `300` seconds
++- **Purpose**: Cooldown applied after a feedback loop trip.
++
++
+ 
+ **`mm_util_reject_opens`** (§1.4.3 Margin Headroom Gate)
+ - **Default**: `0.70` (70%)
+@@ -4289,6 +4670,20 @@
+ | `dvol_jump_window_s` | `60` | sec | §2.3 |
+ | `dvol_cooldown_s` | `300` | sec | §2.3 |
+ | `spread_depth_cooldown_s` | `120` | sec | §2.3 |
++| `basis_price_max_age_ms` | `5000` | ms | §2.3.3 |
++| `basis_reduceonly_bps` | `50` | bps | §2.3.3 |
++| `basis_reduceonly_window_s` | `5` | sec | §2.3.3 |
++| `basis_reduceonly_cooldown_s` | `300` | sec | §2.3.3 |
++| `basis_kill_bps` | `150` | bps | §2.3.3 |
++| `basis_kill_window_s` | `5` | sec | §2.3.3 |
++| `ws_zombie_silence_ms` | `15000` | ms | §3.4 |
++| `ws_zombie_activity_window_ms` | `60000` | ms | §3.4 |
++| `public_trade_feed_max_age_ms` | `5000` | ms | §1.2.3 |
++| `feedback_loop_window_s` | `10` | sec | §1.2.3 |
++| `self_trade_fraction_trip` | `0.50` | ratio | §1.2.3 |
++| `self_trade_min_self_notional_usd` | `5000` | USD | §1.2.3 |
++| `self_trade_notional_trip_usd` | `20000` | USD | §1.2.3 |
++| `feedback_loop_cooldown_s` | `300` | sec | §1.2.3 |
+ | `decision_snapshot_retention_days` | `30` | days | §7.2 |
+ | `replay_window_hours` | `48` | hours | §5.2 |
+ | `tick_l2_retention_hours` | `72` | hours | §7.2 |

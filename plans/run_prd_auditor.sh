@@ -12,6 +12,7 @@ AUDITOR_PROMPT_FLAG="${AUDITOR_PROMPT_FLAG:-}"
 AUDIT_OUTPUT_JSON="${AUDIT_OUTPUT_JSON:-plans/prd_audit.json}"
 AUDIT_PRD_FILE="${AUDIT_PRD_FILE:-plans/prd.json}"
 AUDIT_CACHE_FILE="${AUDIT_CACHE_FILE:-.context/prd_audit_cache.json}"
+AUDIT_STDOUT_LOG="${AUDIT_STDOUT_LOG:-.context/prd_auditor_stdout.log}"
 AUDIT_CONTRACT_FILE="${AUDIT_CONTRACT_FILE:-}"
 AUDIT_PLAN_FILE="${AUDIT_PLAN_FILE:-}"
 AUDIT_WORKFLOW_CONTRACT_FILE="${AUDIT_WORKFLOW_CONTRACT_FILE:-}"
@@ -138,6 +139,19 @@ audit_cache_matches() {
 }
 
 if audit_cache_matches; then
+  audit_check_prd_file="$AUDIT_PRD_FILE"
+  if [[ "$AUDIT_SCOPE" == "slice" ]]; then
+    audit_check_prd_file="$AUDIT_PRD_SLICE_FILE"
+  fi
+  if [[ ! -x "./plans/prd_audit_check.sh" ]]; then
+    echo "[prd_auditor] ERROR: missing audit check script: ./plans/prd_audit_check.sh" >&2
+    exit 2
+  fi
+  AUDIT_PROMISE_REQUIRED=0 \
+    PRD_FILE="$audit_check_prd_file" \
+    AUDIT_FILE="$AUDIT_OUTPUT_JSON" \
+    AUDIT_STDOUT="$AUDIT_STDOUT_LOG" \
+    ./plans/prd_audit_check.sh
   echo "[prd_auditor] SKIP: audit cache matches inputs and last decision PASS" >&2
   exit 0
 fi
@@ -202,7 +216,8 @@ run_auditor() {
   fi
 }
 
-run_auditor
+mkdir -p "$(dirname "$AUDIT_STDOUT_LOG")"
+run_auditor > "$AUDIT_STDOUT_LOG" 2>&1
 
 if [[ ! -f "$AUDIT_OUTPUT_JSON" ]]; then
   echo "[prd_auditor] ERROR: auditor did not produce $AUDIT_OUTPUT_JSON" >&2
@@ -224,6 +239,20 @@ if command -v jq >/dev/null 2>&1; then
     exit 4
   fi
 fi
+
+if [[ ! -x "./plans/prd_audit_check.sh" ]]; then
+  echo "[prd_auditor] ERROR: missing audit check script: ./plans/prd_audit_check.sh" >&2
+  exit 2
+fi
+audit_check_prd_file="$AUDIT_PRD_FILE"
+if [[ "$AUDIT_SCOPE" == "slice" ]]; then
+  audit_check_prd_file="$AUDIT_PRD_SLICE_FILE"
+fi
+AUDIT_PROMISE_REQUIRED=1 \
+  PRD_FILE="$audit_check_prd_file" \
+  AUDIT_FILE="$AUDIT_OUTPUT_JSON" \
+  AUDIT_STDOUT="$AUDIT_STDOUT_LOG" \
+  ./plans/prd_audit_check.sh
 
 write_audit_cache() {
   if ! command -v jq >/dev/null 2>&1; then
