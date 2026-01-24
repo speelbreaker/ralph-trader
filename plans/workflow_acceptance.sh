@@ -3920,7 +3920,7 @@ EOF
 chmod +x "$STUB_DIR/agent_select.sh"
 rate_limit_file="$WORKTREE/.ralph/rate_limit_test.json"
 now="$(date +%s)"
-window_start=$((now - 300))
+window_start=$((now - 3590))
 jq -n \
   --argjson window_start_epoch "$window_start" \
   --argjson count 2 \
