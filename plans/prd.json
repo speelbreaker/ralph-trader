@@ -21,7 +21,7 @@
       "category": "policy",
       "description": "Create launch policy doc with explicit constraints (instruments, position limits, order rate, environments).",
       "contract_refs": [
-        "CONTRACT.md Phase 0: P0-A Launch Policy Baseline"
+        "P0-A Launch Policy Baseline"
       ],
       "plan_refs": [
         "P0-A"
@@ -91,7 +91,7 @@
       "category": "policy",
       "description": "Document environment isolation (separate keys/configs per env, no cross-env leakage).",
       "contract_refs": [
-        "CONTRACT.md Phase 0: P0-B Environment Isolation"
+        "P0-B Environment Isolation"
       ],
       "plan_refs": [
         "P0-B"
@@ -158,7 +158,7 @@
       "category": "policy",
       "description": "Document key creation rules, rotation plan, and prove least-privilege with JSON scope probe.",
       "contract_refs": [
-        "CONTRACT.md Phase 0: P0-C Keys & Secrets Baseline"
+        "P0-C Keys & Secrets Baseline"
       ],
       "plan_refs": [
         "P0-C"
@@ -240,7 +240,7 @@
       "category": "policy",
       "description": "Create break-glass runbook and execute a recorded drill proving halt capability.",
       "contract_refs": [
-        "CONTRACT.md Phase 0: P0-D Break-Glass Runbook + Drill"
+        "P0-D Break-Glass Runbook"
       ],
       "plan_refs": [
         "P0-D"
@@ -342,7 +342,7 @@
       "category": "infra",
       "description": "Implement health endpoint returning ok/build_id/contract_version.",
       "contract_refs": [
-        "CONTRACT.md Phase 0: P0-E Health Endpoint Scaffolding"
+        "P0-E Health Endpoint Scaffolding"
       ],
       "plan_refs": [
         "P0-E"
