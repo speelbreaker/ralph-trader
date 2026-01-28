@@ -464,3 +464,9 @@ Summary: Re-confirmed S0-000 completion in clean iteration; baseline verify.sh f
 Commands: ./plans/verify.sh full.
 Evidence: docs/launch_policy.md; evidence/phase0/policy/launch_policy_snapshot.md; VERIFY OK (mode=full).
 Next: Proceed to S0-001.
+Story: S0-000
+Date: 2026-01-28
+Summary: Final verification of S0-000 completion; baseline verify.sh full is green; all acceptance criteria confirmed (instruments/venues, position/loss limits, order rate/pacing, environments in docs/launch_policy.md; evidence snapshot exists with provenance header); acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh full; ls -la docs/launch_policy.md evidence/phase0/policy/launch_policy_snapshot.md.
+Evidence: docs/launch_policy.md; evidence/phase0/policy/launch_policy_snapshot.md; VERIFY OK (mode=full).
+Next: Proceed to S0-001.
