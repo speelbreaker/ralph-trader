@@ -451,3 +451,10 @@ Summary: Added PRD schema fields (contract evidence, observability, reason codes
 Commands: ./plans/tests/test_prd_gate.sh; ./plans/verify.sh full (failed: workflow acceptance worktree creation; exit 128).
 Evidence: plans/prd.json; plans/prd_schema_check.sh; plans/prd_lint.sh; plans/tests/test_prd_gate.sh; artifacts/verify/20260122_142555/workflow_acceptance.log.
 Next: Fix git worktree permission issue to rerun ./plans/verify.sh full.
+Story: S0-000
+Date: 2026-01-28
+Summary: Verified existing launch policy document meets all acceptance criteria (instruments/venues, position/loss limits, order rate/pacing, environments); evidence snapshot already exists with provenance header; acknowledged AGENTS.md and plans/progress.txt.
+Commands: VERIFY_ALLOW_DIRTY=1 ./plans/verify.sh full; ls -la docs/launch_policy.md evidence/phase0/policy/launch_policy_snapshot.md; diff docs/launch_policy.md evidence/phase0/policy/launch_policy_snapshot.md.
+Evidence: docs/launch_policy.md; evidence/phase0/policy/launch_policy_snapshot.md; VERIFY OK (mode=full).
+Notes: Dirty worktree (docs/contract_coverage.md) used VERIFY_ALLOW_DIRTY=1; CI will run clean checkout.
+Next: Proceed to S0-001 or commit.
