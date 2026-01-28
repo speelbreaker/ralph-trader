@@ -105,6 +105,11 @@ while [[ $idx -lt ${#slice_list[@]} ]] || [[ $running -gt 0 ]]; do
       AUDIT_OUTPUT_JSON="$AUDIT_OUTPUT_DIR/audit_slice_$slice.json" \
       AUDIT_STDOUT_LOG="$WORK_DIR/stdout_$slice.log" \
       AUDIT_CACHE_FILE="$WORK_DIR/cache_$slice.json" \
+      AUDIT_META_FILE="$AUDIT_OUTPUT_DIR/meta_$slice.json" \
+      AUDIT_PRD_SLICE_FILE="$AUDIT_OUTPUT_DIR/prd_slice_$slice.json" \
+      AUDIT_CONTRACT_SLICE_DIGEST_FILE="$AUDIT_OUTPUT_DIR/contract_digest_$slice.json" \
+      AUDIT_PLAN_SLICE_DIGEST_FILE="$AUDIT_OUTPUT_DIR/plan_digest_$slice.json" \
+      AUDIT_ROADMAP_SLICE_DIGEST_FILE="$AUDIT_OUTPUT_DIR/roadmap_digest_$slice.json" \
       AUDIT_PROGRESS=1 \
       bash plans/run_prd_auditor.sh 2>&1 | sed "s/^/[slice $slice] /"
       echo $? > "$WORK_DIR/rc_$slice"
