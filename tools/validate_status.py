@@ -143,9 +143,11 @@ def check_contract_invariants(status: dict[str, Any], manifest: dict[str, Any]) 
 
     regs = manifest.get("registries", {})
     mode_regs = regs.get("ModeReasonCode", {})
-    reduce_only_reasons: list[str] = mode_regs.get("ReduceOnly", [])
-    kill_reasons: list[str] = mode_regs.get("Kill", [])
-    open_perm_reasons: list[str] = regs.get("OpenPermissionReasonCode", [])
+    # Extract code strings from reason objects
+    reduce_only_reasons: list[str] = [r["code"] for r in mode_regs.get("ReduceOnly", []) if isinstance(r, dict)]
+    kill_reasons: list[str] = [r["code"] for r in mode_regs.get("Kill", []) if isinstance(r, dict)]
+    open_perm_reg = regs.get("OpenPermissionReasonCode", {})
+    open_perm_reasons: list[str] = [r["code"] for r in open_perm_reg.get("values", []) if isinstance(r, dict)]
     manifest_contract_version = manifest.get("contract_version", "5.2")
 
     trading_mode = status.get("trading_mode")
