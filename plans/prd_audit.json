@@ -1,6 +1,6 @@
 {
   "project": "StoicTrader",
-  "prd_sha256": "0b2087e3261353a721fadb95dbb805fb109ee7950d04b65bd5c98da4e7a8da8f",
+  "prd_sha256": "955eaf47cea4e13c1a4630e3ce3fc8ca3a96891dd823f00a217a75cb22c6ac8f",
   "inputs": {
     "prd": "plans/prd.json",
     "contract": "CONTRACT.md",
@@ -9,8 +9,8 @@
     "roadmap": "docs/ROADMAP.md"
   },
   "summary": {
-    "items_total": 11,
-    "items_pass": 11,
+    "items_total": 5,
+    "items_pass": 5,
     "items_fail": 0,
     "items_blocked": 0,
     "must_fix_count": 0
@@ -22,14 +22,14 @@
   },
   "items": [
     {
-      "id": "S1-010",
-      "slice": 1,
+      "id": "S0-000",
+      "slice": 0,
       "status": "PASS",
       "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
+          "Schema fields present; acceptance>=3 and steps>=5."
         ]
       },
       "contract_check": {
@@ -40,7 +40,7 @@
         "acceptance_enforces_invariant": true,
         "contradiction": false,
         "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
+          "Policy item validated against ROADMAP P0-A title; acceptance makes launch policy explicit."
         ]
       },
       "verify_check": {
@@ -48,14 +48,14 @@
         "has_targeted_checks": true,
         "evidence_concrete": true,
         "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
+          "Verify includes ./plans/verify.sh plus concrete doc/evidence paths."
         ]
       },
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
         "notes": [
-          "Scope is focused and est_size is XS/S."
+          "Scope limited to policy docs and evidence snapshot."
         ]
       },
       "dependency_check": {
@@ -63,20 +63,20 @@
         "forward_dep": false,
         "cycle": false,
         "notes": [
-          "Dependencies are within slice and non-cyclic."
+          "No dependencies declared in slice 0."
         ]
       },
       "patch_suggestions": []
     },
     {
-      "id": "S1-001",
-      "slice": 1,
+      "id": "S0-001",
+      "slice": 0,
       "status": "PASS",
       "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
+          "Schema fields present; acceptance>=3 and steps>=5."
         ]
       },
       "contract_check": {
@@ -87,7 +87,7 @@
         "acceptance_enforces_invariant": true,
         "contradiction": false,
         "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
+          "Policy item validated against ROADMAP P0-B title; acceptance documents env isolation inputs."
         ]
       },
       "verify_check": {
@@ -95,14 +95,14 @@
         "has_targeted_checks": true,
         "evidence_concrete": true,
         "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
+          "Verify includes ./plans/verify.sh plus concrete doc/evidence paths."
         ]
       },
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
         "notes": [
-          "Scope is focused and est_size is XS/S."
+          "Scope limited to env matrix doc and snapshot evidence."
         ]
       },
       "dependency_check": {
@@ -110,20 +110,20 @@
         "forward_dep": false,
         "cycle": false,
         "notes": [
-          "Dependencies are within slice and non-cyclic."
+          "No dependencies declared in slice 0."
         ]
       },
       "patch_suggestions": []
     },
     {
-      "id": "S1-011",
-      "slice": 1,
+      "id": "S0-002",
+      "slice": 0,
       "status": "PASS",
       "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
+          "Schema fields present; acceptance>=3 and steps>=5."
         ]
       },
       "contract_check": {
@@ -134,7 +134,7 @@
         "acceptance_enforces_invariant": true,
         "contradiction": false,
         "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
+          "Policy item validated against ROADMAP P0-C title; acceptance covers least-privilege and scope proof."
         ]
       },
       "verify_check": {
@@ -142,14 +142,14 @@
         "has_targeted_checks": true,
         "evidence_concrete": true,
         "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
+          "Verify includes ./plans/verify.sh and JSON parse check; human_blocker captures external probe."
         ]
       },
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
         "notes": [
-          "Scope is focused and est_size is XS/S."
+          "Scope limited to keys/secrets doc and probe evidence JSON."
         ]
       },
       "dependency_check": {
@@ -157,20 +157,20 @@
         "forward_dep": false,
         "cycle": false,
         "notes": [
-          "Dependencies are within slice and non-cyclic."
+          "No dependencies declared in slice 0."
         ]
       },
       "patch_suggestions": []
     },
     {
-      "id": "S1-002",
-      "slice": 1,
+      "id": "S0-003",
+      "slice": 0,
       "status": "PASS",
       "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
+          "Schema fields present; acceptance>=3 and steps>=5."
         ]
       },
       "contract_check": {
@@ -181,7 +181,7 @@
         "acceptance_enforces_invariant": true,
         "contradiction": false,
         "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
+          "Policy item validated against ROADMAP P0-D title; acceptance requires executed drill evidence."
         ]
       },
       "verify_check": {
@@ -189,14 +189,14 @@
         "has_targeted_checks": true,
         "evidence_concrete": true,
         "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
+          "Verify includes ./plans/verify.sh plus evidence file presence; drill execution documented."
         ]
       },
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
         "notes": [
-          "Scope is focused and est_size is XS/S."
+          "Scope limited to runbook and drill evidence artifacts."
         ]
       },
       "dependency_check": {
@@ -204,20 +204,20 @@
         "forward_dep": false,
         "cycle": false,
         "notes": [
-          "Dependencies are within slice and non-cyclic."
+          "No dependencies declared in slice 0."
         ]
       },
       "patch_suggestions": []
     },
     {
-      "id": "S1-003",
-      "slice": 1,
+      "id": "S0-004",
+      "slice": 0,
       "status": "PASS",
       "reasons": [],
       "schema_check": {
         "missing_fields": [],
         "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
+          "Schema fields present; acceptance>=3 and steps>=5."
         ]
       },
       "contract_check": {
@@ -228,7 +228,7 @@
         "acceptance_enforces_invariant": true,
         "contradiction": false,
         "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
+          "Infra item validated against ROADMAP P0-E title; acceptance specifies health fields and docs."
         ]
       },
       "verify_check": {
@@ -236,14 +236,14 @@
         "has_targeted_checks": true,
         "evidence_concrete": true,
         "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
+          "Verify includes ./plans/verify.sh and targeted cargo test for health endpoint."
         ]
       },
       "scope_check": {
         "too_broad": false,
         "est_size_too_large": false,
         "notes": [
-          "Scope is focused and est_size is XS/S."
+          "Scope confined to health endpoint docs and infra module/tests."
         ]
       },
       "dependency_check": {
@@ -251,289 +251,7 @@
         "forward_dep": false,
         "cycle": false,
         "notes": [
-          "Dependencies are within slice and non-cyclic."
-        ]
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S1-006",
-      "slice": 1,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
-        ]
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "roadmap_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
-        ]
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
-        ]
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": [
-          "Scope is focused and est_size is XS/S."
-        ]
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": [
-          "Dependencies are within slice and non-cyclic."
-        ]
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S1-004",
-      "slice": 1,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
-        ]
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "roadmap_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
-        ]
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
-        ]
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": [
-          "Scope is focused and est_size is XS/S."
-        ]
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": [
-          "Dependencies are within slice and non-cyclic."
-        ]
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S1-005",
-      "slice": 1,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
-        ]
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "roadmap_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
-        ]
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
-        ]
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": [
-          "Scope is focused and est_size is XS/S."
-        ]
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": [
-          "Dependencies are within slice and non-cyclic."
-        ]
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S1-007",
-      "slice": 1,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
-        ]
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "roadmap_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
-        ]
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
-        ]
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": [
-          "Scope is focused and est_size is XS/S."
-        ]
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": [
-          "Dependencies are within slice and non-cyclic."
-        ]
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S1-008",
-      "slice": 1,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
-        ]
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "roadmap_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
-        ]
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
-        ]
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": [
-          "Scope is focused and est_size is XS/S."
-        ]
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": [
-          "Dependencies are within slice and non-cyclic."
-        ]
-      },
-      "patch_suggestions": []
-    },
-    {
-      "id": "S1-009",
-      "slice": 1,
-      "status": "PASS",
-      "reasons": [],
-      "schema_check": {
-        "missing_fields": [],
-        "notes": [
-          "Schema OK: required fields present; acceptance>=3; steps>=5."
-        ]
-      },
-      "contract_check": {
-        "refs_present": true,
-        "refs_specific": true,
-        "contract_refs_resolved": true,
-        "roadmap_refs_resolved": true,
-        "acceptance_enforces_invariant": true,
-        "contradiction": false,
-        "notes": [
-          "Contract refs resolved against digest; acceptance maps to contract scope."
-        ]
-      },
-      "verify_check": {
-        "has_verify_sh": true,
-        "has_targeted_checks": true,
-        "evidence_concrete": true,
-        "notes": [
-          "Verify includes ./plans/verify.sh plus targeted checks; evidence list concrete."
-        ]
-      },
-      "scope_check": {
-        "too_broad": false,
-        "est_size_too_large": false,
-        "notes": [
-          "Scope is focused and est_size is XS/S."
-        ]
-      },
-      "dependency_check": {
-        "invalid": false,
-        "forward_dep": false,
-        "cycle": false,
-        "notes": [
-          "Dependencies are within slice and non-cyclic."
+          "No dependencies declared in slice 0."
         ]
       },
       "patch_suggestions": []

@@ -303,7 +303,15 @@
       "enforcement_point": "",
       "failure_mode": [],
       "observability": {
-        "metrics": [],
+        "metrics": [
+          {
+            "name": "break_glass_drill_completed",
+            "type": "gauge",
+            "unit": "count",
+            "labels": [],
+            "note": "Evidence artifact: log_excerpt.txt proves drill occurred (1 when drill completed)"
+          }
+        ],
         "status_fields": [],
         "status_contract_ats": []
       },
@@ -386,8 +394,14 @@
       "failure_mode": [],
       "observability": {
         "metrics": [],
-        "status_fields": [],
-        "status_contract_ats": []
+        "status_fields": [
+          "ok",
+          "build_id",
+          "contract_version"
+        ],
+        "status_contract_ats": [
+          "AT-012"
+        ]
       },
       "implementation_tests": [
         "crates/soldier_infra/tests/test_health.rs"
