@@ -63,7 +63,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
