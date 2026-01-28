@@ -27,3 +27,17 @@ test -f docs/order_size_discovery.md
 rg -n "OrderSize" docs/order_size_discovery.md
 test -f docs/dispatch_map_discovery.md
 rg -n "dispatch" docs/dispatch_map_discovery.md
+
+# Phase 0 documentation evidence checks
+test -s docs/launch_policy.md
+test -s evidence/phase0/policy/launch_policy_snapshot.md
+test -s docs/env_matrix.md
+test -s evidence/phase0/env/env_matrix_snapshot.md
+test -s docs/keys_and_secrets.md
+test -s docs/break_glass_runbook.md
+test -s evidence/phase0/break_glass/runbook_snapshot.md
+test -s evidence/phase0/break_glass/drill.md
+test -s evidence/phase0/break_glass/log_excerpt.txt
+test -s docs/health_endpoint.md
+cargo test -p soldier_infra --test test_health
+python -c "import json; json.load(open('evidence/phase0/keys/key_scope_probe.json'))"
