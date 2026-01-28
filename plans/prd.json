@@ -20,9 +20,7 @@
       "story_ref": "P0-A Launch Policy Baseline",
       "category": "policy",
       "description": "Create launch policy doc with explicit constraints (instruments, position limits, order rate, environments).",
-      "contract_refs": [
-        "P0-A"
-      ],
+      "contract_refs": [],
       "plan_refs": [
         "P0-A"
       ],
@@ -90,9 +88,7 @@
       "story_ref": "P0-B Environment Isolation",
       "category": "policy",
       "description": "Document environment isolation (separate keys/configs per env, no cross-env leakage).",
-      "contract_refs": [
-        "P0-B"
-      ],
+      "contract_refs": [],
       "plan_refs": [
         "P0-B"
       ],
@@ -157,9 +153,7 @@
       "story_ref": "P0-C Keys & Secrets Baseline",
       "category": "policy",
       "description": "Document key creation rules, rotation plan, and prove least-privilege with JSON scope probe.",
-      "contract_refs": [
-        "P0-C"
-      ],
+      "contract_refs": [],
       "plan_refs": [
         "P0-C"
       ],
@@ -239,9 +233,7 @@
       "story_ref": "P0-D Break-Glass Runbook + Drill",
       "category": "policy",
       "description": "Create break-glass runbook and execute a recorded drill proving halt capability.",
-      "contract_refs": [
-        "P0-D"
-      ],
+      "contract_refs": [],
       "plan_refs": [
         "P0-D"
       ],
@@ -341,9 +333,7 @@
       "story_ref": "P0-E Health Endpoint",
       "category": "infra",
       "description": "Implement health endpoint returning ok/build_id/contract_version.",
-      "contract_refs": [
-        "P0-E"
-      ],
+      "contract_refs": [],
       "plan_refs": [
         "P0-E"
       ],
