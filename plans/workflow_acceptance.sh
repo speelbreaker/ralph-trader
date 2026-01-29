@@ -1762,10 +1762,10 @@ progress="${PROGRESS_FILE:-plans/progress.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance progress entry
-Commands: none
-Evidence: acceptance stub
-Next: proceed
+Summary: acceptance progress entry with enough detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: none (placeholder text to satisfy gate length; no real commands executed in this stub)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 EOT
 echo "<mark_pass>${id}</mark_pass>"
 EOF
@@ -1780,10 +1780,10 @@ touch_file="${ACCEPTANCE_TOUCH_FILE:-crates/soldier_core/src/lib.rs}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance mark pass with commit
-Commands: echo >> ${touch_file}; git add; git commit
-Evidence: acceptance stub
-Next: proceed
+Summary: acceptance mark pass with commit including extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: echo >> ${touch_file}; git add; git commit (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 EOT
 mkdir -p "$(dirname "$touch_file")"
 echo "tick $(date +%s)" >> "$touch_file"
@@ -1805,10 +1805,10 @@ progress="${PROGRESS_FILE:-plans/progress.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance mark pass meta only
-Commands: append progress only
-Evidence: acceptance stub
-Next: proceed
+Summary: acceptance mark pass meta only with extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: append progress only (placeholder text to satisfy gate length; no real commands executed in this stub)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 EOT
 git add "$progress"
 git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: progress only" >/dev/null 2>&1
@@ -1825,10 +1825,10 @@ touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance commit without pass
-Commands: echo >> ${touch_file}; git add; git commit
-Evidence: acceptance stub
-Next: continue
+Summary: acceptance commit without pass including extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: echo >> ${touch_file}; git add; git commit (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: continue with subsequent acceptance steps in the workflow acceptance suite
 EOT
 echo "tick $(date +%s)" >> "$touch_file"
 if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
@@ -1865,10 +1865,10 @@ touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance mention complete
-Commands: none
-Evidence: acceptance stub
-Next: continue
+Summary: acceptance mention complete including extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: none (placeholder text to satisfy gate length; no real commands executed in this stub)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: continue with subsequent acceptance steps in the workflow acceptance suite
 EOT
 mkdir -p "$(dirname "$touch_file")"
 echo "tick $(date +%s)" >> "$touch_file"

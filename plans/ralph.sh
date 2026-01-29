@@ -1216,8 +1216,10 @@ check_test_cochange() {
   test_files="$(echo "$changed_files" | grep -E "$RPH_TEST_COCHANGE_TEST_PATTERNS" || true)"
 
   local src_count test_count
-  src_count="$(echo "$src_files" | grep -c . || echo 0)"
-  test_count="$(echo "$test_files" | grep -c . || echo 0)"
+  src_count="$(echo "$src_files" | grep -c . || true)"
+  test_count="$(echo "$test_files" | grep -c . || true)"
+  if [[ -z "$src_count" ]]; then src_count=0; fi
+  if [[ -z "$test_count" ]]; then test_count=0; fi
 
   if (( src_count > 0 && test_count == 0 )); then
     echo "src_changed=$src_count test_changed=$test_count"
@@ -1778,7 +1780,7 @@ progress_gate() {
     local summary_content commands_content evidence_content next_content
 
     # Extract content after "Summary:" label (case-insensitive, multiline until next label or EOF)
-    summary_content="$(sed -n '/^[Ss]ummary[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ss]ummary[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    summary_content="$(sed -n '/^[Ss]ummary[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ss]ummary[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$summary_content" ]]; then
       # Fallback: check single-line format "Summary: content"
       summary_content="$(grep -i '^[Ss]ummary[[:space:]]*:' "$appended_file" | sed 's/^[Ss]ummary[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
@@ -1787,7 +1789,7 @@ progress_gate() {
       issues+=("summary_too_short")
     fi
 
-    commands_content="$(sed -n '/^[Cc]ommands[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Cc]ommands[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    commands_content="$(sed -n '/^[Cc]ommands[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Cc]ommands[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$commands_content" ]]; then
       commands_content="$(grep -i '^[Cc]ommands[[:space:]]*:' "$appended_file" | sed 's/^[Cc]ommands[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
     fi
@@ -1795,7 +1797,7 @@ progress_gate() {
       issues+=("commands_too_short")
     fi
 
-    evidence_content="$(sed -n '/^[Ee]vidence[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ee]vidence[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    evidence_content="$(sed -n '/^[Ee]vidence[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ee]vidence[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$evidence_content" ]]; then
       evidence_content="$(grep -i '^[Ee]vidence[[:space:]]*:' "$appended_file" | sed 's/^[Ee]vidence[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
     fi
@@ -1803,7 +1805,7 @@ progress_gate() {
       issues+=("evidence_too_short")
     fi
 
-    next_content="$(sed -n '/^[Nn]ext[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Nn]ext[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    next_content="$(sed -n '/^[Nn]ext[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Nn]ext[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$next_content" ]]; then
       next_content="$(grep -iE '^([Nn]ext|[Gg]otcha)[[:space:]]*:' "$appended_file" | sed 's/^[NnGg][oOeE][txTX][ctCT][hHaA]*[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
     fi
