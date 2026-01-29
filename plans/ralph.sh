@@ -2823,6 +2823,7 @@ PROMPT
       echo "Fail-closed: stop. Fix the failure then rerun." | tee -a "$LOG_FILE"
       BLOCK_DIR="$(write_blocked_with_state "verify_post_failed" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
       echo "Blocked: verify_post failed in $BLOCK_DIR" | tee -a "$LOG_FILE"
+      write_artifact_manifest "$ITER_DIR" "" "BLOCKED" "$BLOCK_DIR" "verify_post_failed" "$NEXT_DESC"
       update_iteration_metrics "verify_post_fail" "verify_post_failed"
       POST_VERIFY_EXIT=1
     fi
