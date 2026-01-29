@@ -17,6 +17,9 @@ Read this first. It is the shortest, enforceable workflow summary.
 
 ## Response Protocol
 
+### 1) Input Guard (conditional)
+QuickCheck: If critical inputs are missing (target files, scope, or intent), ask 1–2 clarifying questions before acting. If the user explicitly says to proceed without preflight, set NO_PREFLIGHT and continue with stated assumptions.
+NO_PREFLIGHT: user requested to skip preflight/clarifications; proceed with best-effort and document assumptions.
 
 ### 4) TOC Lens (MUST drive prioritization)
 System goal:
