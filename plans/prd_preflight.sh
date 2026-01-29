@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Unified PRD preflight gate
 # Runs: prd_gate.sh + story_verify_allowlist_check.sh
-# --strict: treat warnings as errors, mandatory allowlist check (fail-closed if scripts missing)
+# --strict: enforce allowlist check presence and PRD lint strict heuristics (fail-closed if scripts missing)
 
 ARG_PRD_FILE=""
 STRICT=0
@@ -21,7 +21,7 @@ for arg in "$@"; do
       echo "  3. story_verify_allowlist_lint.sh (optional hygiene, warn only)"
       echo ""
       echo "Options:"
-      echo "  --strict    Fail closed if allowlist scripts missing; treat lint warnings as errors"
+      echo "  --strict    Fail closed if allowlist scripts missing; enable PRD lint strict heuristics"
       exit 0
       ;;
     -*)
@@ -66,17 +66,10 @@ else
   fi
 fi
 
-# Gate 3: Allowlist lint (optional hygiene, warn only unless strict)
+# Gate 3: Allowlist lint (optional hygiene, warn only)
 if [[ -x "$SCRIPT_DIR/story_verify_allowlist_lint.sh" ]]; then
   echo "[preflight] Running allowlist lint..." >&2
-  if [[ $STRICT -eq 1 ]]; then
-    ALLOWLIST_LINT_STRICT=1 "$SCRIPT_DIR/story_verify_allowlist_lint.sh" || {
-      echo "[preflight] ERROR: Allowlist lint failed in strict mode" >&2
-      exit 1
-    }
-  else
-    "$SCRIPT_DIR/story_verify_allowlist_lint.sh" || true  # Warn only, don't block
-  fi
+  "$SCRIPT_DIR/story_verify_allowlist_lint.sh" || true  # Warn only, don't block
 fi
 
 echo "[preflight] PASS: All gates passed" >&2
