@@ -136,6 +136,26 @@ fn reject_zero_index_price_for_usd_instruments() {
 }
 
 #[test]
+fn reject_nan_index_price_for_usd_instruments() {
+    let perp = OrderSize::new(
+        InstrumentKind::Perpetual,
+        None,
+        None,
+        Some(100.0),
+        1.0,
+    )
+    .expect("valid perp order size");
+    let err = map_order_size_to_deribit_amount(
+        InstrumentKind::Perpetual,
+        &perp,
+        Some(10.0),
+        f64::NAN,
+    )
+    .unwrap_err();
+    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+}
+
+#[test]
 fn rejects_contract_mismatch_and_increments_counter() {
     let index_price = 100_000.0;
     let option = OrderSize::new(

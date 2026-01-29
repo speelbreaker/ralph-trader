@@ -83,7 +83,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
             (amount, amount)
         }
         InstrumentKind::Perpetual | InstrumentKind::InverseFuture => {
-            if index_price <= 0.0 {
+            if !index_price.is_finite() || index_price <= 0.0 {
                 return reject_unit_mismatch(metrics, "invalid_index_price");
             }
             let amount = order_size.qty_usd;
