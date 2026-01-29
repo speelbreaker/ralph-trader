@@ -837,6 +837,12 @@ if test_start "0k" "workflow preflight checks"; then
     echo "FAIL: story verify allowlist missing: $allowlist" >&2
     exit 1
   fi
+  dup="$(grep -v "^[[:space:]]*#" "$allowlist" | sed "/^[[:space:]]*$/d" | sort | uniq -d || true)"
+  if [[ -n "$dup" ]]; then
+    echo "FAIL: story verify allowlist contains duplicate entries:" >&2
+    printf "%s\n" "$dup" >&2
+    exit 1
+  fi
   missing=0
   while IFS= read -r cmd; do
     [[ -z "$cmd" ]] && continue

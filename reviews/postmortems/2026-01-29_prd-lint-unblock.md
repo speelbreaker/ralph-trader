@@ -1,12 +1,12 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: PRD metadata fixes to unblock Ralph (scope.create/touch alignment, resolvable plan_refs/contract_refs, add required observability.metrics for log/metric mention).
-- What value it has (what problem it solves, upgrade provides): PRD gate now passes so Ralph/verify can run; avoids false-negative lint/ref failures.
+- Feature/behavior: PRD metadata fixes to unblock Ralph (scope.create/touch alignment, resolvable plan_refs/contract_refs, required observability.metrics) plus story verify allowlist updates and a duplicate-entry assertion in workflow acceptance.
+- What value it has (what problem it solves, upgrade provides): PRD gate and workflow acceptance preflight now pass so Ralph/verify can reach the agent step; avoids false-negative lint/ref failures and allowlist drift.
 - Governing contract: Workflow contract (specs/WORKFLOW_CONTRACT.md).
 
 ## 1) Constraint (ONE)
-- How it manifested (2-3 concrete symptoms): PRD lint failed on existing create paths; PRD ref check failed on non-resolvable P0/P1 refs; verify blocked Ralph before agent step.
+- How it manifested (2-3 concrete symptoms): PRD lint failed on existing create paths; PRD ref check failed on non-resolvable P0/P1 refs; workflow acceptance failed on missing allowlist entries, blocking Ralph before agent step.
 - Time/token drain it caused: repeated preflight failures and retries; Ralph never reached agent step.
 - Workaround I used this PR (exploit): minimally edited PRD entries to reflect current repo state and resolvable refs; added required observability metrics.
 - Next-agent default behavior (subordinate): run ./plans/prd_gate.sh early when PRD is touched; fix scope.create vs scope.touch before attempting Ralph.
