@@ -1355,7 +1355,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md 1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)",
@@ -1445,7 +1445,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md 1.1 Labeling & Idempotency Contract",
@@ -1526,7 +1526,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md §1.1 Labeling & Idempotency Contract",

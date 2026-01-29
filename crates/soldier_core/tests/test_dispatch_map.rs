@@ -16,7 +16,8 @@ fn acceptance_option_and_perp_mapping() {
     // Deribit: "amount": "Amount in contract units". For options, 1 contract = 1 coin?
     // Let's assume multiplier = 1.0 for options for this test.
 
-    let option = OrderSize::new(InstrumentKind::Option, None, Some(0.3), None, index_price);
+    let option = OrderSize::new(InstrumentKind::Option, None, Some(0.3), None, index_price)
+        .expect("valid option order size");
     // Passing multiplier 1.0
     let option_amount =
         map_order_size_to_deribit_amount(InstrumentKind::Option, &option, Some(1.0), index_price)
@@ -39,7 +40,8 @@ fn acceptance_option_and_perp_mapping() {
         None,
         Some(30_000.0),
         index_price,
-    );
+    )
+    .expect("valid perp order size");
     let perp_amount =
         map_order_size_to_deribit_amount(InstrumentKind::Perpetual, &perp, Some(10.0), index_price)
             .unwrap();
@@ -60,7 +62,8 @@ fn derives_contracts_when_missing_in_order_size() {
         None,
         Some(1000.0),
         index_price,
-    );
+    )
+    .expect("valid inverse order size");
     let result = map_order_size_to_deribit_amount(
         InstrumentKind::InverseFuture,
         &inverse,
@@ -87,7 +90,8 @@ fn validates_contracts_if_present() {
         Some(2.0),
         None,
         index_price,
-    );
+    )
+    .expect("valid linear future order size");
     let result = map_order_size_to_deribit_amount(
         InstrumentKind::LinearFuture,
         &valid,
@@ -104,7 +108,8 @@ fn validates_contracts_if_present() {
         Some(2.0), // But provides 2.0 coin (implies 2 contracts if mult=1)
         None,
         index_price,
-    );
+    )
+    .expect("valid linear future order size");
     let err = map_order_size_to_deribit_amount(
         InstrumentKind::LinearFuture,
         &invalid,
@@ -112,7 +117,7 @@ fn validates_contracts_if_present() {
         index_price,
     )
     .unwrap_err();
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, DispatchRejectReason::ContractsAmountMismatch);
 }
 
 #[test]
@@ -123,10 +128,31 @@ fn reject_zero_index_price_for_usd_instruments() {
         None,
         Some(100.0),
         0.0, // Invalid
-    );
+    )
+    .expect("valid perp order size");
     let err = map_order_size_to_deribit_amount(InstrumentKind::Perpetual, &perp, Some(10.0), 0.0)
         .unwrap_err();
     assert_eq!(err.reason, DispatchRejectReason::UnitMismatch); // "invalid_index_price" maps to UnitMismatch
+}
+
+#[test]
+fn reject_nan_index_price_for_usd_instruments() {
+    let perp = OrderSize::new(
+        InstrumentKind::Perpetual,
+        None,
+        None,
+        Some(100.0),
+        1.0,
+    )
+    .expect("valid perp order size");
+    let err = map_order_size_to_deribit_amount(
+        InstrumentKind::Perpetual,
+        &perp,
+        Some(10.0),
+        f64::NAN,
+    )
+    .unwrap_err();
+    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
 }
 
 #[test]
@@ -138,7 +164,8 @@ fn rejects_contract_mismatch_and_increments_counter() {
         Some(0.3),
         None,
         index_price,
-    );
+    )
+    .expect("valid option order size");
 
     let metrics = DispatchMetrics::new();
     let before = metrics.unit_mismatch_total();
@@ -153,6 +180,6 @@ fn rejects_contract_mismatch_and_increments_counter() {
     let after = metrics.unit_mismatch_total();
 
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, DispatchRejectReason::ContractsAmountMismatch);
     assert_eq!(after, before + 1);
 }

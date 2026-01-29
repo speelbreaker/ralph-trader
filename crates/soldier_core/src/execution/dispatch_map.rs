@@ -5,7 +5,8 @@ use crate::venue::InstrumentKind;
 
 use super::OrderSize;
 
-const UNIT_MISMATCH_EPSILON: f64 = 1e-9;
+const CONTRACTS_AMOUNT_MATCH_TOLERANCE: f64 = 0.001;
+const CONTRACTS_AMOUNT_MATCH_EPSILON: f64 = 1e-9;
 
 pub struct DispatchMetrics {
     unit_mismatch_total: AtomicU64,
@@ -40,6 +41,7 @@ pub struct DeribitOrderAmount {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchRejectReason {
+    ContractsAmountMismatch,
     UnitMismatch,
 }
 
@@ -81,7 +83,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
             (amount, amount)
         }
         InstrumentKind::Perpetual | InstrumentKind::InverseFuture => {
-            if index_price <= 0.0 {
+            if !index_price.is_finite() || index_price <= 0.0 {
                 return reject_unit_mismatch(metrics, "invalid_index_price");
             }
             let amount = order_size.qty_usd;
@@ -112,8 +114,8 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
             None => return reject_unit_mismatch(metrics, "missing_multiplier_for_validation"),
         };
         let expected = contracts as f64 * multiplier;
-        if !approx_eq(canonical_amount, expected, UNIT_MISMATCH_EPSILON) {
-            return reject_unit_mismatch(metrics, "contracts_mismatch");
+        if !contracts_amount_match(canonical_amount, expected) {
+            return reject_contracts_mismatch(metrics, "contracts_mismatch");
         }
     }
 
@@ -128,8 +130,9 @@ pub fn order_intent_reject_unit_mismatch_total() -> u64 {
     DISPATCH_METRICS.unit_mismatch_total()
 }
 
-fn approx_eq(lhs: f64, rhs: f64, epsilon: f64) -> bool {
-    (lhs - rhs).abs() <= epsilon
+fn contracts_amount_match(amount: f64, expected: f64) -> bool {
+    let denom = amount.abs().max(CONTRACTS_AMOUNT_MATCH_EPSILON);
+    (amount - expected).abs() / denom <= CONTRACTS_AMOUNT_MATCH_TOLERANCE
 }
 
 fn reject_unit_mismatch(
@@ -141,5 +144,17 @@ fn reject_unit_mismatch(
     Err(DispatchReject {
         risk_state: RiskState::Degraded,
         reason: DispatchRejectReason::UnitMismatch,
+    })
+}
+
+fn reject_contracts_mismatch(
+    metrics: &DispatchMetrics,
+    reason: &str,
+) -> Result<DeribitOrderAmount, DispatchReject> {
+    metrics.unit_mismatch_total.fetch_add(1, Ordering::Relaxed);
+    eprintln!("order_intent_reject_contracts_mismatch reason={}", reason);
+    Err(DispatchReject {
+        risk_state: RiskState::Degraded,
+        reason: DispatchRejectReason::ContractsAmountMismatch,
     })
 }
