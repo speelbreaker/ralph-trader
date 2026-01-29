@@ -19,6 +19,7 @@ PROGRESS_FILE="${PROGRESS_FILE:-plans/progress.txt}"
 VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
 ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 PRD_SCHEMA_CHECK_SH="${PRD_SCHEMA_CHECK_SH:-./plans/prd_schema_check.sh}"
+PRD_PREFLIGHT_SH="${PRD_PREFLIGHT_SH:-./plans/prd_preflight.sh}"
 RPH_RUN_ID="${RPH_RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
 VERIFY_RUN_ID="${VERIFY_RUN_ID:-$RPH_RUN_ID}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$REPO_ROOT/.ralph/verify/$VERIFY_RUN_ID}"
@@ -707,19 +708,36 @@ fi
 [[ -f "$PRD_FILE" ]] || block_preflight "missing_prd" "missing $PRD_FILE"
 jq . "$PRD_FILE" >/dev/null 2>&1 || block_preflight "invalid_prd_json" "$PRD_FILE invalid JSON"
 
-# PRD schema sanity check (single source of truth; fail-closed)
-if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
-  block_preflight "missing_prd_schema_check" "$PRD_SCHEMA_CHECK_SH missing or not executable"
+# PRD preflight (schema+lint+ref+allowlist) if available; fallback to schema check
+if [[ -f "$PRD_PREFLIGHT_SH" && ! -x "$PRD_PREFLIGHT_SH" ]]; then
+  block_preflight "missing_prd_preflight" "$PRD_PREFLIGHT_SH missing or not executable"
 fi
-schema_out=""
-schema_rc=0
-set +e
-schema_out="$("$PRD_SCHEMA_CHECK_SH" "$PRD_FILE" 2>&1)"
-schema_rc=$?
-set -e
-if (( schema_rc != 0 )); then
-  echo "$schema_out" | tee -a "$LOG_FILE"
-  block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid (run $PRD_SCHEMA_CHECK_SH $PRD_FILE for details)"
+if [[ -x "$PRD_PREFLIGHT_SH" ]]; then
+  preflight_out=""
+  preflight_rc=0
+  set +e
+  preflight_out="$("$PRD_PREFLIGHT_SH" --strict "$PRD_FILE" 2>&1)"
+  preflight_rc=$?
+  set -e
+  if (( preflight_rc != 0 )); then
+    echo "$preflight_out" | tee -a "$LOG_FILE"
+    block_preflight "prd_preflight_failed" "PRD preflight failed (run $PRD_PREFLIGHT_SH --strict $PRD_FILE for details)"
+  fi
+else
+  # PRD schema sanity check (single source of truth; fail-closed)
+  if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
+    block_preflight "missing_prd_schema_check" "$PRD_SCHEMA_CHECK_SH missing or not executable"
+  fi
+  schema_out=""
+  schema_rc=0
+  set +e
+  schema_out="$("$PRD_SCHEMA_CHECK_SH" "$PRD_FILE" 2>&1)"
+  schema_rc=$?
+  set -e
+  if (( schema_rc != 0 )); then
+    echo "$schema_out" | tee -a "$LOG_FILE"
+    block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid (run $PRD_SCHEMA_CHECK_SH $PRD_FILE for details)"
+  fi
 fi
 if [[ "${PRD_SCHEMA_DRAFT_MODE:-0}" == "1" ]]; then
   block_preflight "prd_schema_draft_mode" "PRD_SCHEMA_DRAFT_MODE=1 set; drafting mode is blocked from execution."
