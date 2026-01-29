@@ -1524,7 +1524,7 @@ write_valid_prd() {
       "contract_refs": ["CONTRACT.md §1"],
       "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
       "scope": {
-        "touch": ["src/lib.rs"],
+        "touch": ["crates/soldier_core/src/lib.rs"],
         "avoid": []
       },
       "acceptance": ["a", "b", "c"],
@@ -1776,7 +1776,7 @@ cat > "$STUB_DIR/agent_mark_pass_with_commit.sh" <<'EOF'
 set -euo pipefail
 id="${SELECTED_ID:-S1-001}"
 progress="${PROGRESS_FILE:-plans/progress.txt}"
-touch_file="${ACCEPTANCE_TOUCH_FILE:-src/lib.rs}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-crates/soldier_core/src/lib.rs}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
@@ -2883,7 +2883,7 @@ run_ralph env \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mentions_complete.sh" \
   SELECTED_ID="S1-002" \
-  ACCEPTANCE_TOUCH_FILE="src/lib.rs" \
+  ACCEPTANCE_TOUCH_FILE="crates/soldier_core/src/lib.rs" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_RATE_LIMIT_ENABLED=0 \
