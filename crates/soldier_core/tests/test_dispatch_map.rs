@@ -16,9 +16,8 @@ fn acceptance_option_and_perp_mapping() {
     // Deribit: "amount": "Amount in contract units". For options, 1 contract = 1 coin?
     // Let's assume multiplier = 1.0 for options for this test.
 
-    let option =
-        OrderSize::new(InstrumentKind::Option, None, Some(0.3), None, index_price)
-            .expect("valid option order size");
+    let option = OrderSize::new(InstrumentKind::Option, None, Some(0.3), None, index_price)
+        .expect("valid option order size");
     // Passing multiplier 1.0
     let option_amount =
         map_order_size_to_deribit_amount(InstrumentKind::Option, &option, Some(1.0), index_price)

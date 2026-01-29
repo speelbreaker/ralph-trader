@@ -56,27 +56,15 @@ fn test_order_size_rejects_missing_qty_coin() {
 
 #[test]
 fn test_order_size_rejects_both_qtys() {
-    let err = OrderSize::new(
-        InstrumentKind::Perpetual,
-        None,
-        Some(1.0),
-        Some(2.0),
-        100.0,
-    )
-    .expect_err("both qtys should reject");
+    let err = OrderSize::new(InstrumentKind::Perpetual, None, Some(1.0), Some(2.0), 100.0)
+        .expect_err("both qtys should reject");
     assert_eq!(err, OrderSizeError::BothQtyProvided);
 }
 
 #[test]
 fn test_order_size_rejects_non_positive_qty() {
-    let err = OrderSize::new(
-        InstrumentKind::LinearFuture,
-        None,
-        Some(0.0),
-        None,
-        100.0,
-    )
-    .expect_err("zero qty should reject");
+    let err = OrderSize::new(InstrumentKind::LinearFuture, None, Some(0.0), None, 100.0)
+        .expect_err("zero qty should reject");
     assert_eq!(err, OrderSizeError::NonPositiveQty);
 }
 

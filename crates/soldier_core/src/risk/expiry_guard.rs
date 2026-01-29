@@ -93,13 +93,19 @@ impl ExpiryGuard {
         }
 
         // For OPEN intents, reject if instrument is delisting soon or expired/delisted.
-        match Self::derive_instrument_state(is_active, expiration_timestamp, current_time_ms, buffer_ms)
-        {
+        match Self::derive_instrument_state(
+            is_active,
+            expiration_timestamp,
+            current_time_ms,
+            buffer_ms,
+        ) {
             InstrumentState::Active => Ok(()),
-            InstrumentState::DelistingSoon | InstrumentState::ExpiredOrDelisted => Err(ExpiryReject {
-                risk_state: RiskState::Degraded,
-                reason: ExpiryRejectReason::InstrumentExpiredOrDelisted,
-            }),
+            InstrumentState::DelistingSoon | InstrumentState::ExpiredOrDelisted => {
+                Err(ExpiryReject {
+                    risk_state: RiskState::Degraded,
+                    reason: ExpiryRejectReason::InstrumentExpiredOrDelisted,
+                })
+            }
         }
     }
 
@@ -213,7 +219,10 @@ mod tests {
         let expiry_ms = 1000;
         let current_ms = 2000; // Past expiry
         let result = ExpiryGuard::check(true, Some(expiry_ms), current_ms, IntentClass::Close);
-        assert!(result.is_ok(), "CLOSE should be allowed on expired instruments");
+        assert!(
+            result.is_ok(),
+            "CLOSE should be allowed on expired instruments"
+        );
     }
 
     #[test]
@@ -227,7 +236,10 @@ mod tests {
     #[test]
     fn test_close_on_delisted_instrument_allowed() {
         let result = ExpiryGuard::check(false, None, 1000, IntentClass::Close);
-        assert!(result.is_ok(), "CLOSE should be allowed on delisted instruments");
+        assert!(
+            result.is_ok(),
+            "CLOSE should be allowed on delisted instruments"
+        );
     }
 
     #[test]
@@ -260,7 +272,10 @@ mod tests {
             buffer_ms,
             IntentClass::Close,
         );
-        assert!(result.is_ok(), "CLOSE should be allowed even within expiry buffer");
+        assert!(
+            result.is_ok(),
+            "CLOSE should be allowed even within expiry buffer"
+        );
     }
 
     #[test]

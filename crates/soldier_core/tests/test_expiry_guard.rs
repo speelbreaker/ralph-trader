@@ -37,7 +37,10 @@ fn test_close_allowed_on_expired_instrument() {
 
     // CLOSE on expired instrument should be allowed
     let result = ExpiryGuard::check(true, Some(expiry_ms), current_ms, IntentClass::Close);
-    assert!(result.is_ok(), "CLOSE should be allowed on expired instruments");
+    assert!(
+        result.is_ok(),
+        "CLOSE should be allowed on expired instruments"
+    );
 }
 
 /// Test that CANCEL intents are allowed on expired instruments (risk-reducing).
@@ -47,7 +50,10 @@ fn test_cancel_allowed_on_expired_instrument() {
     let current_ms = expiry_ms + 1;
 
     let result = ExpiryGuard::check(true, Some(expiry_ms), current_ms, IntentClass::Cancel);
-    assert!(result.is_ok(), "CANCEL should be allowed on expired instruments");
+    assert!(
+        result.is_ok(),
+        "CANCEL should be allowed on expired instruments"
+    );
 }
 
 /// Test that delisted instruments reject OPENs with deterministic reason.
@@ -67,7 +73,10 @@ fn test_delisted_instrument_rejected_with_reason_code() {
 fn test_close_allowed_on_delisted_instrument() {
     // CLOSE on delisted instrument should be allowed
     let result = ExpiryGuard::check(false, None, 1000, IntentClass::Close);
-    assert!(result.is_ok(), "CLOSE should be allowed on delisted instruments");
+    assert!(
+        result.is_ok(),
+        "CLOSE should be allowed on delisted instruments"
+    );
 }
 
 /// Test that expiry guard sets RiskState::Degraded for blocked OPENs.
@@ -79,8 +88,8 @@ fn test_expiry_guard_sets_degraded_state() {
     assert_eq!(err.risk_state, RiskState::Degraded);
 
     // Delisted - OPEN rejected with Degraded
-    let err = ExpiryGuard::check(false, None, 1000, IntentClass::Open)
-        .expect_err("should reject OPEN");
+    let err =
+        ExpiryGuard::check(false, None, 1000, IntentClass::Open).expect_err("should reject OPEN");
     assert_eq!(err.risk_state, RiskState::Degraded);
 }
 
@@ -94,14 +103,16 @@ fn test_near_expiry_buffer_blocks_open_orders() {
     let past_expiry = expiry_ms + 1;
 
     // Before buffer: OPEN OK
-    assert!(ExpiryGuard::check_with_buffer(
-        true,
-        Some(expiry_ms),
-        safe_time,
-        buffer_ms,
-        IntentClass::Open
-    )
-    .is_ok());
+    assert!(
+        ExpiryGuard::check_with_buffer(
+            true,
+            Some(expiry_ms),
+            safe_time,
+            buffer_ms,
+            IntentClass::Open
+        )
+        .is_ok()
+    );
 
     // At buffer boundary: OPEN rejected
     let err = ExpiryGuard::check_with_buffer(
@@ -135,24 +146,28 @@ fn test_near_expiry_buffer_allows_close_orders() {
     let past_expiry = expiry_ms + 1;
 
     // Near expiry: CLOSE allowed
-    assert!(ExpiryGuard::check_with_buffer(
-        true,
-        Some(expiry_ms),
-        near_expiry,
-        buffer_ms,
-        IntentClass::Close
-    )
-    .is_ok());
+    assert!(
+        ExpiryGuard::check_with_buffer(
+            true,
+            Some(expiry_ms),
+            near_expiry,
+            buffer_ms,
+            IntentClass::Close
+        )
+        .is_ok()
+    );
 
     // Past expiry: CLOSE allowed
-    assert!(ExpiryGuard::check_with_buffer(
-        true,
-        Some(expiry_ms),
-        past_expiry,
-        buffer_ms,
-        IntentClass::Close
-    )
-    .is_ok());
+    assert!(
+        ExpiryGuard::check_with_buffer(
+            true,
+            Some(expiry_ms),
+            past_expiry,
+            buffer_ms,
+            IntentClass::Close
+        )
+        .is_ok()
+    );
 }
 
 /// Test delisted takes precedence over expiry (checked first) for OPENs.
@@ -165,7 +180,10 @@ fn test_delisted_precedence_over_expiry() {
 
     // But CLOSE should still be allowed
     let result = ExpiryGuard::check(false, Some(1000), 2000, IntentClass::Close);
-    assert!(result.is_ok(), "CLOSE should be allowed even when delisted AND expired");
+    assert!(
+        result.is_ok(),
+        "CLOSE should be allowed even when delisted AND expired"
+    );
 }
 
 #[test]
