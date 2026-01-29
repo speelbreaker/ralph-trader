@@ -21,7 +21,7 @@
       "category": "workflow",
       "description": "dependency base item",
       "contract_refs": [
-        "specs/WORKFLOW_CONTRACT.md \u00a75.3"
+        "specs/CONTRACT.md 0.Y Verification Harness"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Phase 1"
@@ -81,7 +81,7 @@
       "category": "workflow",
       "description": "depends on S1-001",
       "contract_refs": [
-        "specs/WORKFLOW_CONTRACT.md \u00a75.3"
+        "specs/CONTRACT.md 0.Y Verification Harness"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Phase 1"
