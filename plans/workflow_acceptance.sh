@@ -1315,6 +1315,21 @@ if test_start "0k.3" "contract coverage matrix fixtures"; then
   test_pass "0k.3"
 fi
 
+if test_start "0k.5" "contract kernel check"; then
+  run_in_worktree python3 scripts/check_contract_kernel.py >/dev/null 2>&1
+  test_pass "0k.5"
+fi
+
+if test_start "0k.6" "contract kernel sources hash aligned"; then
+  run_in_worktree python3 scripts/check_contract_kernel.py --kernel docs/contract_kernel.json >/dev/null 2>&1
+  test_pass "0k.6"
+fi
+
+if test_start "0k.7" "contract kernel file present"; then
+  run_in_worktree test -f docs/contract_kernel.json
+  test_pass "0k.7"
+fi
+
 if test_start "0k.4" "workflow acceptance clone fallback"; then
   "$ROOT/plans/tests/test_workflow_acceptance_fallback.sh" >/dev/null 2>&1
   test_pass "0k.4"
