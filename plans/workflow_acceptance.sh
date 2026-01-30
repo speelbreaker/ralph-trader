@@ -4428,6 +4428,8 @@ cat > "$valid_prd_16" <<'JSON'
   ]
 }
 JSON
+run_in_worktree touch "acceptance_tick.txt"
+snapshot_worktree_if_dirty
 run_ralph env \
   PRD_FILE="$valid_prd_16" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
