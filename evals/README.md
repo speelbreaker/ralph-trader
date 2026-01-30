@@ -65,11 +65,11 @@ Compare eval results between two runs to detect regressions or improvements.
 **Example:**
 ```bash
 # Run baseline
-./evals/run_all_repros.sh apply_patch baseline.patch
+./evals/run_all_repros.sh apply_patch baseline/
 # → creates evals/results/20260130-120000/
 
 # Run experiment
-./evals/run_all_repros.sh apply_patch experiment.patch
+./evals/run_all_repros.sh apply_patch experiment/
 # → creates evals/results/20260130-120500/
 
 # Compare
