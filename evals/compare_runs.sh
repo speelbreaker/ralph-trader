@@ -32,7 +32,7 @@ RESULTS_DIR="evals/results"
 
 # Collect all unique repro names using temporary files (bash 3.2 compatible)
 tmp_repros=$(mktemp)
-trap "rm -f $tmp_repros" EXIT
+trap 'rm -f "$tmp_repros"' EXIT
 
 # Gather repro names from both runs
 (cd "$RESULTS_DIR/$RUN1" && ls *.json 2>/dev/null | sed 's/\.json$//' || true) > "$tmp_repros"
@@ -41,7 +41,7 @@ sort -u "$tmp_repros" -o "$tmp_repros"
 
 # Print header
 printf "%-30s %-12s %-12s %s\n" "Repro" "$RUN1" "$RUN2" "Delta"
-printf "%-30s %-12s %-12s %s\n" "$(printf '%0.s-' {1..30})" "$(printf '%0.s-' {1..12})" "$(printf '%0.s-' {1..12})" "-----"
+printf "%-30s %-12s %-12s %s\n" "$(printf '%0.s-' $(seq 1 30))" "$(printf '%0.s-' $(seq 1 12))" "$(printf '%0.s-' $(seq 1 12))" "-----"
 
 count_improved=0
 count_regressed=0

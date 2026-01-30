@@ -246,7 +246,7 @@ case "$MODE" in
         --arg rc "$validate_rc" \
         --arg duration "$duration" \
         --arg validate_timeout "$validate_timeout" \
-        --arg timestamp "$(date -Iseconds)" \
+        --arg timestamp "$(date +%Y%m%d-%H%M%S)" \
         --arg output_head "$(printf '%s\n' "$validate_out" | head -50)" \
         '{
           repro: $repro,
