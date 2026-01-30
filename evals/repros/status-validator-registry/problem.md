@@ -7,7 +7,7 @@ The status validator fails to parse registry entries correctly when the manifest
 This is a **defensive robustness fix** - the old code would silently drop plain string entries when processing registries, causing validation to fail incorrectly. The new code handles all format variations.
 
 ```bash
-$ python tools/validate_status.py --file tests/fixtures/status/repro-only/mixed_registry_test.json --manifest tests/fixtures/manifests/mixed_format_registry.json --strict
+$ python3 tools/validate_status.py --file tests/fixtures/status/repro-only/mixed_registry_test.json --schema tests/fixtures/schemas/repro_test_schema.json --manifest tests/fixtures/manifests/mixed_format_registry.json --strict
 ValidationError: Invalid ReduceOnly mode_reasons (not in manifest): ['REDUCEONLY_PLAIN_STRING']
 # Old code only extracted object entries with "code" field, missing plain strings
 ```
@@ -22,9 +22,9 @@ The validator should handle various registry formats robustly:
 
 ## Reproduction Steps
 
-1. Run `python tools/validate_status.py --file tests/fixtures/status/repro-only/mixed_registry_test.json --manifest tests/fixtures/manifests/mixed_format_registry.json --strict`
-2. At bad_commit (3f10c1e): Validation fails because plain string codes are silently dropped during registry parsing
-3. At good_commit (68b30dc): Validation passes because `normalize_code_list()` handles all formats
+1. Run `python3 tools/validate_status.py --file tests/fixtures/status/repro-only/mixed_registry_test.json --schema tests/fixtures/schemas/repro_test_schema.json --manifest tests/fixtures/manifests/mixed_format_registry.json --strict`
+2. At bad_commit (18ff16b): Validation fails because plain string codes are silently dropped during registry parsing
+3. At good_commit (edddce1): Validation passes because `normalize_code_list()` handles all formats
 
 ## Context
 
