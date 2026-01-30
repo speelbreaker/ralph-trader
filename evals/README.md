@@ -54,6 +54,46 @@ The manifest (`repros/manifest.json`) pins:
 4. Run verify_cmd (regression check)
 5. Record result to `evals/results/<run-id>/`
 
+### `compare_runs` - Compare Results Across Runs
+
+```bash
+./evals/compare_runs.sh <run-id-1> <run-id-2>
+```
+
+Compare eval results between two runs to detect regressions or improvements.
+
+**Example:**
+```bash
+# Run baseline
+./evals/run_all_repros.sh apply_patch baseline.patch
+# → creates evals/results/20260130-120000/
+
+# Run experiment
+./evals/run_all_repros.sh apply_patch experiment.patch
+# → creates evals/results/20260130-120500/
+
+# Compare
+./evals/compare_runs.sh 20260130-120000 20260130-120500
+```
+
+**Output:**
+```
+Repro                          20260130-120000 20260130-120500 Delta
+------------------------------ ------------ ------------ -----
+preflight-env-var              pass         pass         --
+status-validator-registry      fail         pass         OK
+prd-lint-refs                  pass         fail         REG
+
+Summary: 1 improved, 1 regressed, 1 unchanged
+```
+
+**Exit codes:**
+- 0 = No regressions (safe to merge)
+- 1 = Regressions detected
+- 2 = Usage error or missing data
+
+**Requirements:** `jq` and `bash` 3.2+
+
 ## Adding a New Repro
 
 1. Find a real bug with bad/good commits
@@ -93,3 +133,10 @@ The manifest (`repros/manifest.json`) pins:
 | preflight-env-var | lint | easy |
 | status-validator-registry | validation | medium |
 | prd-lint-refs | lint | easy |
+
+## Dependencies
+
+- `bash` 3.2+ (default on macOS)
+- `jq` (JSON processing) - install via `brew install jq`
+- `git` (for worktree operations)
+- Optional: `gtimeout` or `timeout` (for command timeouts)
