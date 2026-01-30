@@ -1,0 +1,44 @@
+{
+  "version": "1.0.0",
+  "repros": [
+    {
+      "name": "preflight-env-var",
+      "branch": "repro/preflight-env-var",
+      "bad_commit": "6faf52f6fdb5df700ffe0afa23d04561f0a52bec",
+      "good_commit": "ced649295be8bbb3fd51dc7d363778eb9b8e0b96",
+      "validate_cmd": "./plans/prd_preflight.sh --strict plans/prd.json",
+      "verify_cmd": "./plans/verify.sh quick",
+      "bad_output_regex": "not found|unknown option",
+      "validate_timeout_secs": 30,
+      "verify_timeout_secs": 300,
+      "category": "lint",
+      "difficulty": "easy"
+    },
+    {
+      "name": "status-validator-registry",
+      "branch": "repro/status-validator-registry",
+      "bad_commit": "18ff16b38a4adc33ea3c5e2694561b50ee7883a2",
+      "good_commit": "edddce1bc5e93b694ba580642f23f467158c8c40",
+      "validate_cmd": "python3 tools/validate_status.py --file tests/fixtures/status/repro-only/mixed_registry_test.json --schema tests/fixtures/schemas/repro_test_schema.json --manifest tests/fixtures/manifests/mixed_format_registry.json --strict",
+      "verify_cmd": "./plans/verify.sh quick",
+      "bad_output_regex": "TIER|Invalid.*mode_reasons|not in manifest",
+      "validate_timeout_secs": 30,
+      "verify_timeout_secs": 300,
+      "category": "validation",
+      "difficulty": "medium"
+    },
+    {
+      "name": "prd-lint-refs",
+      "branch": "repro/prd-lint-refs",
+      "bad_commit": "9c21f1e2c689fe0c9bdff6bb0adc8ad4fe9c0492",
+      "good_commit": "739756bf5b3f039545f71ff6edba9e921cad526c",
+      "validate_cmd": "./plans/prd_lint.sh plans/prd.json",
+      "verify_cmd": "./plans/verify.sh quick",
+      "bad_output_regex": "lint|ref|scope",
+      "validate_timeout_secs": 30,
+      "verify_timeout_secs": 300,
+      "category": "lint",
+      "difficulty": "easy"
+    }
+  ]
+}
