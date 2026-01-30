@@ -1430,6 +1430,10 @@ if ! grep -q "RPH_PROFILE_MODE" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must expose RPH_PROFILE_MODE for profile behavior checks" >&2
   exit 1
 fi
+if ! grep -q "RPH_TEST_COCHANGE_STRICT" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_TEST_COCHANGE_STRICT default" >&2
+  exit 1
+fi
 if ! grep -q "verify)" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must include verify profile case" >&2
   exit 1
