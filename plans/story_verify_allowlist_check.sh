@@ -6,7 +6,7 @@ set -euo pipefail
 # Read-only; no gate weakening
 
 ALLOWLIST="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
-PRD_FILE=""
+ARG_PRD_FILE=""
 FORMAT="text"  # text or json
 
 # Parse arguments
@@ -33,13 +33,13 @@ while [[ $# -gt 0 ]]; do
       exit 2
       ;;
     *)
-      PRD_FILE="$1"
+      ARG_PRD_FILE="$1"
       shift
       ;;
   esac
 done
 
-PRD_FILE="${PRD_FILE:-${PRD_FILE:-plans/prd.json}}"
+PRD_FILE="${ARG_PRD_FILE:-${PRD_FILE:-plans/prd.json}}"
 
 if ! command -v jq >/dev/null 2>&1; then
   if [[ "$FORMAT" == "json" ]]; then

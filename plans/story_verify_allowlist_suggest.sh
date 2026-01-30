@@ -6,7 +6,8 @@ set -euo pipefail
 # Usage: ./plans/story_verify_allowlist_suggest.sh [prd.json] > allowlist.patch
 
 ALLOWLIST="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
-PRD_FILE="${1:-plans/prd.json}"
+ARG_PRD_FILE="${1:-}"
+PRD_FILE="${ARG_PRD_FILE:-${PRD_FILE:-plans/prd.json}}"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "# ERROR: jq required" >&2
