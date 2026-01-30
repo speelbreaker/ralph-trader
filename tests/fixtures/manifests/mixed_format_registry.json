@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ralph.internal/schemas/test_mixed_registry_manifest.json",
+  "schema_version": 3,
+  "contract_version": "5.2",
+  "description": "Test manifest with mixed-format registries (for status-validator-registry repro)",
+
+  "registries": {
+    "TradingMode": {
+      "values": ["Active", "ReduceOnly", "Kill"],
+      "description": "Contract-defined trading modes"
+    },
+
+    "RiskState": {
+      "values": ["Healthy", "Degraded", "Maintenance"],
+      "description": "System health state"
+    },
+
+    "F1CertState": {
+      "values": ["PASS", "FAIL", "STALE", "MISSING", "INVALID"],
+      "description": "F1 certification status"
+    },
+
+    "ModeReasonCode": {
+      "description": "Test registry with MIXED format (plain strings + objects)",
+      "Kill": [
+        "KILL_PLAIN_STRING_FORMAT",
+        {
+          "code": "KILL_OBJECT_FORMAT",
+          "display": "This uses object format with code field",
+          "latched": true,
+          "unblock": { "type": "MANUAL", "condition": "Manual intervention" }
+        }
+      ],
+      "ReduceOnly": [
+        "REDUCEONLY_PLAIN_STRING",
+        {
+          "code": "REDUCEONLY_OBJECT_WITH_CODE",
+          "display": "This is an object with code field",
+          "latched": false,
+          "unblock": { "type": "AUTO", "condition": "Auto unblock" }
+        },
+        "REDUCEONLY_ANOTHER_PLAIN_STRING"
+      ]
+    },
+
+    "OpenPermissionReasonCode": {
+      "description": "Open permission reasons",
+      "values": [
+        "RESTART_RECONCILE_REQUIRED",
+        "WS_BOOK_GAP_RECONCILE_REQUIRED"
+      ]
+    }
+  }
+}
