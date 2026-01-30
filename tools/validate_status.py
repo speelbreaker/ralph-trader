@@ -119,8 +119,31 @@ def check_minimum_keys(status: dict[str, Any]) -> list[str]:
     return []
 
 
+def normalize_code_list(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        if "values" in value:
+            return normalize_code_list(value["values"])
+        code = value.get("code")
+        return [code] if isinstance(code, str) else []
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                out.append(item)
+            elif isinstance(item, dict):
+                code = item.get("code")
+                if isinstance(code, str):
+                    out.append(code)
+        return out
+    return []
+
+
 def is_subsequence_in_order(seq: list[str], ordered_universe: list[str]) -> bool:
     """True iff seq preserves relative order of ordered_universe."""
+    if not all(isinstance(v, str) for v in seq):
+        return False
+    if not all(isinstance(v, str) for v in ordered_universe):
+        return False
     index = {v: i for i, v in enumerate(ordered_universe)}
     try:
         idxs = [index[v] for v in seq]
@@ -143,9 +166,9 @@ def check_contract_invariants(status: dict[str, Any], manifest: dict[str, Any]) 
 
     regs = manifest.get("registries", {})
     mode_regs = regs.get("ModeReasonCode", {})
-    reduce_only_reasons: list[str] = mode_regs.get("ReduceOnly", [])
-    kill_reasons: list[str] = mode_regs.get("Kill", [])
-    open_perm_reasons: list[str] = regs.get("OpenPermissionReasonCode", [])
+    reduce_only_reasons = normalize_code_list(mode_regs.get("ReduceOnly", []))
+    kill_reasons = normalize_code_list(mode_regs.get("Kill", []))
+    open_perm_reasons = normalize_code_list(regs.get("OpenPermissionReasonCode", []))
     manifest_contract_version = manifest.get("contract_version", "5.2")
 
     trading_mode = status.get("trading_mode")
