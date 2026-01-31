@@ -1,6 +1,6 @@
 # Contract Coverage Matrix
 
-Generated: 2026-01-29 01:53:13Z
+Generated: 2026-01-31 01:42:54Z
 
 ## Anchors
 
@@ -9,7 +9,7 @@ Generated: 2026-01-29 01:53:13Z
 - ✅ **Anchor-003** — EvidenceGuard Blocks Opens on Evidence Chain Failure → S1-010
 - ✅ **Anchor-004** — TruthCapsule Timing (RecordedBeforeDispatch) → S4-000
 - ✅ **Anchor-005** — Decision Snapshots Required for Replay → S4-000
-- ✅ **Anchor-006** — WAL Durability (Record Before Dispatch) → S4-000, S4-003
+- ✅ **Anchor-006** — WAL Durability (Record Before Dispatch) → S4-000, S4-003, S6-000, S6-002, S6-004
 - ✅ **Anchor-007** — Trade-ID Registry Deduplication → S4-002
 - ✅ **Anchor-008** — Disk Watermark Actions → S1-010
 - ✅ **Anchor-009** — AGGRESSIVE Patches Require Human Approval → S1-010
@@ -44,7 +44,7 @@ Generated: 2026-01-29 01:53:13Z
 - ✅ **VR-011** — Liquidity Gate → S5-000
 - ✅ **VR-012** — Net Edge Gate → S5-002
 - ✅ **VR-013** — Instrument Cache Staleness Gate → S1-003, S1-006
-- ✅ **VR-014** — WAL Record-Before-Dispatch Gate → S4-000, S4-003
+- ✅ **VR-014** — WAL Record-Before-Dispatch Gate → S4-000, S4-003, S6-000, S6-004
 - ✅ **VR-015** — AGGRESSIVE Patch Human Approval Gate → S1-010
 - ✅ **VR-016** — Exchange Health Monitor Gate → S1-010
 - ✅ **VR-017** — Atomic Churn Circuit Breaker → S2-001
