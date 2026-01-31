@@ -3,6 +3,7 @@
 
 bash -n plans/verify.sh
 cargo test --workspace
+cargo test -p soldier_infra
 cargo test -p soldier_core --test test_dispatch_map
 cargo test -p soldier_core --test test_idempotency
 cargo test -p soldier_core --test test_instrument_cache_ttl
@@ -16,11 +17,24 @@ cargo test -p soldier_core --test test_quantize
 cargo test -p soldier_core --test test_preflight
 cargo test -p soldier_core --test test_post_only_guard
 cargo test -p soldier_core --test test_capabilities
+cargo test -p soldier_core --test test_liquidity_gate
+cargo test -p soldier_core --test test_fee_staleness
+cargo test -p soldier_core --test test_fee_cache
+cargo test -p soldier_core --test test_net_edge_gate
+cargo test -p soldier_core --test test_pricer
 cargo test -p soldier_core --test test_tlsm
+cargo test -p soldier_core --test test_gate_ordering
+cargo test -p soldier_core --test test_phase1_dispatch_auth
+cargo test -p soldier_core --test test_dispatch_chokepoint
+cargo test -p soldier_core --test test_intent_determinism
+cargo test -p soldier_core --test test_rejection_side_effects
+cargo test -p soldier_core --test test_intent_id_propagation
+cargo test -p soldier_core --test test_missing_config
 cargo test -p soldier_infra --test test_ledger_replay
 cargo test -p soldier_infra --test test_trade_id_registry
 cargo test -p soldier_infra --test test_dispatch_durability
 cargo test -p soldier_infra --test test_config_defaults
+cargo test -p soldier_infra --test test_crash_mid_intent
 rg -n "cargo test --workspace" plans/verify.sh
 rg -n "check_vq_evidence.py" plans/verify.sh
 test -f docs/order_size_discovery.md

@@ -21,7 +21,7 @@
       "category": "workflow",
       "description": "depends on higher slice",
       "contract_refs": [
-        "specs/WORKFLOW_CONTRACT.md \u00a73.5"
+        "specs/CONTRACT.md 0.Y Verification Harness"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Phase 1"
@@ -83,7 +83,7 @@
       "category": "workflow",
       "description": "higher slice dependency",
       "contract_refs": [
-        "specs/WORKFLOW_CONTRACT.md \u00a73.5"
+        "specs/CONTRACT.md 0.Y Verification Harness"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Phase 1"

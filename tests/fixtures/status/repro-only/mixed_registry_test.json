@@ -1,0 +1,55 @@
+{
+  "status_schema_version": 1,
+  "contract_version": "5.2",
+  "build_id": "test-fixture-mixed-registry",
+  "runtime_config_hash": "abc123",
+  "supported_profiles": ["CSP"],
+  "enforced_profile": "CSP",
+
+  "trading_mode": "ReduceOnly",
+  "risk_state": "Healthy",
+  "bunker_mode_active": false,
+  "connectivity_degraded": false,
+
+  "policy_age_sec": 5,
+  "last_policy_update_ts": 1769440510000,
+
+  "f1_cert_state": "PASS",
+  "f1_cert_expires_at": 1769526910000,
+
+  "disk_used_pct": 0.35,
+  "disk_used_last_update_ts_ms": 1769440510000,
+  "disk_used_pct_secondary": 0.35,
+  "disk_used_secondary_last_update_ts_ms": 1769440510000,
+
+  "mm_util": 0.15,
+  "mm_util_last_update_ts_ms": 1769440510000,
+
+  "loop_tick_last_ts_ms": 1769440510600,
+
+  "atomic_naked_events_24h": 0,
+  "429_count_5m": 0,
+  "10028_count_5m": 0,
+
+  "wal_queue_depth": 10,
+  "wal_queue_capacity": 1024,
+  "wal_queue_enqueue_failures": 0,
+
+  "deribit_http_p95_ms": 120,
+  "ws_event_lag_ms": 25,
+
+  "mode_reasons": ["REDUCEONLY_PLAIN_STRING", "REDUCEONLY_OBJECT_WITH_CODE"],
+
+  "open_permission_blocked_latch": false,
+  "open_permission_reason_codes": [],
+  "open_permission_requires_reconcile": false,
+
+  "owner_view": {
+    "primary_owner_reason_code": "REDUCEONLY_PLAIN_STRING",
+    "owner_message": "Testing mixed registry format parsing.",
+    "unblock": [
+      "This is a test fixture for the status-validator-registry repro",
+      "It uses both plain string codes (REDUCEONLY_PLAIN_STRING) and object codes (REDUCEONLY_OBJECT_WITH_CODE)"
+    ]
+  }
+}

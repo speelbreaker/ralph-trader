@@ -3,11 +3,20 @@ set -euo pipefail
 
 # Fix: prevent concurrent state mutation with file locking
 LOCK_FILE="${RPH_STATE_FILE:-.ralph/state.json}.lock"
+LOCK_DIR="${LOCK_FILE}.d"
 mkdir -p "$(dirname "$LOCK_FILE")"
-exec 200>"$LOCK_FILE"
-if ! flock -n 200; then
-  echo "ERROR: state locked by another process" >&2
-  exit 7
+if command -v flock >/dev/null 2>&1; then
+  exec 200>"$LOCK_FILE"
+  if ! flock -n 200; then
+    echo "ERROR: state locked by another process" >&2
+    exit 7
+  fi
+else
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "ERROR: state locked by another process" >&2
+    exit 7
+  fi
+  trap 'rmdir "$LOCK_DIR"' EXIT
 fi
 
 ID="${1:-}"

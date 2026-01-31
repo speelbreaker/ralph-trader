@@ -21,7 +21,7 @@
       "category": "workflow",
       "description": "cycle A",
       "contract_refs": [
-        "specs/WORKFLOW_CONTRACT.md \u00a75.3"
+        "specs/CONTRACT.md 0.Y Verification Harness"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Phase 1"
@@ -83,7 +83,7 @@
       "category": "workflow",
       "description": "cycle B",
       "contract_refs": [
-        "specs/WORKFLOW_CONTRACT.md \u00a75.3"
+        "specs/CONTRACT.md 0.Y Verification Harness"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Phase 1"

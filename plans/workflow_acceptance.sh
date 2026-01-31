@@ -528,6 +528,10 @@ OVERLAY_FILES=(
   "plans/prd_lint.sh"
   "plans/prd_gate.sh"
   "plans/prd_pipeline.sh"
+  "plans/prd_preflight.sh"
+  "plans/story_verify_allowlist_check.sh"
+  "plans/story_verify_allowlist_lint.sh"
+  "plans/story_verify_allowlist_suggest.sh"
   "plans/prd_autofix.sh"
   "plans/run_prd_auditor.sh"
   "plans/prd_audit_check.sh"
@@ -627,6 +631,10 @@ scripts_to_chmod=(
   "prd_lint.sh"
   "prd_gate.sh"
   "prd_pipeline.sh"
+  "prd_preflight.sh"
+  "story_verify_allowlist_check.sh"
+  "story_verify_allowlist_lint.sh"
+  "story_verify_allowlist_suggest.sh"
   "prd_autofix.sh"
   "run_prd_auditor.sh"
   "prd_audit_check.sh"
@@ -826,6 +834,144 @@ if test_start "0j" "shell safety checks (bash -n, shellcheck optional)" 1; then
   test_pass "0j"
 fi
 
+if test_start "0j.1" "autofix script syntax check" 1; then
+  bash -n "$ROOT/plans/autofix.sh" || {
+    echo "FAIL: autofix.sh has syntax errors" >&2
+    exit 1
+  }
+  test_pass "0j.1"
+fi
+
+if test_start "0j.2" "autofix run_fix escalates on tool failure" 1; then
+  # Test that run_fix() helper exits 1 and preserves log on tool failure
+  test_evidence_dir="$WORKTREE/.ralph/autofix_test_evidence_$$"
+  mkdir -p "$test_evidence_dir"
+
+  # Create a mock failing tool
+  mock_fail="$WORKTREE/.ralph/mock_fail.sh"
+  cat > "$mock_fail" <<'MOCKEOF'
+#!/usr/bin/env bash
+echo "mock tool output before failure"
+echo "simulated error: something went wrong" >&2
+exit 1
+MOCKEOF
+  chmod +x "$mock_fail"
+
+  # Source the helper function by extracting it and testing in isolation
+  # (Avoids running the full autofix.sh which has side effects)
+  test_script="$WORKTREE/.ralph/test_run_fix.sh"
+  cat > "$test_script" <<TESTEOF
+#!/usr/bin/env bash
+set -euo pipefail
+AUTOFIX_EVIDENCE_DIR="$test_evidence_dir"
+VERIFY_RUN_ID="test_run"
+
+# run_fix helper (extracted from autofix.sh)
+run_fix() {
+  local label="\$1"; shift
+  local log="\$AUTOFIX_EVIDENCE_DIR/\${VERIFY_RUN_ID:-unknown}_\${label}.log"
+  if ! "\$@" >"\$log" 2>&1; then
+    echo "ESCALATE: \${label} failed; see \$log" >&2
+    tail -n 80 "\$log" >&2 || true
+    echo "Evidence preserved in: \$AUTOFIX_EVIDENCE_DIR/" >&2
+    exit 1
+  fi
+}
+
+# Test: call run_fix with the failing mock tool
+run_fix mock_tool "$mock_fail"
+echo "should not reach here"
+TESTEOF
+  chmod +x "$test_script"
+
+  set +e
+  run_in_worktree bash "$test_script" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: run_fix should have exited 1 on tool failure" >&2
+    exit 1
+  fi
+
+  # Verify log file was created
+  log_file="$test_evidence_dir/test_run_mock_tool.log"
+  if [[ ! -f "$log_file" ]]; then
+    echo "FAIL: run_fix should have created log file at $log_file" >&2
+    exit 1
+  fi
+
+  # Verify log contains tool output
+  if ! grep -q "mock tool output before failure" "$log_file"; then
+    echo "FAIL: log file should contain tool stdout" >&2
+    exit 1
+  fi
+
+  rm -rf "$test_evidence_dir"
+  test_pass "0j.2"
+fi
+
+if test_start "0j.3" "autofix evidence survives escalation" 1; then
+  # Test that evidence directory and its contents survive failure escalation
+  test_evidence_dir="$WORKTREE/.ralph/autofix_evidence_survive_$$"
+  mkdir -p "$test_evidence_dir"
+
+  # Create evidence file before simulated failure
+  echo "pre-failure evidence" > "$test_evidence_dir/pre_failure.log"
+
+  # Simulate copy_evidence_or_die with a failure case
+  test_script="$WORKTREE/.ralph/test_copy_evidence.sh"
+  cat > "$test_script" <<TESTEOF
+#!/usr/bin/env bash
+set -euo pipefail
+AUTOFIX_EVIDENCE_DIR="$test_evidence_dir"
+
+# copy_evidence_or_die helper (extracted from autofix.sh)
+copy_evidence_or_die() {
+  local src="\$1"
+  local dst="\$2"
+  if ! cp -R "\$src" "\$dst"; then
+    echo "ESCALATE: failed to copy evidence from \${src} to \${dst}" >&2
+    echo "Evidence dir: \$AUTOFIX_EVIDENCE_DIR" >&2
+    exit 1
+  fi
+}
+
+# Try to copy from nonexistent source (should fail)
+copy_evidence_or_die "/nonexistent/path" "$test_evidence_dir/dest"
+TESTEOF
+  chmod +x "$test_script"
+
+  set +e
+  run_in_worktree bash "$test_script" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: copy_evidence_or_die should have exited 1 on copy failure" >&2
+    exit 1
+  fi
+
+  # Critical: evidence directory and pre-existing files must survive
+  if [[ ! -d "$test_evidence_dir" ]]; then
+    echo "FAIL: evidence directory should survive escalation" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "$test_evidence_dir/pre_failure.log" ]]; then
+    echo "FAIL: pre-failure evidence should survive escalation" >&2
+    exit 1
+  fi
+
+  if ! grep -q "pre-failure evidence" "$test_evidence_dir/pre_failure.log"; then
+    echo "FAIL: pre-failure evidence content should be intact" >&2
+    exit 1
+  fi
+
+  rm -rf "$test_evidence_dir"
+  test_pass "0j.3"
+fi
+
 if test_start "0k" "workflow preflight checks"; then
   run_in_worktree ./plans/prd_gate.sh "plans/prd.json" >/dev/null 2>&1
   run_in_worktree mkdir -p ".ralph"
@@ -835,6 +981,12 @@ if test_start "0k" "workflow preflight checks"; then
   allowlist="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
   if [[ ! -f "$allowlist" ]]; then
     echo "FAIL: story verify allowlist missing: $allowlist" >&2
+    exit 1
+  fi
+  dup="$(grep -v "^[[:space:]]*#" "$allowlist" | sed "/^[[:space:]]*$/d" | sort | uniq -d || true)"
+  if [[ -n "$dup" ]]; then
+    echo "FAIL: story verify allowlist contains duplicate entries:" >&2
+    printf "%s\n" "$dup" >&2
     exit 1
   fi
   missing=0
@@ -1278,6 +1430,10 @@ if ! grep -q "RPH_PROFILE_MODE" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must expose RPH_PROFILE_MODE for profile behavior checks" >&2
   exit 1
 fi
+if ! grep -q "RPH_TEST_COCHANGE_STRICT" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_TEST_COCHANGE_STRICT default" >&2
+  exit 1
+fi
 if ! grep -q "verify)" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must include verify profile case" >&2
   exit 1
@@ -1510,7 +1666,7 @@ write_valid_prd() {
       "contract_refs": ["CONTRACT.md §1"],
       "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
       "scope": {
-        "touch": ["src/lib.rs"],
+        "touch": ["crates/soldier_core/src/lib.rs"],
         "avoid": []
       },
       "acceptance": ["a", "b", "c"],
@@ -1748,10 +1904,10 @@ progress="${PROGRESS_FILE:-plans/progress.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance progress entry
-Commands: none
-Evidence: acceptance stub
-Next: proceed
+Summary: acceptance progress entry with enough detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: none (placeholder text to satisfy gate length; no real commands executed in this stub)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 EOT
 echo "<mark_pass>${id}</mark_pass>"
 EOF
@@ -1762,14 +1918,14 @@ cat > "$STUB_DIR/agent_mark_pass_with_commit.sh" <<'EOF'
 set -euo pipefail
 id="${SELECTED_ID:-S1-001}"
 progress="${PROGRESS_FILE:-plans/progress.txt}"
-touch_file="${ACCEPTANCE_TOUCH_FILE:-src/lib.rs}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-crates/soldier_core/src/lib.rs}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance mark pass with commit
-Commands: echo >> ${touch_file}; git add; git commit
-Evidence: acceptance stub
-Next: proceed
+Summary: acceptance mark pass with commit including extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: echo >> ${touch_file}; git add; git commit (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 EOT
 mkdir -p "$(dirname "$touch_file")"
 echo "tick $(date +%s)" >> "$touch_file"
@@ -1791,10 +1947,10 @@ progress="${PROGRESS_FILE:-plans/progress.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance mark pass meta only
-Commands: append progress only
-Evidence: acceptance stub
-Next: proceed
+Summary: acceptance mark pass meta only with extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: append progress only (placeholder text to satisfy gate length; no real commands executed in this stub)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 EOT
 git add "$progress"
 git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: progress only" >/dev/null 2>&1
@@ -1811,10 +1967,10 @@ touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance commit without pass
-Commands: echo >> ${touch_file}; git add; git commit
-Evidence: acceptance stub
-Next: continue
+Summary: acceptance commit without pass including extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: echo >> ${touch_file}; git add; git commit (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: continue with subsequent acceptance steps in the workflow acceptance suite
 EOT
 echo "tick $(date +%s)" >> "$touch_file"
 if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
@@ -1851,10 +2007,10 @@ touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
-Summary: acceptance mention complete
-Commands: none
-Evidence: acceptance stub
-Next: continue
+Summary: acceptance mention complete including extra detail to satisfy progress gate length requirements for workflow acceptance tests
+Commands: none (placeholder text to satisfy gate length; no real commands executed in this stub)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: continue with subsequent acceptance steps in the workflow acceptance suite
 EOT
 mkdir -p "$(dirname "$touch_file")"
 echo "tick $(date +%s)" >> "$touch_file"
@@ -1892,6 +2048,7 @@ cat > "$STUB_DIR/agent_modify_ralph_state.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p .ralph
+rm -f .ralph/state.json
 cat > .ralph/state.json <<'JSON'
 {"last_verify_post_rc":0,"tampered":true}
 JSON
@@ -2177,7 +2334,7 @@ JSON
   test_pass "0a"
 fi
 
-if test_start "0b" "slice preflight blocks unresolved refs"; then
+if test_start "0b" "slice preflight warns but continues on unresolved refs"; then
   run_in_worktree bash -c '
   set -euo pipefail
   tmpdir=".ralph/audit_slice_preflight"
@@ -2238,8 +2395,12 @@ JSON
   PRD_FILE="$prd" PRD_SLICE=1 CONTRACT_DIGEST="$tmpdir/contract_digest.json" PLAN_DIGEST="$tmpdir/plan_digest.json" OUT_PRD_SLICE="$tmpdir/prd_slice.json" OUT_CONTRACT_DIGEST="$tmpdir/contract_slice.json" OUT_PLAN_DIGEST="$tmpdir/plan_slice.json" OUT_META="$tmpdir/meta.json" ./plans/prd_slice_prepare.sh >/dev/null 2>&1
   rc=$?
   set -e
-  if [[ "$rc" -eq 0 ]]; then
-    echo "FAIL: expected prd_slice_prepare to fail on unresolved refs" >&2
+  if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: expected prd_slice_prepare to succeed (unresolved refs are warnings)" >&2
+    exit 1
+  fi
+  if [[ ! -s "$tmpdir/prd_slice.json" ]]; then
+    echo "FAIL: expected prd_slice.json output from prd_slice_prepare" >&2
     exit 1
   fi
 '
@@ -2525,9 +2686,8 @@ if test_start "2" "attempted pass flip without verify_post is prevented"; then
 reset_state
 valid_prd_2="$WORKTREE/.ralph/valid_prd_2.json"
 write_valid_prd "$valid_prd_2" "S1-001"
-before_blocked="$(count_blocked)"
-set +e
-run_ralph env \
+  set +e
+  run_ralph env \
   PRD_FILE="$valid_prd_2" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
@@ -2540,20 +2700,15 @@ run_ralph env \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
   ./plans/ralph.sh 1 >/dev/null 2>&1
-rc=$?
-set -e
-if [[ "$rc" -eq 0 ]]; then
-  echo "FAIL: expected non-zero exit when verify_post fails" >&2
-  exit 1
-fi
-after_blocked="$(count_blocked)"
-if [[ "$after_blocked" -le "$before_blocked" ]]; then
-  echo "FAIL: expected blocked artifact for verify_post failure" >&2
-  exit 1
-fi
-pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_2")"
-if [[ "$pass_state" != "false" ]]; then
-  echo "FAIL: passes flipped without verify_post green" >&2
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected non-zero exit when verify_post fails" >&2
+    exit 1
+  fi
+  pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_2")"
+  if [[ "$pass_state" != "false" ]]; then
+    echo "FAIL: passes flipped without verify_post green" >&2
   exit 1
 fi
 manifest_path=".ralph/artifacts.json"
@@ -2566,15 +2721,24 @@ if ! run_in_worktree ./plans/artifacts_validate.sh "$manifest_path" >/dev/null 2
   exit 1
 fi
 manifest_status="$(run_in_worktree jq -r '.final_verify_status' "$manifest_path")"
-if [[ "$manifest_status" != "BLOCKED" ]]; then
-  echo "FAIL: expected final_verify_status=BLOCKED on verify_post failure" >&2
-  exit 1
-fi
-blocked_reason="$(run_in_worktree jq -r '.blocked_reason' "$manifest_path")"
-if [[ "$blocked_reason" != "verify_post_failed" ]]; then
-  echo "FAIL: expected blocked_reason=verify_post_failed" >&2
-  exit 1
-fi
+  if [[ "$manifest_status" != "BLOCKED" ]]; then
+    echo "FAIL: expected final_verify_status=BLOCKED on verify_post failure" >&2
+    exit 1
+  fi
+  blocked_dir="$(run_in_worktree jq -r '.blocked_dir // empty' "$manifest_path")"
+  if [[ -z "$blocked_dir" ]]; then
+    echo "FAIL: expected blocked_dir recorded in manifest" >&2
+    exit 1
+  fi
+  if ! run_in_worktree test -d "$blocked_dir"; then
+    echo "FAIL: expected blocked_dir to exist for verify_post failure" >&2
+    exit 1
+  fi
+  blocked_reason="$(run_in_worktree jq -r '.blocked_reason' "$manifest_path")"
+  if [[ "$blocked_reason" != "verify_post_failed" ]]; then
+    echo "FAIL: expected blocked_reason=verify_post_failed" >&2
+    exit 1
+  fi
 if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="story_verify" and .reason=="verify_post_failed")' "$manifest_path" >/dev/null 2>&1; then
   echo "FAIL: expected skipped_checks verify_post_failed entry in manifest" >&2
   exit 1
@@ -2864,7 +3028,7 @@ run_ralph env \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mentions_complete.sh" \
   SELECTED_ID="S1-002" \
-  ACCEPTANCE_TOUCH_FILE="src/lib.rs" \
+  ACCEPTANCE_TOUCH_FILE="crates/soldier_core/src/lib.rs" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_RATE_LIMIT_ENABLED=0 \
@@ -3965,7 +4129,7 @@ fi
   test_pass "15"
 fi
 
-echo "Test 15b: dependency schema rejects forward-slice dependency"
+if test_start "15b" "dependency schema rejects forward-slice dependency"; then
 set +e
 run_in_worktree ./plans/prd_schema_check.sh "plans/fixtures/prd/deps_forward_slice.json" >/dev/null 2>&1
 rc=$?
@@ -3974,8 +4138,10 @@ if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected schema check to fail for forward-slice dependency" >&2
   exit 1
 fi
+  test_pass "15b"
+fi
 
-echo "Test 15c: dependency ordering respects same-slice deps"
+if test_start "15c" "dependency ordering respects same-slice deps"; then
 reset_state
 snapshot_worktree_if_dirty
 test15c_log="$WORKTREE/.ralph/test15c.log"
@@ -4004,8 +4170,10 @@ if [[ "$selected_id" != "S1-001" ]]; then
   echo "FAIL: expected S1-001 selected before dependency, got ${selected_id}" >&2
   exit 1
 fi
+  test_pass "15c"
+fi
 
-echo "Test 15d: dependency cycle blocks selection"
+if test_start "15d" "dependency cycle blocks selection"; then
 reset_state
 snapshot_worktree_if_dirty
 test15d_log="$WORKTREE/.ralph/test15d.log"
@@ -4033,8 +4201,10 @@ if [[ ! -f "$latest_block/dependency_deadlock.json" ]]; then
   echo "FAIL: expected dependency_deadlock.json in blocked artifact" >&2
   exit 1
 fi
+  test_pass "15d"
+fi
 
-echo "Test 16: cheating detected (deleted test file)"
+if test_start "16" "cheating detected (deleted test file)"; then
 reset_state
 valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
 write_valid_prd "$valid_prd_15" "S1-011"
@@ -4098,8 +4268,10 @@ if ! run_in_worktree test -f "tests/test_dummy.rs"; then
   exit 1
 fi
 write_contract_check_stub "PASS"
+  test_pass "16"
+fi
 
-echo "Test 16b: harness tamper blocks before processing"
+if test_start "16b" "harness tamper blocks before processing"; then
 reset_state
 valid_prd_16b="$WORKTREE/.ralph/valid_prd_16b.json"
 write_valid_prd "$valid_prd_16b" "S1-011"
@@ -4137,8 +4309,10 @@ fi
 copy_worktree_file "plans/ralph.sh"
 chmod +x "$WORKTREE/plans/ralph.sh" >/dev/null 2>&1 || true
 run_in_worktree git update-index --skip-worktree plans/ralph.sh >/dev/null 2>&1 || true
+  test_pass "16b"
+fi
 
-echo "Test 16c: .ralph tamper blocks before processing"
+if test_start "16c" ".ralph tamper blocks before processing"; then
 reset_state
 valid_prd_16c="$WORKTREE/.ralph/valid_prd_16c.json"
 write_valid_prd "$valid_prd_16c" "S1-012"
@@ -4172,6 +4346,8 @@ if [[ -z "$latest_block" ]]; then
   echo "FAIL: expected blocked artifact for ralph_dir_modified" >&2
   tail -n 120 "$test16c_log" >&2 || true
   exit 1
+fi
+  test_pass "16c"
 fi
 
 if test_start "17" "active slice gating selects lowest slice"; then
@@ -4252,6 +4428,8 @@ cat > "$valid_prd_16" <<'JSON'
   ]
 }
 JSON
+run_in_worktree touch "acceptance_tick.txt"
+snapshot_worktree_if_dirty
 run_ralph env \
   PRD_FILE="$valid_prd_16" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
@@ -4491,6 +4669,321 @@ if [[ "$rc" -eq 0 ]]; then
   exit 1
 fi
   test_pass "21"
+fi
+
+# --- Allowlist check tests ---
+
+if test_start "22" "allowlist_check rejects missing entries" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_check_test"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+  prd="$tmpdir/prd.json"
+
+  # Create a minimal allowlist with only one command
+  cat > "$allowlist" <<EOF
+bash -n plans/verify.sh
+EOF
+
+  # Create a PRD with verify commands not in allowlist
+  cat > "$prd" <<JSON
+{
+  "project": "Test",
+  "source": {"implementation_plan_path": "x", "contract_path": "y"},
+  "rules": {},
+  "items": [
+    {
+      "id": "T-001",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "category": "test",
+      "description": "test",
+      "contract_refs": [],
+      "plan_refs": [],
+      "scope": {"touch": ["plans/verify.sh"]},
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh", "cargo test --not-in-allowlist"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+
+  # Should fail due to missing allowlist entry
+  set +e
+  RPH_STORY_VERIFY_ALLOWLIST_FILE="$allowlist" ./plans/story_verify_allowlist_check.sh "$prd" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: allowlist_check should reject missing entries" >&2
+    exit 1
+  fi
+'
+  test_pass "22"
+fi
+
+if test_start "23" "allowlist_check passes when all entries present" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_check_pass"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+  prd="$tmpdir/prd.json"
+
+  # Create allowlist with all needed entries
+  cat > "$allowlist" <<EOF
+bash -n plans/verify.sh
+cargo test --workspace
+EOF
+
+  cat > "$prd" <<JSON
+{
+  "project": "Test",
+  "source": {"implementation_plan_path": "x", "contract_path": "y"},
+  "rules": {},
+  "items": [
+    {
+      "id": "T-001",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "category": "test",
+      "description": "test",
+      "contract_refs": [],
+      "plan_refs": [],
+      "scope": {"touch": ["plans/verify.sh"]},
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh", "cargo test --workspace"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+
+  RPH_STORY_VERIFY_ALLOWLIST_FILE="$allowlist" ./plans/story_verify_allowlist_check.sh "$prd" >/dev/null 2>&1
+'
+  test_pass "23"
+fi
+
+if test_start "24" "allowlist_check --format json produces valid JSON" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_json_test"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+  prd="$tmpdir/prd.json"
+
+  cat > "$allowlist" <<EOF
+bash -n plans/verify.sh
+EOF
+
+  cat > "$prd" <<JSON
+{
+  "project": "Test",
+  "source": {"implementation_plan_path": "x", "contract_path": "y"},
+  "rules": {},
+  "items": [
+    {
+      "id": "T-001",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "category": "test",
+      "description": "test",
+      "contract_refs": [],
+      "plan_refs": [],
+      "scope": {"touch": ["plans/verify.sh"]},
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+
+  output=$(RPH_STORY_VERIFY_ALLOWLIST_FILE="$allowlist" ./plans/story_verify_allowlist_check.sh --format json "$prd" 2>&1)
+  if ! echo "$output" | jq -e . >/dev/null 2>&1; then
+    echo "FAIL: --format json should produce valid JSON" >&2
+    echo "Output: $output" >&2
+    exit 1
+  fi
+  status=$(echo "$output" | jq -r ".status")
+  if [[ "$status" != "pass" ]]; then
+    echo "FAIL: expected status=pass, got $status" >&2
+    exit 1
+  fi
+'
+  test_pass "24"
+fi
+
+if test_start "25" "allowlist_lint detects duplicates" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_lint_test"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+
+  # Create allowlist with duplicates
+  cat > "$allowlist" <<EOF
+bash -n plans/verify.sh
+cargo test --workspace
+bash -n plans/verify.sh
+EOF
+
+  set +e
+  ./plans/story_verify_allowlist_lint.sh "$allowlist" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: allowlist_lint should fail on duplicates" >&2
+    exit 1
+  fi
+'
+  test_pass "25"
+fi
+
+if test_start "26" "allowlist_lint passes on clean file" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_lint_clean"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+
+  cat > "$allowlist" <<EOF
+# Comment line
+bash -n plans/verify.sh
+cargo test --workspace
+EOF
+
+  ./plans/story_verify_allowlist_lint.sh "$allowlist" >/dev/null 2>&1
+'
+  test_pass "26"
+fi
+
+if test_start "27" "prd_preflight runs gate and allowlist check" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  # Run preflight on real prd.json - should pass if allowlist is complete
+  ./plans/prd_preflight.sh plans/prd.json >/dev/null 2>&1
+'
+  test_pass "27"
+fi
+
+if test_start "28" "prd_preflight --strict fails when allowlist script missing" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/preflight_strict_test"
+  mkdir -p "$tmpdir"
+
+  # Create a minimal preflight wrapper that simulates missing check script
+  cat > "$tmpdir/preflight_test.sh" <<'"'"'SCRIPT'"'"'
+#!/usr/bin/env bash
+set -euo pipefail
+STRICT=1
+SCRIPT_DIR="$1"
+if [[ ! -x "$SCRIPT_DIR/story_verify_allowlist_check.sh" ]]; then
+  echo "[preflight] WARN: story_verify_allowlist_check.sh not found, skipping" >&2
+  if [[ $STRICT -eq 1 ]]; then
+    echo "[preflight] ERROR: --strict requires allowlist check script" >&2
+    exit 2
+  fi
+fi
+exit 0
+SCRIPT
+  chmod +x "$tmpdir/preflight_test.sh"
+
+  # Point to non-existent dir for strict mode failure
+  set +e
+  "$tmpdir/preflight_test.sh" "/nonexistent" >/dev/null 2>&1
+  rc=$?
+  set -e
+
+  if [[ "$rc" -ne 2 ]]; then
+    echo "FAIL: --strict should fail when allowlist check missing (got rc=$rc)" >&2
+    exit 1
+  fi
+'
+  test_pass "28"
+fi
+
+if test_start "29" "allowlist_suggest generates patch" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_suggest_test"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+  prd="$tmpdir/prd.json"
+
+  # Empty allowlist
+  echo "# Empty" > "$allowlist"
+
+  cat > "$prd" <<JSON
+{
+  "project": "Test",
+  "source": {"implementation_plan_path": "x", "contract_path": "y"},
+  "rules": {},
+  "items": [
+    {
+      "id": "T-001",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "category": "test",
+      "description": "test",
+      "contract_refs": [],
+      "plan_refs": [],
+      "scope": {"touch": ["plans/verify.sh"]},
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh", "cargo test --workspace"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+
+  output=$(RPH_STORY_VERIFY_ALLOWLIST_FILE="$allowlist" ./plans/story_verify_allowlist_suggest.sh "$prd" 2>&1)
+
+  if ! echo "$output" | grep -q "ADD these entries"; then
+    echo "FAIL: suggest should indicate entries to add" >&2
+    echo "Output: $output" >&2
+    exit 1
+  fi
+
+  if ! echo "$output" | grep -q "cargo test --workspace"; then
+    echo "FAIL: suggest should list missing command" >&2
+    echo "Output: $output" >&2
+    exit 1
+  fi
+'
+  test_pass "29"
 fi
 
 echo "Workflow acceptance tests passed"

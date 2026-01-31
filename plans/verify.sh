@@ -251,6 +251,14 @@ run_logged() {
     fi
   fi
 
+  # WRITE .rc FOR ALL GATES (pass or fail) - immediately after rc is known
+  echo "$rc" > "${VERIFY_ARTIFACTS_DIR}/${name}.rc"
+
+  # WRITE FAILED_GATE only for first failure (before timeout check)
+  if [[ "$rc" != "0" && ! -f "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE" ]]; then
+    echo "$name" > "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE"
+  fi
+
   if [[ "$rc" == "124" || "$rc" == "137" ]]; then
     fail "Timeout running ${name} (limit=${duration})"
   fi
@@ -265,7 +273,12 @@ is_workflow_file() {
     plans/workflow_verify.sh) return 0 ;;
     plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
     plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;
+    plans/autofix.sh) return 0 ;;
     plans/story_verify_allowlist.txt) return 0 ;;
+    plans/story_verify_allowlist_check.sh) return 0 ;;
+    plans/story_verify_allowlist_lint.sh) return 0 ;;
+    plans/story_verify_allowlist_suggest.sh) return 0 ;;
+    plans/prd_preflight.sh) return 0 ;;
     specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml) return 0 ;;
     tools/vendor_docs_lint_rust.py) return 0 ;;
     scripts/build_contract_kernel.py|scripts/check_contract_kernel.py|scripts/contract_kernel_lib.py|scripts/test_contract_kernel.py) return 0 ;;

@@ -3,9 +3,11 @@ target/
 plans/logs/
 plans/progress_archive.txt
 artifacts/verify/
+artifacts/autofix/
 patches/
 .DS_Store
 __pycache__/
+evals/
 
 # Local Codex config
 .codex/

@@ -66,6 +66,97 @@ report_warn() {
   warnings_json+=("{\"code\":\"$(json_escape "$code")\",\"id\":\"$(json_escape "$id")\",\"message\":\"$(json_escape "$message")\"}")
 }
 
+# Error context helpers - show story id, field, and fix guidance
+context_link() {
+  echo "  See: specs/WORKFLOW_CONTRACT.md (PRD validation rules)"
+}
+
+suggest_fix() {
+  local code="$1"
+  local id="$2"
+  local field="$3"
+  local value="$4"
+
+  case "$code" in
+    MISSING_PATH)
+      echo "  Story: $id"
+      echo "  Field: scope.touch"
+      echo "  Path:  $value"
+      echo ""
+      echo "  Possible fixes:"
+      echo "  1. Create the file: touch $value"
+      echo "  2. Move to scope.create if this is a new file"
+      echo "  3. Run autofix: ./plans/prd_autofix.sh"
+      local basename
+      basename=$(basename "$value" 2>/dev/null || echo "")
+      if [[ -n "$basename" ]] && command -v fd >/dev/null 2>&1; then
+        local similar
+        similar=$(fd -t f "$basename" 2>/dev/null | head -3 || true)
+        if [[ -n "$similar" ]]; then
+          echo "  4. Similar files found:"
+          echo "$similar" | sed 's/^/     /'
+        fi
+      fi
+      context_link
+      ;;
+    CREATE_PATH_EXISTS)
+      echo "  Story: $id"
+      echo "  Field: scope.create"
+      echo "  Path:  $value"
+      echo ""
+      echo "  Possible fixes:"
+      echo "  1. Move to scope.touch (file already exists)"
+      echo "  2. Run autofix: ./plans/prd_autofix.sh"
+      context_link
+      ;;
+    MISSING_VERIFY_SH)
+      echo "  Story: $id"
+      echo "  Field: verify[]"
+      echo ""
+      echo "  Possible fixes:"
+      echo "  1. Run autofix: ./plans/prd_autofix.sh (auto-adds ./plans/verify.sh)"
+      echo "  2. Manual: Add \"./plans/verify.sh\" to verify array"
+      context_link
+      ;;
+    UNRESOLVED_CONTRACT_REF|UNRESOLVED_PLAN_REF)
+      echo "  Story: $id"
+      echo "  Field: ${field}_refs"
+      echo "  Ref:   $value"
+      echo ""
+      echo "  Possible fixes:"
+      echo "  1. Check specs/CONTRACT.md for exact section text"
+      echo "  2. Use section ID format: \"2.2.1 PolicyGuard Resolution\""
+      echo "  3. Run: grep -i '$(echo "$value" | cut -d' ' -f1)' specs/CONTRACT.md"
+      context_link
+      ;;
+    FORWARD_KEYWORD)
+      echo "  Story: $id"
+      echo "  Field: acceptance"
+      echo "  Keyword: $value"
+      echo ""
+      echo "  Possible fixes:"
+      echo "  1. Add dependency on story that implements $value"
+      echo "  2. Move story to later slice"
+      echo "  3. Remove forward-looking language from acceptance"
+      context_link
+      ;;
+    CREATE_PARENT_MISSING)
+      echo "  Story: $id"
+      echo "  Field: scope.create"
+      echo "  Path:  $value"
+      echo ""
+      echo "  Possible fixes:"
+      echo "  1. Create parent directory: mkdir -p $(dirname "$value")"
+      echo "  2. Fix path typo in prd.json"
+      context_link
+      ;;
+    *)
+      echo "  Story: $id"
+      context_link
+      ;;
+  esac
+}
+
 finish() {
   printf 'PRD_LINT: errors=%s warnings=%s\n' "$errors" "$warnings"
   if [[ -n "$json_out" ]]; then
@@ -329,6 +420,7 @@ while IFS= read -r entry; do
     if ! is_allowlisted "$item_id"; then
       if ! printf '%s' "$item_json" | jq -e '.verify | index("./plans/verify.sh") != null' >/dev/null 2>&1; then
         report_error MISSING_VERIFY_SH "$item_id" "verify must include ./plans/verify.sh"
+        suggest_fix MISSING_VERIFY_SH "$item_id" "verify" ""
       fi
     fi
   fi
@@ -364,6 +456,7 @@ while IFS= read -r entry; do
         full_path="$repo_root/$touch_norm"
         if [[ ! -e "$full_path" ]]; then
           report_error MISSING_PATH "$item_id" "path does not exist: $touch_norm"
+          suggest_fix MISSING_PATH "$item_id" "touch" "$touch_norm"
         fi
       fi
     done <<< "$(printf '%s' "$item_json" | jq -r '.scope.touch[]')"
@@ -397,11 +490,13 @@ while IFS= read -r entry; do
       full_create="$repo_root/$create_norm"
       if [[ -e "$full_create" ]]; then
         report_error CREATE_PATH_EXISTS "$item_id" "scope.create path already exists: $create_norm"
+        suggest_fix CREATE_PATH_EXISTS "$item_id" "create" "$create_norm"
         continue
       fi
       parent_dir="$(dirname "$full_create")"
       if [[ ! -d "$parent_dir" ]]; then
         report_error CREATE_PARENT_MISSING "$item_id" "scope.create parent directory missing for: $create_norm"
+        suggest_fix CREATE_PARENT_MISSING "$item_id" "create" "$create_norm"
       fi
     done
   fi
@@ -453,8 +548,16 @@ while IFS= read -r entry; do
     acceptance_lc=$(printf '%s' "$acceptance_refs" | tr '[:upper:]' '[:lower:]')
 
     if [[ "$acceptance_lc" == *"policyguard"* || "$acceptance_lc" == *"evidenceguard"* || "$acceptance_lc" == *"f1"* || "$acceptance_lc" == *"replay"* || "$acceptance_lc" == *"wal"* ]]; then
+      # Determine which keyword was found for better guidance
+      forward_keyword=""
+      [[ "$acceptance_lc" == *"policyguard"* ]] && forward_keyword="PolicyGuard"
+      [[ "$acceptance_lc" == *"evidenceguard"* ]] && forward_keyword="EvidenceGuard"
+      [[ "$acceptance_lc" == *"f1"* ]] && forward_keyword="F1"
+      [[ "$acceptance_lc" == *"replay"* ]] && forward_keyword="replay"
+      [[ "$acceptance_lc" == *"wal"* ]] && forward_keyword="WAL"
       if [[ "${PRD_LINT_FORWARD_FAIL:-}" == "1" ]]; then
         report_error FORWARD_KEYWORD "$item_id" "forward-dependency keyword found; add dependency, move to later slice, or remove premature acceptance"
+        suggest_fix FORWARD_KEYWORD "$item_id" "acceptance" "$forward_keyword"
       else
         report_warn FORWARD_KEYWORD "$item_id" "forward-dependency keyword found; add dependency, move to later slice, or remove premature acceptance"
       fi

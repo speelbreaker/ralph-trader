@@ -19,6 +19,7 @@ PROGRESS_FILE="${PROGRESS_FILE:-plans/progress.txt}"
 VERIFY_SH="${VERIFY_SH:-./plans/verify.sh}"
 ROTATE_PY="${ROTATE_PY:-./plans/rotate_progress.py}"
 PRD_SCHEMA_CHECK_SH="${PRD_SCHEMA_CHECK_SH:-./plans/prd_schema_check.sh}"
+PRD_PREFLIGHT_SH="${PRD_PREFLIGHT_SH:-./plans/prd_preflight.sh}"
 RPH_RUN_ID="${RPH_RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
 VERIFY_RUN_ID="${VERIFY_RUN_ID:-$RPH_RUN_ID}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$REPO_ROOT/.ralph/verify/$VERIFY_RUN_ID}"
@@ -707,19 +708,36 @@ fi
 [[ -f "$PRD_FILE" ]] || block_preflight "missing_prd" "missing $PRD_FILE"
 jq . "$PRD_FILE" >/dev/null 2>&1 || block_preflight "invalid_prd_json" "$PRD_FILE invalid JSON"
 
-# PRD schema sanity check (single source of truth; fail-closed)
-if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
-  block_preflight "missing_prd_schema_check" "$PRD_SCHEMA_CHECK_SH missing or not executable"
+# PRD preflight (schema+lint+ref+allowlist) if available; fallback to schema check
+if [[ -f "$PRD_PREFLIGHT_SH" && ! -x "$PRD_PREFLIGHT_SH" ]]; then
+  block_preflight "missing_prd_preflight" "$PRD_PREFLIGHT_SH missing or not executable"
 fi
-schema_out=""
-schema_rc=0
-set +e
-schema_out="$("$PRD_SCHEMA_CHECK_SH" "$PRD_FILE" 2>&1)"
-schema_rc=$?
-set -e
-if (( schema_rc != 0 )); then
-  echo "$schema_out" | tee -a "$LOG_FILE"
-  block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid (run $PRD_SCHEMA_CHECK_SH $PRD_FILE for details)"
+if [[ -x "$PRD_PREFLIGHT_SH" ]]; then
+  preflight_out=""
+  preflight_rc=0
+  set +e
+  preflight_out="$("$PRD_PREFLIGHT_SH" --strict "$PRD_FILE" 2>&1)"
+  preflight_rc=$?
+  set -e
+  if (( preflight_rc != 0 )); then
+    echo "$preflight_out" | tee -a "$LOG_FILE"
+    block_preflight "prd_preflight_failed" "PRD preflight failed (run $PRD_PREFLIGHT_SH --strict $PRD_FILE for details)"
+  fi
+else
+  # PRD schema sanity check (single source of truth; fail-closed)
+  if [[ ! -x "$PRD_SCHEMA_CHECK_SH" ]]; then
+    block_preflight "missing_prd_schema_check" "$PRD_SCHEMA_CHECK_SH missing or not executable"
+  fi
+  schema_out=""
+  schema_rc=0
+  set +e
+  schema_out="$("$PRD_SCHEMA_CHECK_SH" "$PRD_FILE" 2>&1)"
+  schema_rc=$?
+  set -e
+  if (( schema_rc != 0 )); then
+    echo "$schema_out" | tee -a "$LOG_FILE"
+    block_preflight "invalid_prd_schema" "$PRD_FILE schema invalid (run $PRD_SCHEMA_CHECK_SH $PRD_FILE for details)"
+  fi
 fi
 if [[ "${PRD_SCHEMA_DRAFT_MODE:-0}" == "1" ]]; then
   block_preflight "prd_schema_draft_mode" "PRD_SCHEMA_DRAFT_MODE=1 set; drafting mode is blocked from execution."
@@ -1169,6 +1187,7 @@ append_metrics() {
 
 # Fix 10: Test co-change gate - require test changes with source changes
 RPH_TEST_COCHANGE_ENABLED="${RPH_TEST_COCHANGE_ENABLED:-1}"
+RPH_TEST_COCHANGE_STRICT="${RPH_TEST_COCHANGE_STRICT:-0}"
 RPH_TEST_COCHANGE_SRC_PATTERNS="${RPH_TEST_COCHANGE_SRC_PATTERNS:-^src/|^lib/|^app/|^pkg/|^internal/|^cmd/|\.rs$|\.py$|\.ts$|\.js$}"
 RPH_TEST_COCHANGE_TEST_PATTERNS="${RPH_TEST_COCHANGE_TEST_PATTERNS:-^tests?/|_test\.|\.test\.|\.spec\.|^__tests__/}"
 RPH_TEST_COCHANGE_EXEMPT_PATTERNS="${RPH_TEST_COCHANGE_EXEMPT_PATTERNS:-\.md$|\.txt$|\.json$|\.yaml$|\.yml$|\.toml$|^docs/|^specs/|^plans/}"
@@ -1198,8 +1217,10 @@ check_test_cochange() {
   test_files="$(echo "$changed_files" | grep -E "$RPH_TEST_COCHANGE_TEST_PATTERNS" || true)"
 
   local src_count test_count
-  src_count="$(echo "$src_files" | grep -c . || echo 0)"
-  test_count="$(echo "$test_files" | grep -c . || echo 0)"
+  src_count="$(echo "$src_files" | grep -c . || true)"
+  test_count="$(echo "$test_files" | grep -c . || true)"
+  if [[ -z "$src_count" ]]; then src_count=0; fi
+  if [[ -z "$test_count" ]]; then test_count=0; fi
 
   if (( src_count > 0 && test_count == 0 )); then
     echo "src_changed=$src_count test_changed=$test_count"
@@ -1760,7 +1781,7 @@ progress_gate() {
     local summary_content commands_content evidence_content next_content
 
     # Extract content after "Summary:" label (case-insensitive, multiline until next label or EOF)
-    summary_content="$(sed -n '/^[Ss]ummary[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ss]ummary[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    summary_content="$(sed -n '/^[Ss]ummary[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ss]ummary[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$summary_content" ]]; then
       # Fallback: check single-line format "Summary: content"
       summary_content="$(grep -i '^[Ss]ummary[[:space:]]*:' "$appended_file" | sed 's/^[Ss]ummary[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
@@ -1769,7 +1790,7 @@ progress_gate() {
       issues+=("summary_too_short")
     fi
 
-    commands_content="$(sed -n '/^[Cc]ommands[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Cc]ommands[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    commands_content="$(sed -n '/^[Cc]ommands[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Cc]ommands[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$commands_content" ]]; then
       commands_content="$(grep -i '^[Cc]ommands[[:space:]]*:' "$appended_file" | sed 's/^[Cc]ommands[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
     fi
@@ -1777,7 +1798,7 @@ progress_gate() {
       issues+=("commands_too_short")
     fi
 
-    evidence_content="$(sed -n '/^[Ee]vidence[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ee]vidence[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    evidence_content="$(sed -n '/^[Ee]vidence[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Ee]vidence[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$evidence_content" ]]; then
       evidence_content="$(grep -i '^[Ee]vidence[[:space:]]*:' "$appended_file" | sed 's/^[Ee]vidence[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
     fi
@@ -1785,7 +1806,7 @@ progress_gate() {
       issues+=("evidence_too_short")
     fi
 
-    next_content="$(sed -n '/^[Nn]ext[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Nn]ext[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p}' "$appended_file" | tr -d '[:space:]')"
+    next_content="$(sed -n '/^[Nn]ext[[:space:]]*:/,/^[A-Za-z]*[[:space:]]*:/{/^[Nn]ext[[:space:]]*:/d;/^[A-Za-z]*[[:space:]]*:/d;p;}' "$appended_file" | tr -d '[:space:]')"
     if [[ -z "$next_content" ]]; then
       next_content="$(grep -iE '^([Nn]ext|[Gg]otcha)[[:space:]]*:' "$appended_file" | sed 's/^[NnGg][oOeE][txTX][ctCT][hHaA]*[[:space:]]*:[[:space:]]*//' | tr -d '[:space:]')"
     fi
@@ -2917,6 +2938,8 @@ PROMPT
 
   if (( POST_VERIFY_FAILED == 1 )); then
     if (( POST_VERIFY_EXIT == 1 )); then
+      add_skipped_check "final_verify" "verify_post_failed"
+      write_artifact_manifest "$ITER_DIR" "" "BLOCKED" "$BLOCK_DIR" "verify_post_failed" "verify_post failed"
       exit 8
     fi
     if (( POST_VERIFY_CONTINUE == 1 )); then
