@@ -9,6 +9,7 @@ DEFAULT_STATUS_FILE="/tmp/workflow_acceptance.status"
 WORKFLOW_ACCEPTANCE_MODE="full"
 WORKFLOW_ACCEPTANCE_SETUP_MODE="${WORKFLOW_ACCEPTANCE_SETUP_MODE:-auto}"
 ONLY_ID=""
+ONLY_SET=""
 FROM_ID=""
 UNTIL_ID=""
 RESUME=0
@@ -35,6 +36,7 @@ Options:
   --fast                 Run fast prechecks only
   --mode <full|smoke>     Run full suite or fast smoke subset
   --only <id>            Run a single test id (overrides other selectors)
+  --only-set <ids>       Run multiple test ids (comma-separated, e.g., "0e,0f,1")
   --from <id>            Start running at id (inclusive)
   --until <id>           Stop after id (inclusive)
   --resume               Resume from the test after the last completed id in state file
@@ -117,6 +119,13 @@ test_start() {
     if [[ "$id" != "$ONLY_ID" ]]; then
       return 1
     fi
+  elif [[ -n "$ONLY_SET" ]]; then
+    # Normalize: remove whitespace, check membership
+    normalized=$(echo "$ONLY_SET" | tr -d '[:space:]')
+    case ",$normalized," in
+      *,$id,*) ;;  # ID found in set - continue to run
+      *) return 1 ;; # ID not in set - skip
+    esac
   else
     if (( TEST_COUNTER < START_INDEX || TEST_COUNTER > END_INDEX )); then
       return 1
@@ -166,6 +175,14 @@ parse_args() {
         ONLY_ID="${2:-}"
         if [[ -z "$ONLY_ID" ]]; then
           echo "FAIL: --only requires an id" >&2
+          exit 1
+        fi
+        shift 2
+        ;;
+      --only-set)
+        ONLY_SET="${2:-}"
+        if [[ -z "$ONLY_SET" ]]; then
+          echo "FAIL: --only-set requires a comma-separated list of ids" >&2
           exit 1
         fi
         shift 2
@@ -243,11 +260,31 @@ fi
 
 collect_test_ids
 
+# Mutual exclusion: --only and --only-set cannot both be set
+if [[ -n "$ONLY_ID" && -n "$ONLY_SET" ]]; then
+  echo "FAIL: --only and --only-set are mutually exclusive" >&2
+  exit 1
+fi
+
 if [[ -n "$ONLY_ID" ]]; then
   if ! index_first_of "$ONLY_ID" >/dev/null; then
     echo "FAIL: --only id not found: $ONLY_ID" >&2
     exit 1
   fi
+fi
+
+if [[ -n "$ONLY_SET" ]]; then
+  # Validate all IDs in the set exist
+  normalized=$(echo "$ONLY_SET" | tr -d '[:space:]')
+  IFS=',' read -ra ids <<<"$normalized"
+  for id in "${ids[@]}"; do
+    # Skip empty tokens
+    [[ -z "$id" ]] && continue
+    if ! index_first_of "$id" >/dev/null; then
+      echo "FAIL: --only-set id not found: $id" >&2
+      exit 1
+    fi
+  done
 fi
 
 if [[ -n "$FROM_ID" ]]; then
@@ -290,6 +327,9 @@ fi
 mode_parts=()
 if [[ -n "$ONLY_ID" ]]; then
   mode_parts+=("only:${ONLY_ID}")
+fi
+if [[ -n "$ONLY_SET" ]]; then
+  mode_parts+=("only-set:$(echo "$ONLY_SET" | tr -d '[:space:]')")
 fi
 if (( FAST == 1 )); then
   mode_parts+=("fast")
