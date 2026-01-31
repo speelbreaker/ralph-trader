@@ -269,7 +269,7 @@ is_workflow_file() {
   case "$1" in
     AGENTS.md|specs/WORKFLOW_CONTRACT.md|specs/CONTRACT.md|specs/IMPLEMENTATION_PLAN.md|specs/POLICY.md|specs/SOURCE_OF_TRUTH.md|IMPLEMENTATION_PLAN.md|POLICY.md) return 0 ;;
     verify.sh) return 0 ;;
-    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json|plans/ssot_lint.sh|plans/prd_gate.sh|plans/prd_audit_check.sh|plans/tests/test_workflow_acceptance_fallback.sh) return 0 ;;
+    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_acceptance_parallel.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json|plans/ssot_lint.sh|plans/prd_gate.sh|plans/prd_audit_check.sh|plans/tests/test_workflow_acceptance_fallback.sh) return 0 ;;
     plans/workflow_verify.sh) return 0 ;;
     plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
     plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;

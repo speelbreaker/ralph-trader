@@ -24,15 +24,14 @@
         "P0-A Launch Policy Baseline"
       ],
       "plan_refs": [
-        "P0-A"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
-          "docs/launch_policy.md"
-        ],
-        "create": [
+          "docs/launch_policy.md",
           "evidence/phase0/policy/launch_policy_snapshot.md"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -94,15 +93,14 @@
         "P0-B Environment Isolation"
       ],
       "plan_refs": [
-        "P0-B"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
-          "docs/env_matrix.md"
-        ],
-        "create": [
+          "docs/env_matrix.md",
           "evidence/phase0/env/env_matrix_snapshot.md"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -161,15 +159,14 @@
         "P0-C Keys & Secrets Baseline"
       ],
       "plan_refs": [
-        "P0-C"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
-          "docs/keys_and_secrets.md"
-        ],
-        "create": [
+          "docs/keys_and_secrets.md",
           "evidence/phase0/keys/key_scope_probe.json"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -243,17 +240,16 @@
         "P0-D Break-Glass Runbook"
       ],
       "plan_refs": [
-        "P0-D"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
-          "docs/break_glass_runbook.md"
-        ],
-        "create": [
+          "docs/break_glass_runbook.md",
           "evidence/phase0/break_glass/runbook_snapshot.md",
           "evidence/phase0/break_glass/drill.md",
           "evidence/phase0/break_glass/log_excerpt.txt"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -347,17 +343,16 @@
         "VR-024"
       ],
       "plan_refs": [
-        "P0-E"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
           "docs/health_endpoint.md",
-          "crates/soldier_infra/src/lib.rs"
-        ],
-        "create": [
+          "crates/soldier_infra/src/lib.rs",
           "crates/soldier_infra/src/health.rs",
           "crates/soldier_infra/tests/test_health.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -2935,18 +2930,17 @@
       "category": "hardening",
       "description": "Implement CI tests proving exactly one module/function may dispatch exchange orders with no bypass paths.",
       "contract_refs": [
-        "CONTRACT.md §1 Execution Core Invariants",
         "RecordedBeforeDispatch",
         "AT-935",
         "Anchor-006",
-        "VR-014",
-        "P1-A"
+        "VR-014"
       ],
       "plan_refs": [
-        "P1-A"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/tests/test_dispatch_chokepoint.rs",
           "docs/dispatch_chokepoint.md"
         ],
@@ -3009,19 +3003,17 @@
       "category": "hardening",
       "description": "Implement CI test proving identical inputs produce identical intent bytes/hashes across runs and restarts.",
       "contract_refs": [
-        "CONTRACT.md §1.1 Intent Determinism",
-        "CSP.2.1 Stable Intent Identity",
-        "P1-B"
+        "CSP.2.1 Stable Intent Identity"
       ],
       "plan_refs": [
-        "P1-B"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/tests/test_intent_determinism.rs"
+          "evidence/phase1/determinism/intent_hashes.txt"
         ],
         "create": [
-          "evidence/phase1/determinism/intent_hashes.txt"
+          "crates/soldier_core/tests/test_intent_determinism.rs"
         ],
         "avoid": [
           "plans/**"
@@ -3081,17 +3073,16 @@
       "category": "hardening",
       "description": "Implement CI test proving rejected intents leave no persistent state changes except counters/logs.",
       "contract_refs": [
-        "CONTRACT.md §1 Execution Core Invariants",
         "RecordedBeforeDispatch",
         "AT-201",
-        "Anchor-006",
-        "P1-C"
+        "Anchor-006"
       ],
       "plan_refs": [
-        "P1-C"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/tests/test_rejection_side_effects.rs",
           "evidence/phase1/no_side_effects/rejection_cases.md"
         ],
@@ -3154,18 +3145,15 @@
       "category": "hardening",
       "description": "Implement CI test proving every intent-handling log/metric includes the same intent_id and run_id.",
       "contract_refs": [
-        "CONTRACT.md Observability requirements",
-        "0.Z.7.4 Observability Requirement",
-        "P1-D"
+        "0.Z.7.4 Observability Requirement"
       ],
       "plan_refs": [
-        "P1-D"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
-        "touch": [
-          "crates/soldier_core/tests/test_intent_id_propagation.rs"
-        ],
+        "touch": [],
         "create": [
+          "crates/soldier_core/tests/test_intent_id_propagation.rs",
           "evidence/phase1/traceability/sample_rejection_log.txt"
         ],
         "avoid": [
@@ -3206,7 +3194,16 @@
       "enforcement_point": "",
       "failure_mode": [],
       "observability": {
-        "metrics": [],
+        "metrics": [
+          {
+            "name": "intent_id_propagation_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": [
+              "result"
+            ]
+          }
+        ],
         "status_fields": [],
         "status_contract_ats": []
       },
@@ -3227,14 +3224,14 @@
         "CONTRACT.md RecordedBeforeDispatch",
         "CONTRACT.md CSP.5.2 Enforcement Rules",
         "Anchor-006",
-        "VR-014",
-        "P1-E"
+        "VR-014"
       ],
       "plan_refs": [
-        "P1-E"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/tests/test_gate_ordering.rs",
           "docs/intent_gate_invariants.md"
         ],
@@ -3296,20 +3293,18 @@
       "category": "hardening",
       "description": "Implement CI test proving missing critical config causes fail-closed rejection with enumerated reason code.",
       "contract_refs": [
-        "CONTRACT.md Appendix A Safety-Critical Defaults",
-        "Appendix A",
-        "P1-F"
+        "Appendix A"
       ],
       "plan_refs": [
-        "P1-F"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/tests/test_missing_config.rs",
-          "docs/critical_config_keys.md"
+          "evidence/phase1/config_fail_closed/missing_keys_matrix.json"
         ],
         "create": [
-          "evidence/phase1/config_fail_closed/missing_keys_matrix.json"
+          "crates/soldier_core/tests/test_missing_config.rs",
+          "docs/critical_config_keys.md"
         ],
         "avoid": [
           "plans/**"
@@ -3373,17 +3368,15 @@
       "contract_refs": [
         "CONTRACT.md §1.2 Idempotency / WAL",
         "AT-935",
-        "AT-233",
-        "P1-G"
+        "AT-233"
       ],
       "plan_refs": [
-        "P1-G"
+        "Global Non‑Negotiables (apply to ALL stories)"
       ],
       "scope": {
-        "touch": [
-          "crates/soldier_infra/tests/test_crash_mid_intent.rs"
-        ],
+        "touch": [],
         "create": [
+          "crates/soldier_infra/tests/test_crash_mid_intent.rs",
           "evidence/phase1/crash_mid_intent/drill.md"
         ],
         "avoid": [

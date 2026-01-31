@@ -410,6 +410,74 @@ while IFS= read -r entry; do
     fi
   fi
 
+  contract_refs_list=()
+  contract_refs_lc=()
+  if printf '%s' "$item_json" | jq -e '.contract_refs | type == "array"' >/dev/null 2>&1; then
+    while IFS= read -r cref; do
+      [[ -z "$cref" ]] && continue
+      contract_refs_list+=("$cref")
+      contract_refs_lc+=("$(printf '%s' "$cref" | tr '[:upper:]' '[:lower:]')")
+    done <<< "$(printf '%s' "$item_json" | jq -r '.contract_refs[]?')"
+  fi
+
+  if (( ${#contract_refs_list[@]} > 0 )); then
+    if (( ${#anchor_ids[@]} > 0 )); then
+      for i in "${!anchor_ids[@]}"; do
+        anchor_id="${anchor_ids[$i]}"
+        anchor_title="${anchor_titles[$i]}"
+        anchor_title_lc="$(printf '%s' "$anchor_title" | tr '[:upper:]' '[:lower:]')"
+        title_found=0
+        for ref_lc in "${contract_refs_lc[@]}"; do
+          if [[ "$ref_lc" == *"$anchor_title_lc"* ]]; then
+            title_found=1
+            break
+          fi
+        done
+        if (( title_found == 1 )); then
+          has_id=0
+          for cref in "${contract_refs_list[@]}"; do
+            if [[ "$cref" == "$anchor_id" ]]; then
+              has_id=1
+              break
+            fi
+          done
+          if (( has_id == 0 )); then
+            report_error MISSING_ANCHOR_REF "$item_id" "contract_refs mention anchor title '${anchor_title}' but missing ${anchor_id}"
+            suggest_fix MISSING_ANCHOR_REF "$item_id" "contract_refs" "$anchor_id"
+          fi
+        fi
+      done
+    fi
+
+    if (( ${#vr_ids[@]} > 0 )); then
+      for i in "${!vr_ids[@]}"; do
+        vr_id="${vr_ids[$i]}"
+        vr_title="${vr_titles[$i]}"
+        vr_title_lc="$(printf '%s' "$vr_title" | tr '[:upper:]' '[:lower:]')"
+        title_found=0
+        for ref_lc in "${contract_refs_lc[@]}"; do
+          if [[ "$ref_lc" == *"$vr_title_lc"* ]]; then
+            title_found=1
+            break
+          fi
+        done
+        if (( title_found == 1 )); then
+          has_id=0
+          for cref in "${contract_refs_list[@]}"; do
+            if [[ "$cref" == "$vr_id" ]]; then
+              has_id=1
+              break
+            fi
+          done
+          if (( has_id == 0 )); then
+            report_error MISSING_VR_REF "$item_id" "contract_refs mention validation rule title '${vr_title}' but missing ${vr_id}"
+            suggest_fix MISSING_VR_REF "$item_id" "contract_refs" "$vr_id"
+          fi
+        fi
+      done
+    fi
+  fi
+
   if printf '%s' "$item_json" | jq -e 'has("dependencies") and .dependencies != null' >/dev/null 2>&1; then
     if ! printf '%s' "$item_json" | jq -e '.dependencies | (type == "array")' >/dev/null 2>&1; then
       report_error INVALID_FIELD "$item_id" "dependencies must be array"
