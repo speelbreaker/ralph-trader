@@ -7,13 +7,15 @@ set -euo pipefail
 
 ARG_PRD_FILE=""
 STRICT=0
+SMOKE=0
 
 # Parse arguments
 for arg in "$@"; do
   case "$arg" in
     --strict) STRICT=1 ;;
+    --smoke) SMOKE=1 ;;
     --help|-h)
-      echo "Usage: $0 [--strict] [prd.json]"
+      echo "Usage: $0 [--strict] [--smoke] [prd.json]"
       echo ""
       echo "Unified PRD preflight gate. Runs:"
       echo "  1. prd_gate.sh (schema + lint + ref check)"
@@ -22,6 +24,7 @@ for arg in "$@"; do
       echo ""
       echo "Options:"
       echo "  --strict    Fail closed if allowlist scripts missing; enable PRD lint strict heuristics"
+      echo "  --smoke     Run schema + allowlist only (skip PRD lint + ref checks)"
       exit 0
       ;;
     -*)
@@ -41,17 +44,25 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Gate 1: PRD schema + lint + ref check
-echo "[preflight] Running PRD gate..." >&2
-if [[ ! -x "$SCRIPT_DIR/prd_gate.sh" ]]; then
-  echo "[preflight] ERROR: prd_gate.sh not found or not executable" >&2
-  exit 2
-fi
-
-if [[ $STRICT -eq 1 ]]; then
-  PRD_LINT_STRICT_HEURISTICS=1 "$SCRIPT_DIR/prd_gate.sh" "$PRD_FILE"
+# Gate 1: PRD schema (+ lint/ref in full mode)
+if [[ $SMOKE -eq 1 ]]; then
+  echo "[preflight] Running PRD schema check (smoke)..." >&2
+  if [[ ! -x "$SCRIPT_DIR/prd_schema_check.sh" ]]; then
+    echo "[preflight] ERROR: prd_schema_check.sh not found or not executable" >&2
+    exit 2
+  fi
+  "$SCRIPT_DIR/prd_schema_check.sh" "$PRD_FILE"
 else
-  "$SCRIPT_DIR/prd_gate.sh" "$PRD_FILE"
+  echo "[preflight] Running PRD gate..." >&2
+  if [[ ! -x "$SCRIPT_DIR/prd_gate.sh" ]]; then
+    echo "[preflight] ERROR: prd_gate.sh not found or not executable" >&2
+    exit 2
+  fi
+  if [[ $STRICT -eq 1 ]]; then
+    PRD_LINT_STRICT_HEURISTICS=1 "$SCRIPT_DIR/prd_gate.sh" "$PRD_FILE"
+  else
+    "$SCRIPT_DIR/prd_gate.sh" "$PRD_FILE"
+  fi
 fi
 
 # Gate 2: Allowlist check
@@ -67,9 +78,11 @@ else
 fi
 
 # Gate 3: Allowlist lint (optional hygiene, warn only)
-if [[ -x "$SCRIPT_DIR/story_verify_allowlist_lint.sh" ]]; then
-  echo "[preflight] Running allowlist lint..." >&2
-  "$SCRIPT_DIR/story_verify_allowlist_lint.sh" || true  # Warn only, don't block
+if [[ $SMOKE -eq 0 ]]; then
+  if [[ -x "$SCRIPT_DIR/story_verify_allowlist_lint.sh" ]]; then
+    echo "[preflight] Running allowlist lint..." >&2
+    "$SCRIPT_DIR/story_verify_allowlist_lint.sh" || true  # Warn only, don't block
+  fi
 fi
 
 echo "[preflight] PASS: All gates passed" >&2
