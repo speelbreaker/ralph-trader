@@ -54,6 +54,11 @@ Then end with: `<promise>COMPLETE</promise>`
 ## Review Coverage
 
 - Use `reviews/REVIEW_CHECKLIST.md` to ensure PR reviews cover evidence, compounding, and workflow-specific gates.
+## PRD Authoring Rules
+
+- MUST run `./plans/prd_gate.sh` (not `prd_lint.sh`) when validating PRDs — lint alone misses schema/ref checks.
+- MUST validate audit output with `plans/prd_audit_check.sh` before accepting cached results.
+- Require `Anchor-###` / `VR-###` IDs when `contract_refs` mention anchor or validation rule titles (enforced by `plans/prd_lint.sh` via `MISSING_ANCHOR_REF`/`MISSING_VR_REF`).
 
 ## Start here (only when doing edits / PR work / MED-HIGH risk)
 - Read `specs/CONTRACT.md`, `IMPLEMENTATION_PLAN.md`, `specs/WORKFLOW_CONTRACT.md`.
