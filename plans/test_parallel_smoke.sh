@@ -90,6 +90,13 @@ if ! grep -Eq 'run_logged[[:space:]]+"parallel_smoke"' "$SCRIPT_DIR/verify.sh"; 
 fi
 echo "[OK] Smoke test integrated via run_logged"
 
+# 12. Parallel workflow acceptance integration (marker-based)
+if ! grep -q "VERIFY_WA_PARALLEL_INTEGRATION" "$SCRIPT_DIR/verify.sh"; then
+  echo "[FAIL] parallel acceptance integration marker missing"
+  exit 1
+fi
+echo "[OK] parallel acceptance integration marker present"
+
 echo ""
 echo "[OK] All smoke tests passed"
 exit 0
