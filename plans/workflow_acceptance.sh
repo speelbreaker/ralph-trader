@@ -1616,6 +1616,42 @@ if test_start "0n" "selector flags work for --only/--resume"; then
   test_pass "0n"
 fi
 
+if test_start "0n.1" "selector flags work for --only-set"; then
+  tmp_state="$WORKTREE/.ralph/accept_state_only_set"
+  tmp_status="$WORKTREE/.ralph/accept_status_only_set"
+  rm -f "$tmp_state" "$tmp_status"
+  set +e
+  only_set_output="$("$ROOT/plans/workflow_acceptance.sh" --only-set "0h, 0i" --state-file "$tmp_state" --status-file "$tmp_status" 2>&1)"
+  rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    echo "FAIL: expected --only-set run to succeed" >&2
+    echo "Output: $only_set_output" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$only_set_output" | grep -q "^Test 0h:"; then
+    echo "FAIL: expected --only-set output to include 0h" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$only_set_output" | grep -q "^Test 0i:"; then
+    echo "FAIL: expected --only-set output to include 0i" >&2
+    exit 1
+  fi
+  if [[ "$(head -n 1 "$tmp_state" 2>/dev/null || true)" != "0i" ]]; then
+    echo "FAIL: expected --only-set run to record 0i in state file" >&2
+    exit 1
+  fi
+  set +e
+  "$ROOT/plans/workflow_acceptance.sh" --only 0h --only-set "0h,0i" >/dev/null 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected --only + --only-set to fail" >&2
+    exit 1
+  fi
+  test_pass "0n.1"
+fi
+
 exclude_file="$(run_in_worktree git rev-parse --git-path info/exclude)"
 {
   printf '%s\n' ".context/"
