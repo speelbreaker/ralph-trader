@@ -158,6 +158,7 @@ Operational notes:
 - MUST update workflow acceptance coverage when changing `plans/verify.sh` mode defaults.
 - Keep WF-* IDs synchronized across `specs/WORKFLOW_CONTRACT.md` and `plans/workflow_contract_map.json`.
 - Workflow acceptance runs in CI (smoke when no workflow-critical changes; full when workflow changes or detection fails); locally it may skip when no workflow-critical files changed (WORKFLOW_ACCEPTANCE_POLICY=auto). Force with WORKFLOW_ACCEPTANCE_POLICY=always.
+- SHOULD run `./plans/workflow_verify.sh` during iteration when changes are limited to workflow/harness files (see `plans/verify.sh:is_workflow_file`), then run `./plans/verify.sh full` before PR. [WF-VERIFY-RULE]
 
 ### Fail-closed default
 If a required script/artifact is missing or invalid, the workflow must produce a deterministic BLOCKED outcome (not a silent pass).

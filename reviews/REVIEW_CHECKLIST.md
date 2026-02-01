@@ -4,6 +4,7 @@
 - [ ] Proof includes exact commands, 1–3 key output lines, and artifact/log paths.
 - [ ] Requirements touched list concrete CR-IDs/contract anchors (no vague claims).
 - [ ] If any verification was rerun, the reason is stated.
+- [ ] If workflow/harness files changed, evidence includes `./plans/workflow_verify.sh` during iteration and a final `./plans/verify.sh full` (or CI proof). [WF-VERIFY-EVIDENCE]
 
 ## Compounding Gate (Required)
 - [ ] "AGENTS.md updates proposed" section contains 1–3 enforceable rules (MUST/SHOULD + Trigger + Prevents + Enforce).

@@ -1122,6 +1122,14 @@ if test_start "0k" "workflow preflight checks"; then
     echo "FAIL: plans/prd_audit_check.sh not executable" >&2
     exit 1
   fi
+  if ! run_in_worktree grep -q "WF-VERIFY-RULE" "AGENTS.md"; then
+    echo "FAIL: AGENTS.md missing workflow verify guidance marker (WF-VERIFY-RULE)" >&2
+    exit 1
+  fi
+  if ! run_in_worktree grep -q "WF-VERIFY-EVIDENCE" "reviews/REVIEW_CHECKLIST.md"; then
+    echo "FAIL: review checklist missing workflow verify evidence marker (WF-VERIFY-EVIDENCE)" >&2
+    exit 1
+  fi
 
   if ! run_in_worktree test -x "plans/prd_autofix.sh"; then
     echo "FAIL: plans/prd_autofix.sh not executable" >&2
