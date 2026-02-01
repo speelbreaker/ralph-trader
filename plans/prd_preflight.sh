@@ -4,6 +4,7 @@ set -euo pipefail
 # Unified PRD preflight gate
 # Runs: prd_gate.sh + story_verify_allowlist_check.sh
 # --strict: enforce allowlist check presence and PRD lint strict heuristics (fail-closed if scripts missing)
+# --smoke:  fast mode (schema + allowlist only, skip deep lint/ref checks)
 
 ARG_PRD_FILE=""
 STRICT=0
@@ -24,7 +25,7 @@ for arg in "$@"; do
       echo ""
       echo "Options:"
       echo "  --strict    Fail closed if allowlist scripts missing; enable PRD lint strict heuristics"
-      echo "  --smoke     Run schema + allowlist only (skip PRD lint + ref checks)"
+      echo "  --smoke     Fast mode: schema + allowlist only (skip PRD lint + ref checks)"
       exit 0
       ;;
     -*)
@@ -44,9 +45,10 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Gate 1: PRD schema (+ lint/ref in full mode)
+# Gate 1: PRD schema (+ lint + ref check in full mode)
 if [[ $SMOKE -eq 1 ]]; then
-  echo "[preflight] Running PRD schema check (smoke)..." >&2
+  echo "[preflight] Running PRD gate (smoke mode)..." >&2
+  # Smoke mode: schema check only (fast)
   if [[ ! -x "$SCRIPT_DIR/prd_schema_check.sh" ]]; then
     echo "[preflight] ERROR: prd_schema_check.sh not found or not executable" >&2
     exit 2
