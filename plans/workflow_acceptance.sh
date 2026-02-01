@@ -1117,6 +1117,14 @@ if test_start "0k" "workflow preflight checks"; then
     echo "FAIL: plans/prd_gate.sh not executable" >&2
     exit 1
   fi
+  if ! run_in_worktree test -f "plans/prd_gate_help.md"; then
+    echo "FAIL: plans/prd_gate_help.md missing" >&2
+    exit 1
+  fi
+  if ! run_in_worktree grep -q "prd_gate_help.md" "plans/prd_gate.sh"; then
+    echo "FAIL: prd_gate.sh must reference prd_gate_help.md" >&2
+    exit 1
+  fi
 
   if ! run_in_worktree test -x "plans/prd_audit_check.sh"; then
     echo "FAIL: plans/prd_audit_check.sh not executable" >&2

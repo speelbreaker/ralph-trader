@@ -2,6 +2,8 @@
 set -euo pipefail
 IFS=$'\n\t'
 
+trap 'rc=$?; [[ $rc -ne 0 ]] && echo "See plans/prd_gate_help.md" >&2' EXIT
+
 PRD_FILE="${1:-${PRD_FILE:-plans/prd.json}}"
 PRD_REF_CHECK_ENABLED="${PRD_REF_CHECK_ENABLED:-1}"
 PRD_GATE_ALLOW_REF_SKIP="${PRD_GATE_ALLOW_REF_SKIP:-0}"
