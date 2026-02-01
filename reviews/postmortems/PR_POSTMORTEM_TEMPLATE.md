@@ -3,6 +3,7 @@
 ## 0) What shipped
 - Feature/behavior:
 - What value it has (what problem it solves, upgrade provides):
+- Governing contract: specs/WORKFLOW_CONTRACT.md | specs/CONTRACT.md
 
 ## 1) Constraint (ONE)
 - How it manifested (2-3 concrete symptoms):
