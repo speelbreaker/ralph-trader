@@ -101,6 +101,17 @@ warn() { echo -e "${YELLOW}WARN: $*${NC}" >&2; }
 fail() { echo -e "${RED}FAIL: $*${NC}" >&2; exit 1; }
 is_ci(){ [[ -n "${CI:-}" ]]; }
 
+detect_cpus() {
+  # Auto-detect CPU cores (portable: macOS + Linux)
+  local cpus=2
+  if command -v nproc >/dev/null 2>&1; then
+    cpus=$(nproc)
+  elif command -v sysctl >/dev/null 2>&1; then
+    cpus=$(sysctl -n hw.ncpu 2>/dev/null || echo 2)
+  fi
+  echo "$cpus"
+}
+
 VERIFY_CONSOLE="${VERIFY_CONSOLE:-auto}"
 case "$VERIFY_CONSOLE" in
   auto)
@@ -224,11 +235,15 @@ run_logged() {
   shift 2
   local logfile="${VERIFY_ARTIFACTS_DIR}/${name}.log"
   local rc=0
+  local start_time end_time elapsed
 
   if [[ "$ENABLE_TIMEOUTS" == "1" && -n "$duration" && -z "$TIMEOUT_BIN" && "$TIMEOUT_WARNED" == "0" ]]; then
     warn "timeout not available; running without time limits (install coreutils for gtimeout on macOS)"
     TIMEOUT_WARNED=1
   fi
+
+  # Timing instrumentation
+  start_time=$(date +%s)
 
   if [[ "$VERIFY_CONSOLE" == "verbose" ]]; then
     if [[ "$VERIFY_LOG_CAPTURE" == "1" ]]; then
@@ -246,30 +261,115 @@ run_logged() {
     run_with_timeout "$duration" "$@" > "$logfile" 2>&1
     rc=$?
     set -e
-    if [[ "$rc" != "0" ]]; then
+    if [[ "$rc" != "0" && -z "${RUN_LOGGED_SUPPRESS_EXCERPT:-}" ]]; then
       emit_fail_excerpt "$name" "$logfile"
     fi
   fi
+
+  # Timing instrumentation: write elapsed time
+  end_time=$(date +%s)
+  elapsed=$((end_time - start_time))
+  echo "$elapsed" > "${VERIFY_ARTIFACTS_DIR}/${name}.time"
 
   # WRITE .rc FOR ALL GATES (pass or fail) - immediately after rc is known
   echo "$rc" > "${VERIFY_ARTIFACTS_DIR}/${name}.rc"
 
   # WRITE FAILED_GATE only for first failure (before timeout check)
-  if [[ "$rc" != "0" && ! -f "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE" ]]; then
+  # Skip if RUN_LOGGED_SKIP_FAILED_GATE is set (parallel runner handles this)
+  if [[ "$rc" != "0" && ! -f "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE" && -z "${RUN_LOGGED_SKIP_FAILED_GATE:-}" ]]; then
     echo "$name" > "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE"
   fi
 
-  if [[ "$rc" == "124" || "$rc" == "137" ]]; then
+  # VERIFY_TIMEOUT_PAREN_FIX: in [[ ]], && binds tighter than ||.
+  # Without parens: (rc==124 || rc==137 && suppress) becomes
+  # rc==124 || (rc==137 && suppress), so rc=124 ignores suppress.
+  if [[ ( "$rc" == "124" || "$rc" == "137" ) && -z "${RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL:-}" ]]; then
     fail "Timeout running ${name} (limit=${duration})"
   fi
   return "$rc"
+}
+
+run_parallel_group() {
+  # Wave-based parallel execution for Bash 3.2+ compatibility
+  # Args: array_name max_jobs
+  # Array format: "name|timeout|command args"
+  local specs_array_name="$1"
+  local max_jobs="${2:-4}"
+
+  # Get array contents (Bash 3.2 compatible - no nameref)
+  eval "local -a specs=(\"\${$specs_array_name[@]}\")"
+
+  local spec name timeout cmd
+  local job_count=0
+  local -a wave_pids
+
+  for spec in "${specs[@]}"; do
+    # Parse spec: "name|timeout|command args"
+    name="$(echo "$spec" | cut -d'|' -f1)"
+    timeout="$(echo "$spec" | cut -d'|' -f2)"
+    cmd="$(echo "$spec" | cut -d'|' -f3-)"
+
+    # Security: cmd is validated to reject shell metacharacters.
+    # Unquoted expansion is required for run_logged to receive proper arg array.
+    # Quoted would pass entire command as single string → "command not found" error.
+    if [[ "$cmd" =~ [\;\`\$\(\)\&\|\>\<$'\n'] ]]; then
+      warn "Rejecting spec with potentially unsafe command: $name"
+      echo "1" > "${VERIFY_ARTIFACTS_DIR}/${name}.rc"
+      continue
+    fi
+
+    # Launch in background with run_logged safety flags
+    (
+      RUN_LOGGED_SUPPRESS_EXCERPT=1 \
+      RUN_LOGGED_SKIP_FAILED_GATE=1 \
+      RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL=1 \
+      eval "run_logged \"$name\" \"$timeout\" $cmd"
+    ) &
+    wave_pids+=($!)
+    job_count=$((job_count + 1))
+
+    # Wave scheduling: wait when batch full
+    if (( job_count >= max_jobs )); then
+      for pid in "${wave_pids[@]}"; do
+        wait "$pid" || true
+      done
+      wave_pids=()
+      job_count=0
+    fi
+  done
+
+  # Wait for final wave
+  for pid in "${wave_pids[@]}"; do
+    wait "$pid" || true
+  done
+
+  # Deterministic failure detection (check .rc files in array order)
+  for spec in "${specs[@]}"; do
+    name="$(echo "$spec" | cut -d'|' -f1)"
+    if [[ -f "${VERIFY_ARTIFACTS_DIR}/${name}.rc" ]]; then
+      rc="$(cat "${VERIFY_ARTIFACTS_DIR}/${name}.rc")"
+      if [[ "$rc" != "0" ]]; then
+        # First failure sets FAILED_GATE
+        if [[ ! -f "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE" ]]; then
+          echo "$name" > "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE"
+          # Print excerpt for first failure only
+          if [[ -f "${VERIFY_ARTIFACTS_DIR}/${name}.log" ]]; then
+            emit_fail_excerpt "$name" "${VERIFY_ARTIFACTS_DIR}/${name}.log"
+          fi
+        fi
+        return "$rc"
+      fi
+    fi
+  done
+
+  return 0
 }
 
 is_workflow_file() {
   case "$1" in
     AGENTS.md|specs/WORKFLOW_CONTRACT.md|specs/CONTRACT.md|specs/IMPLEMENTATION_PLAN.md|specs/POLICY.md|specs/SOURCE_OF_TRUTH.md|IMPLEMENTATION_PLAN.md|POLICY.md) return 0 ;;
     verify.sh) return 0 ;;
-    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_acceptance_parallel.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json|plans/ssot_lint.sh|plans/prd_gate.sh|plans/prd_audit_check.sh|plans/tests/test_workflow_acceptance_fallback.sh) return 0 ;;
+    plans/verify.sh|plans/workflow_acceptance.sh|plans/workflow_acceptance_parallel.sh|plans/test_parallel_smoke.sh|plans/workflow_contract_gate.sh|plans/workflow_contract_map.json|plans/ssot_lint.sh|plans/prd_gate.sh|plans/prd_audit_check.sh|plans/tests/test_workflow_acceptance_fallback.sh) return 0 ;;
     plans/workflow_verify.sh) return 0 ;;
     plans/contract_coverage_matrix.py|plans/contract_coverage_promote.sh) return 0 ;;
     plans/contract_check.sh|plans/contract_review_validate.sh|plans/init.sh|plans/ralph.sh) return 0 ;;
@@ -603,9 +703,18 @@ export CONTRACT_COVERAGE_STRICT
 init_change_detection
 
 # -----------------------------------------------------------------------------
-# 0a) Harness script syntax
+# 0a) Parallel primitives smoke test
 # -----------------------------------------------------------------------------
-log "0a) Harness script syntax"
+log "0a) Parallel primitives smoke test"
+if [[ ! -x "plans/test_parallel_smoke.sh" ]]; then
+  fail "Missing or non-executable: plans/test_parallel_smoke.sh"
+fi
+run_logged "parallel_smoke" "1m" ./plans/test_parallel_smoke.sh
+
+# -----------------------------------------------------------------------------
+# 0a.1) Harness script syntax
+# -----------------------------------------------------------------------------
+log "0a.1) Harness script syntax"
 run_logged "bash_syntax_workflow_acceptance" "1m" bash -n plans/workflow_acceptance.sh
 
 # -----------------------------------------------------------------------------
@@ -636,79 +745,41 @@ ensure_python
 [[ -f "$GLOBAL_INVARIANTS_FILE" ]] || fail "Missing $GLOBAL_INVARIANTS_FILE"
 [[ -d "specs/state_machines" ]] || fail "Missing specs/state_machines"
 
+# Existence checks for all validators (fail fast before parallelization)
 [[ -f "scripts/check_contract_crossrefs.py" ]] || fail "Missing scripts/check_contract_crossrefs.py"
-run_logged "contract_crossrefs" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_contract_crossrefs.py" \
-  --contract "$CONTRACT_FILE" \
-  --strict \
-  --check-at \
-  --include-bare-section-refs
-
 [[ -f "scripts/check_arch_flows.py" ]] || fail "Missing scripts/check_arch_flows.py"
-run_logged "arch_flows" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_arch_flows.py" \
-  --contract "$CONTRACT_FILE" \
-  --flows "$ARCH_FLOWS_FILE" \
-  --strict
-
 [[ -f "scripts/check_state_machines.py" ]] || fail "Missing scripts/check_state_machines.py"
-run_logged "state_machines" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_state_machines.py" \
-  --dir specs/state_machines \
-  --strict \
-  --contract "$CONTRACT_FILE" \
-  --flows "$ARCH_FLOWS_FILE" \
-  --invariants "$GLOBAL_INVARIANTS_FILE"
-
 [[ -f "scripts/check_global_invariants.py" ]] || fail "Missing scripts/check_global_invariants.py"
-run_logged "global_invariants" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_global_invariants.py" \
-  --file "$GLOBAL_INVARIANTS_FILE" \
-  --contract "$CONTRACT_FILE"
+[[ -f "scripts/check_time_freshness.py" ]] || fail "Missing scripts/check_time_freshness.py"
+[[ -f "scripts/check_crash_matrix.py" ]] || fail "Missing scripts/check_crash_matrix.py"
+[[ -f "scripts/check_crash_replay_idempotency.py" ]] || fail "Missing scripts/check_crash_replay_idempotency.py"
+[[ -f "scripts/check_reconciliation_matrix.py" ]] || fail "Missing scripts/check_reconciliation_matrix.py"
+[[ -f "scripts/check_csp_trace.py" ]] || fail "Missing scripts/check_csp_trace.py"
+[[ -f "specs/flows/TIME_FRESHNESS.yaml" ]] || fail "Missing specs/flows/TIME_FRESHNESS.yaml"
+[[ -f "specs/flows/CRASH_MATRIX.md" ]] || fail "Missing specs/flows/CRASH_MATRIX.md"
+[[ -f "specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml" ]] || fail "Missing specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml"
+[[ -f "specs/flows/RECONCILIATION_MATRIX.md" ]] || fail "Missing specs/flows/RECONCILIATION_MATRIX.md"
+[[ -f "specs/TRACE.yaml" ]] || fail "Missing specs/TRACE.yaml"
 
-if [[ -f "scripts/check_time_freshness.py" ]]; then
-  [[ -f "specs/flows/TIME_FRESHNESS.yaml" ]] || fail "Missing specs/flows/TIME_FRESHNESS.yaml"
-  run_logged "time_freshness" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_time_freshness.py" \
-    --contract "$CONTRACT_FILE" \
-    --spec specs/flows/TIME_FRESHNESS.yaml \
-    --strict
-else
-  fail "Missing scripts/check_time_freshness.py"
-fi
+# Build spec validator array (format: "name|timeout|command args")
+SPEC_VALIDATOR_SPECS=(
+  "contract_crossrefs|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_contract_crossrefs.py --contract $CONTRACT_FILE --strict --check-at --include-bare-section-refs"
+  "arch_flows|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_arch_flows.py --contract $CONTRACT_FILE --flows $ARCH_FLOWS_FILE --strict"
+  "state_machines|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_state_machines.py --dir specs/state_machines --strict --contract $CONTRACT_FILE --flows $ARCH_FLOWS_FILE --invariants $GLOBAL_INVARIANTS_FILE"
+  "global_invariants|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_global_invariants.py --file $GLOBAL_INVARIANTS_FILE --contract $CONTRACT_FILE"
+  "time_freshness|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_time_freshness.py --contract $CONTRACT_FILE --spec specs/flows/TIME_FRESHNESS.yaml --strict"
+  "crash_matrix|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_crash_matrix.py --contract $CONTRACT_FILE --matrix specs/flows/CRASH_MATRIX.md"
+  "crash_replay_idempotency|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_crash_replay_idempotency.py --contract $CONTRACT_FILE --spec specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml --strict"
+  "reconciliation_matrix|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_reconciliation_matrix.py --matrix specs/flows/RECONCILIATION_MATRIX.md --contract $CONTRACT_FILE --strict"
+  "csp_trace|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_csp_trace.py --contract $CONTRACT_FILE --trace specs/TRACE.yaml"
+)
 
-if [[ -f "scripts/check_crash_matrix.py" ]]; then
-  [[ -f "specs/flows/CRASH_MATRIX.md" ]] || fail "Missing specs/flows/CRASH_MATRIX.md"
-  run_logged "crash_matrix" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_crash_matrix.py" \
-    --contract "$CONTRACT_FILE" \
-    --matrix specs/flows/CRASH_MATRIX.md
-else
-  fail "Missing scripts/check_crash_matrix.py"
-fi
+# Auto-detect CPU cores, cap at 4 to avoid CI thrashing
+SPEC_LINT_JOBS=$(detect_cpus)
+[[ $SPEC_LINT_JOBS -gt 4 ]] && SPEC_LINT_JOBS=4
 
-if [[ -f "scripts/check_crash_replay_idempotency.py" ]]; then
-  [[ -f "specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml" ]] || fail "Missing specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml"
-  run_logged "crash_replay_idempotency" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_crash_replay_idempotency.py" \
-    --contract "$CONTRACT_FILE" \
-    --spec specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml \
-    --strict
-else
-  fail "Missing scripts/check_crash_replay_idempotency.py"
-fi
-
-if [[ -f "scripts/check_reconciliation_matrix.py" ]]; then
-  [[ -f "specs/flows/RECONCILIATION_MATRIX.md" ]] || fail "Missing specs/flows/RECONCILIATION_MATRIX.md"
-  run_logged "reconciliation_matrix" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_reconciliation_matrix.py" \
-    --matrix specs/flows/RECONCILIATION_MATRIX.md \
-    --contract "$CONTRACT_FILE" \
-    --strict
-else
-  fail "Missing scripts/check_reconciliation_matrix.py"
-fi
-
-if [[ -f "scripts/check_csp_trace.py" ]]; then
-  [[ -f "specs/TRACE.yaml" ]] || fail "Missing specs/TRACE.yaml"
-  run_logged "csp_trace" "$SPEC_LINT_TIMEOUT" "$PYTHON_BIN" "scripts/check_csp_trace.py" \
-    --contract "$CONTRACT_FILE" \
-    --trace specs/TRACE.yaml
-else
-  fail "Missing scripts/check_csp_trace.py"
-fi
+# Run validators in parallel
+run_parallel_group SPEC_VALIDATOR_SPECS "$SPEC_LINT_JOBS"
 
 # -----------------------------------------------------------------------------
 # 0d) Status contract validation (CSP)
@@ -729,26 +800,34 @@ test -f "$STATUS_MANIFEST" || fail "Missing $STATUS_MANIFEST"
 
 # Validate fixtures against exact schema (no extra keys allowed)
 if [[ -d "$STATUS_FIXTURES_DIR" ]]; then
+  # Build status fixture validation array
+  STATUS_FIXTURE_SPECS=()
   fixture_count=0
-  for f in "$STATUS_FIXTURES_DIR"/*.json; do
+
+  # Build quiet flag if needed
+  QUIET_FLAG=""
+  if [[ "$VERIFY_CONSOLE" == "quiet" ]]; then
+    QUIET_FLAG="--quiet"
+  fi
+
+  # Glob fixtures in deterministic order (sorted by name)
+  while IFS= read -r f; do
     [[ -f "$f" ]] || continue
     fixture_name="$(basename "$f" .json)"
-    VALIDATE_STATUS_ARGS=(
-      --file "$f"
-      --schema "$STATUS_EXACT_SCHEMA"
-      --manifest "$STATUS_MANIFEST"
-      --strict
-    )
-    if [[ "$VERIFY_CONSOLE" == "quiet" ]]; then
-      VALIDATE_STATUS_ARGS+=(--quiet)
-    fi
-    run_logged "status_fixture_${fixture_name}" "$STATUS_VALIDATION_TIMEOUT" \
-      "$PYTHON_BIN" tools/validate_status.py "${VALIDATE_STATUS_ARGS[@]}"
+    # Format: "name|timeout|command args"
+    STATUS_FIXTURE_SPECS+=("status_fixture_${fixture_name}|$STATUS_VALIDATION_TIMEOUT|$PYTHON_BIN tools/validate_status.py --file $f --schema $STATUS_EXACT_SCHEMA --manifest $STATUS_MANIFEST --strict $QUIET_FLAG")
     fixture_count=$((fixture_count + 1))
-  done
+  done < <(ls -1 "$STATUS_FIXTURES_DIR"/*.json 2>/dev/null | sort || true)
+
   if [[ "$fixture_count" -eq 0 ]]; then
     warn "No status fixtures found in $STATUS_FIXTURES_DIR"
   else
+    # Auto-detect CPU cores, cap at 4 (status validation is lightweight)
+    STATUS_JOBS=$(detect_cpus)
+    [[ $STATUS_JOBS -gt 4 ]] && STATUS_JOBS=4
+
+    # Run fixture validations in parallel
+    run_parallel_group STATUS_FIXTURE_SPECS "$STATUS_JOBS"
     echo "✓ validated $fixture_count status fixture(s)"
   fi
 else
@@ -1097,5 +1176,14 @@ else
     echo "info: workflow acceptance skipped (no workflow file changes detected)"
   fi
 fi
+
+# Timing summary
+log "Timing Summary"
+for f in "${VERIFY_ARTIFACTS_DIR}"/*.time; do
+  [[ -f "$f" ]] || continue  # handles no-match case (glob returns literal)
+  name="$(basename "$f" .time)"
+  elapsed="$(cat "$f")"
+  echo "  $name: ${elapsed}s"
+done
 
 log "VERIFY OK (mode=$MODE)"

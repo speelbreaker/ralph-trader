@@ -277,6 +277,7 @@ if [[ -n "$ONLY_SET" ]]; then
   # Validate all IDs in the set exist
   normalized=$(echo "$ONLY_SET" | tr -d '[:space:]')
   IFS=',' read -ra ids <<<"$normalized"
+  valid_count=0
   for id in "${ids[@]}"; do
     # Skip empty tokens
     [[ -z "$id" ]] && continue
@@ -284,7 +285,13 @@ if [[ -n "$ONLY_SET" ]]; then
       echo "FAIL: --only-set id not found: $id" >&2
       exit 1
     fi
+    valid_count=$((valid_count + 1))
   done
+  # Fail-fast on empty/whitespace-only input
+  if (( valid_count == 0 )); then
+    echo "FAIL: --only-set requires at least one valid id" >&2
+    exit 1
+  fi
 fi
 
 if [[ -n "$FROM_ID" ]]; then
@@ -327,12 +334,16 @@ fi
 mode_parts=()
 if [[ -n "$ONLY_ID" ]]; then
   mode_parts+=("only:${ONLY_ID}")
-fi
-if [[ -n "$ONLY_SET" ]]; then
+elif [[ -n "$ONLY_SET" ]]; then
   mode_parts+=("only-set:$(echo "$ONLY_SET" | tr -d '[:space:]')")
-fi
-if (( FAST == 1 )); then
-  mode_parts+=("fast")
+else
+  # FAST only applies when not using --only or --only-set
+  # Distinguish between --mode smoke (explicit) and --fast (flag)
+  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "smoke" ]]; then
+    mode_parts+=("smoke")
+  elif (( FAST == 1 )); then
+    mode_parts+=("fast")
+  fi
 fi
 if (( RESUME == 1 )); then
   mode_parts+=("resume")
@@ -1530,6 +1541,11 @@ if test_start "0k.3" "contract coverage matrix fixtures"; then
   test_pass "0k.3"
 fi
 
+if test_start "0k.4" "workflow acceptance clone fallback"; then
+  "$ROOT/plans/tests/test_workflow_acceptance_fallback.sh" >/dev/null 2>&1
+  test_pass "0k.4"
+fi
+
 if test_start "0k.5" "contract kernel check"; then
   run_in_worktree python3 scripts/check_contract_kernel.py >/dev/null 2>&1
   test_pass "0k.5"
@@ -1545,9 +1561,63 @@ if test_start "0k.7" "contract kernel file present"; then
   test_pass "0k.7"
 fi
 
-if test_start "0k.4" "workflow acceptance clone fallback"; then
-  "$ROOT/plans/tests/test_workflow_acceptance_fallback.sh" >/dev/null 2>&1
-  test_pass "0k.4"
+if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+
+    verify="plans/verify.sh"
+
+    # 1. Core functions exist
+    if ! grep -q "^run_parallel_group()" "$verify"; then
+      echo "FAIL: run_parallel_group() not found" >&2
+      exit 1
+    fi
+
+    if ! grep -q "^detect_cpus()" "$verify"; then
+      echo "FAIL: detect_cpus() not found" >&2
+      exit 1
+    fi
+
+    # 2. Arrays are defined and used (whitespace tolerant for runner call)
+    for array in SPEC_VALIDATOR_SPECS STATUS_FIXTURE_SPECS; do
+      if ! grep -q "${array}=(" "$verify"; then
+        echo "FAIL: ${array} array not found" >&2
+        exit 1
+      fi
+
+      if ! grep -Eq "run_parallel_group[[:space:]]+${array}" "$verify"; then
+        echo "FAIL: ${array} not passed to runner" >&2
+        exit 1
+      fi
+    done
+
+    # 3. Timing artifacts (E-RE, ordering tolerant)
+    if ! grep -Eq '\''\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time'\'' "$verify"; then
+      echo "FAIL: Timing artifact pattern not found" >&2
+      exit 1
+    fi
+
+    # 4. Safety guards
+    for var in RUN_LOGGED_SUPPRESS_EXCERPT RUN_LOGGED_SKIP_FAILED_GATE RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL; do
+      if ! grep -q "\${${var}:-}" "$verify"; then
+        echo "FAIL: Unbound guard for ${var} not found" >&2
+        exit 1
+      fi
+    done
+
+    # 5. Precedence fix (marker-based, robust to formatting)
+    if ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$verify"; then
+      echo "FAIL: Timeout precedence fix marker not found" >&2
+      exit 1
+    fi
+
+    # 6. Smoke test integration (whitespace tolerant)
+    if ! grep -Eq '\''run_logged[[:space:]]+"parallel_smoke"'\'' "$verify"; then
+      echo "FAIL: parallel_smoke not invoked via run_logged" >&2
+      exit 1
+    fi
+  '
+  test_pass "0k.8"
 fi
 
 if test_start "0l" "--list prints test ids"; then
