@@ -2,17 +2,3 @@ pub mod execution;
 pub mod idempotency;
 pub mod risk;
 pub mod venue;
-tick 1769910503
-tick 1769910597
-tick 1769910759
-tick 1769910910
-tick 1769910988
-tick 1769911045
-tick 1769911106
-tick 1769911170
-tick 1769911250
-tick 1769911334
-tick 1769911421
-tick 1769911520
-tick 1769911603
-tick 1769912146
