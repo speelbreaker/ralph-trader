@@ -4478,12 +4478,12 @@ if test_start "16" "cheating detected (deleted test file)"; then
 reset_state
 valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
 write_valid_prd "$valid_prd_15" "S1-011"
-# Update scope to include tests/test_dummy.rs
-_tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["tests/test_dummy.rs"]' "$valid_prd_15" > "$_tmp" && mv "$_tmp" "$valid_prd_15"
-
 # Create a dummy test file to delete
 dummy_test="tests/test_dummy_wa_${$}.rs"
+# Update scope to include the dummy test path
+_tmp=$(mktemp)
+run_in_worktree jq --arg dummy "$dummy_test" '.items[0].scope.touch += [$dummy]' "$valid_prd_15" > "$_tmp" && mv "$_tmp" "$valid_prd_15"
+
 run_in_worktree mkdir -p tests
 run_in_worktree touch "$dummy_test"
 run_in_worktree git add "$dummy_test"
