@@ -97,6 +97,17 @@ if ! grep -q "VERIFY_WA_PARALLEL_INTEGRATION" "$SCRIPT_DIR/verify.sh"; then
 fi
 echo "[OK] parallel acceptance integration marker present"
 
+# 13. eval removed from command execution (marker-based)
+if ! grep -q "RUN_PARALLEL_NO_EVAL" "$SCRIPT_DIR/verify.sh"; then
+  echo "[FAIL] RUN_PARALLEL_NO_EVAL marker missing"
+  exit 1
+fi
+if grep -q "eval.*run_logged" "$SCRIPT_DIR/verify.sh"; then
+  echo "[FAIL] eval command execution still present"
+  exit 1
+fi
+echo "[OK] eval removed from command execution"
+
 echo ""
 echo "[OK] All smoke tests passed"
 exit 0

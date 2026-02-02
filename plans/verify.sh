@@ -330,21 +330,24 @@ run_parallel_group() {
     timeout="$(echo "$spec" | cut -d'|' -f2)"
     cmd="$(echo "$spec" | cut -d'|' -f3-)"
 
-    # Security: cmd is validated to reject shell metacharacters.
-    # Unquoted expansion is required for run_logged to receive proper arg array.
-    # Quoted would pass entire command as single string → "command not found" error.
-    if [[ "$cmd" =~ [\;\`\$\(\)\&\|\>\<$'\n'] ]]; then
-      warn "Rejecting spec with potentially unsafe command: $name"
+    # Policy: specs must be simple commands (no shell metacharacters or quotes).
+    # This enforces "simple command" format, not eval safety (eval is removed).
+    # Specs are space-separated tokens only - no quoted args or globs supported.
+    if [[ "$cmd" =~ [\;\`\$\(\)\&\|\>\<$'\n'\"\'] ]]; then
+      warn "Rejecting spec with non-simple command: $name"
       echo "1" > "${VERIFY_ARTIFACTS_DIR}/${name}.rc"
       continue
     fi
 
+    # RUN_PARALLEL_NO_EVAL: Parse command into array (no eval - structurally safe)
+    local -a cmd_array
+    read -ra cmd_array <<< "$cmd"
     # Launch in background with run_logged safety flags
     (
       RUN_LOGGED_SUPPRESS_EXCERPT=1 \
       RUN_LOGGED_SKIP_FAILED_GATE=1 \
       RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL=1 \
-      eval "run_logged \"$name\" \"$timeout\" $cmd"
+      run_logged "$name" "$timeout" "${cmd_array[@]}"
     ) &
     wave_pids+=($!)
     job_count=$((job_count + 1))

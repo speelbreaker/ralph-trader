@@ -1684,6 +1684,32 @@ if test_start "0k.9" "verify.sh parallel acceptance integration marker" 1; then
   test_pass "0k.9"
 fi
 
+if test_start "0k.10" "verify.sh run_parallel_group uses array expansion not eval" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    verify="plans/verify.sh"
+
+    # 1. Marker must exist (proves intentional change)
+    if ! grep -q "RUN_PARALLEL_NO_EVAL" "$verify"; then
+      echo "FAIL: RUN_PARALLEL_NO_EVAL marker not found" >&2
+      exit 1
+    fi
+
+    # 2. Array parsing must exist
+    if ! grep -q "read -ra cmd_array" "$verify"; then
+      echo "FAIL: read -ra cmd_array not found" >&2
+      exit 1
+    fi
+
+    # 3. eval run_logged must be absent
+    if grep -q "eval.*run_logged" "$verify"; then
+      echo "FAIL: eval command execution still present" >&2
+      exit 1
+    fi
+  '
+  test_pass "0k.10"
+fi
+
 if test_start "0l" "--list prints test ids"; then
   list_output="$("$ROOT/plans/workflow_acceptance.sh" --list)"
   if [[ -z "$list_output" ]]; then
