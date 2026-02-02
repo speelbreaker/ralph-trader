@@ -4702,13 +4702,22 @@ cat > "$valid_prd_16" <<'JSON'
 JSON
 run_in_worktree touch "acceptance_tick.txt"
 snapshot_worktree_if_dirty
+set +e
+test17_log="$WORKTREE/.ralph/test17.log"
 run_ralph env \
   PRD_FILE="$valid_prd_16" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
-  ./plans/ralph.sh 1 >/dev/null 2>&1
+  ./plans/ralph.sh 1 >"$test17_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for slice selection dry-run, got $rc" >&2
+  tail -n 120 "$test17_log" >&2 || true
+  exit 1
+fi
 iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json")"
 selected_id="$(run_in_worktree jq -r '.selected_id // empty' "$WORKTREE/$iter_dir/selected.json")"
 if [[ "$selected_id" != "S1-012" ]]; then
