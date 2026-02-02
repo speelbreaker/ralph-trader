@@ -288,8 +288,11 @@ if [[ -n "$ONLY_SET" ]]; then
   IFS=',' read -ra ids <<<"$normalized"
   valid_count=0
   for id in "${ids[@]}"; do
-    # Skip empty tokens
-    [[ -z "$id" ]] && continue
+    # Fail-closed: reject empty tokens (likely user typo like "0e,,0f")
+    if [[ -z "$id" ]]; then
+      echo "FAIL: --only-set contains empty token (check for typos like '0e,,0f')" >&2
+      exit 1
+    fi
     if ! index_first_of "$id" >/dev/null; then
       echo "FAIL: --only-set id not found: $id" >&2
       exit 1
@@ -371,6 +374,33 @@ echo "workflow_acceptance_mode=$WORKFLOW_ACCEPTANCE_MODE"
 echo "State file: ${STATE_FILE}"
 echo "Status file: ${STATUS_FILE}"
 
+# Validate story verify allowlist: checks file exists, has content, no duplicates
+# Args: $1 = allowlist file path
+# Returns: 0 on success, 1 on failure (with FAIL message to stderr)
+validate_story_allowlist() {
+  local allowlist="$1"
+  if [[ ! -f "$allowlist" ]]; then
+    echo "FAIL: story verify allowlist missing: $allowlist" >&2
+    return 1
+  fi
+  # Check for empty or comment-only allowlist (awk is safer than grep -cv || true)
+  local content_lines
+  content_lines="$(awk '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ { count++ } END { print count+0 }' "$allowlist")"
+  if [[ "$content_lines" -eq 0 ]]; then
+    echo "FAIL: story verify allowlist is empty or contains only comments: $allowlist" >&2
+    return 1
+  fi
+  # Check for duplicates
+  local dup
+  dup="$(grep -v "^[[:space:]]*#" "$allowlist" | sed '/^[[:space:]]*$/d' | sort | uniq -d)"
+  if [[ -n "$dup" ]]; then
+    echo "FAIL: story verify allowlist contains duplicate entries:" >&2
+    printf "%s\n" "$dup" >&2
+    return 1
+  fi
+  return 0
+}
+
 require_tools() {
   local missing=0
   for tool in "$@"; do
@@ -385,7 +415,7 @@ require_tools() {
 }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-require_tools git jq mktemp find wc tr sed awk stat sort head tail date grep
+require_tools git jq mktemp find wc tr sed awk stat sort head tail date grep uniq comm
 mkdir -p "$ROOT/.ralph"
 WORKFLOW_ACCEPTANCE_SETUP_ONLY="${WORKFLOW_ACCEPTANCE_SETUP_ONLY:-0}"
 WORKTREE_MODE=""
@@ -1037,18 +1067,13 @@ if test_start "0k" "workflow preflight checks"; then
   run_in_worktree mkdir -p ".ralph"
   cp "$ROOT/plans/story_verify_allowlist.txt" "$WORKTREE/.ralph/story_verify_allowlist.txt"
   export RPH_STORY_VERIFY_ALLOWLIST_FILE="$WORKTREE/.ralph/story_verify_allowlist.txt"
+  if ! validate_story_allowlist "$RPH_STORY_VERIFY_ALLOWLIST_FILE"; then
+    exit 1
+  fi
+  # Completeness check (commands in PRD but not in allowlist)
   if ! run_in_worktree bash -c '
+  set -euo pipefail
   allowlist="${RPH_STORY_VERIFY_ALLOWLIST_FILE:-plans/story_verify_allowlist.txt}"
-  if [[ ! -f "$allowlist" ]]; then
-    echo "FAIL: story verify allowlist missing: $allowlist" >&2
-    exit 1
-  fi
-  dup="$(grep -v "^[[:space:]]*#" "$allowlist" | sed "/^[[:space:]]*$/d" | sort | uniq -d || true)"
-  if [[ -n "$dup" ]]; then
-    echo "FAIL: story verify allowlist contains duplicate entries:" >&2
-    printf "%s\n" "$dup" >&2
-    exit 1
-  fi
   # Optimized allowlist completeness check (set comparison)
   tmpdir="$(mktemp -d)"
   trap "rm -rf \"$tmpdir\"" EXIT
@@ -1061,7 +1086,7 @@ if test_start "0k" "workflow preflight checks"; then
   grep -v "^[[:space:]]*#" "$allowlist" | sed "/^[[:space:]]*$/d" \
     | LC_ALL=C sort -u > "$allowed_file"
   # Set difference: commands in PRD but not in allowlist
-  missing="$(LC_ALL=C comm -23 "$required_file" "$allowed_file" || true)"
+  missing="$(LC_ALL=C comm -23 "$required_file" "$allowed_file")"
   if [[ -n "$missing" ]]; then
     echo "FAIL: story verify commands not allowlisted:" >&2
     printf "%s\n" "$missing" >&2
@@ -1708,6 +1733,50 @@ if test_start "0k.10" "verify.sh run_parallel_group uses array expansion not eva
     fi
   '
   test_pass "0k.10"
+fi
+
+if test_start "0k.11" "Reject --only-set with empty tokens" 1; then
+  # Self-test: verify our own empty-token rejection works
+  # Capture both output and exit code
+  set +e
+  output="$("$SCRIPT_PATH" --only-set "0e,,0f" 2>&1)"
+  rc=$?
+  set -e
+  # Assert non-zero exit code (guards against regression where message prints but exits 0)
+  if [[ $rc -eq 0 ]]; then
+    echo "FAIL: --only-set with empty tokens should exit non-zero (got 0)" >&2
+    exit 1
+  fi
+  # Assert descriptive error message
+  if ! echo "$output" | grep -q "empty token"; then
+    echo "FAIL: --only-set with empty tokens should fail with 'empty token' message" >&2
+    exit 1
+  fi
+  test_pass "0k.11"
+fi
+
+if test_start "0k.12" "Reject empty or comment-only allowlist" 1; then
+  # Create a comment-only allowlist
+  empty_allowlist="$WORKTREE/.ralph/empty_allowlist.txt"
+  run_in_worktree bash -c 'mkdir -p .ralph && echo "# just a comment" > .ralph/empty_allowlist.txt'
+
+  # Run the REAL validation function with our empty allowlist
+  set +e
+  output="$(validate_story_allowlist "$empty_allowlist" 2>&1)"
+  rc=$?
+  set -e
+
+  # Assert non-zero exit code
+  if [[ $rc -eq 0 ]]; then
+    echo "FAIL: empty/comment-only allowlist should exit non-zero (got 0)" >&2
+    exit 1
+  fi
+  # Assert descriptive error message
+  if ! echo "$output" | grep -q "empty or contains only comments"; then
+    echo "FAIL: empty/comment-only allowlist should fail with descriptive message" >&2
+    exit 1
+  fi
+  test_pass "0k.12"
 fi
 
 if test_start "0l" "--list prints test ids"; then

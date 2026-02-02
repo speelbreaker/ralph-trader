@@ -4,6 +4,7 @@
 - [ ] All modified/added files are enumerated (code + docs + scripts + tests).
 - [ ] Each file has a 1-line review note (what changed + risk).
 - [ ] New files are intentional and referenced in the review summary.
+- [ ] Any validator/contract scripts referenced by a plan are opened and reviewed (source of truth beats plan text).
 
 ## Evidence Gate (Required)
 - [ ] Proof includes exact commands, 1–3 key output lines, and artifact/log paths.
@@ -30,6 +31,8 @@
 ## Claims & Data
 - [ ] Performance or integration claims are backed by data or explicitly labeled estimates.
 - [ ] Line-number references are avoided or validated; prefer function names/snippets.
+- [ ] Schema fields and counts referenced in plans/pseudocode are verified against validator scripts (e.g., `plans/prd_audit_check.sh`).
+- [ ] Cache key/dependency scope claims are traced to actual inputs (prompt templates, slice prep, validators, runner scripts).
 
 ## Block Conditions
 Mark the PR BLOCKED if any are true:
