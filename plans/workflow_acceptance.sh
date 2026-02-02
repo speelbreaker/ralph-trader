@@ -4729,7 +4729,8 @@ fi
 
 if test_start "18" "rate limit sleep updates state and cooldown"; then
 reset_state
-rate_prd="$WORKTREE/plans/prd_rate_limit.json"
+run_in_worktree mkdir -p "plans/.tmp" >/dev/null 2>&1
+rate_prd="$WORKTREE/plans/.tmp/prd_rate_limit_${$}.json"
 write_valid_prd "$rate_prd" "S1-014"
 run_in_worktree git add "$rate_prd" >/dev/null 2>&1
 run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd rate limit" >/dev/null 2>&1
