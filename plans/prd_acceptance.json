@@ -20,28 +20,56 @@
       "story_ref": "Story 1",
       "category": "acceptance",
       "description": "Acceptance test story",
-      "contract_refs": ["CONTRACT.md §1"],
-      "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
+      "contract_refs": [
+        "CONTRACT.md §1"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md §1"
+      ],
       "scope": {
-        "touch": ["crates/soldier_core/src/lib.rs"],
+        "touch": [
+          "crates/soldier_core/src/lib.rs"
+        ],
         "avoid": []
       },
-      "acceptance": ["a", "b", "c"],
-      "steps": ["1", "2", "3", "4", "5"],
-      "verify": ["./plans/verify.sh", "bash -n plans/verify.sh"],
-      "evidence": ["log"],
+      "acceptance": [
+        "a",
+        "b",
+        "c"
+      ],
+      "steps": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "log"
+      ],
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
-      "reason_codes": { "type": "", "values": [] },
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
       "enforcement_point": "",
       "failure_mode": [],
-      "observability": { "metrics": [], "status_fields": [], "status_contract_ats": [] },
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
       "implementation_tests": [],
       "dependencies": [],
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false
+      "passes": true
     }
   ]
 }
