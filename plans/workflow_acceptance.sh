@@ -4483,9 +4483,10 @@ _tmp=$(mktemp)
 run_in_worktree jq '.items[0].scope.touch += ["tests/test_dummy.rs"]' "$valid_prd_15" > "$_tmp" && mv "$_tmp" "$valid_prd_15"
 
 # Create a dummy test file to delete
+dummy_test="tests/test_dummy_wa_${$}.rs"
 run_in_worktree mkdir -p tests
-run_in_worktree touch "tests/test_dummy.rs"
-run_in_worktree git add "tests/test_dummy.rs"
+run_in_worktree touch "$dummy_test"
+run_in_worktree git add "$dummy_test"
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "add dummy test" >/dev/null 2>&1
 start_sha="$(run_in_worktree git rev-parse HEAD)"
 
@@ -4496,6 +4497,7 @@ run_ralph env \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_delete_test_file_and_commit.sh" \
+  DELETE_TEST_FILE="$dummy_test" \
   RPH_CHEAT_DETECTION="block" \
   RPH_SELF_HEAL=1 \
   RPH_SELECTION_MODE=harness \
@@ -4533,7 +4535,7 @@ if [[ "$end_sha" != "$last_good" ]]; then
   echo "FAIL: expected HEAD to match last_good_ref after self-heal" >&2
   exit 1
 fi
-if ! run_in_worktree test -f "tests/test_dummy.rs"; then
+if ! run_in_worktree test -f "$dummy_test"; then
   echo "FAIL: expected test file restored after self-heal" >&2
   exit 1
 fi
