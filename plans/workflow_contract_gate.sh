@@ -88,7 +88,7 @@ while IFS= read -r enforcement; do
       ;;
     */*|*.sh|*.py|*.json)
       if [[ ! -e "$path" ]]; then
-        echo "ERROR: enforcement path missing: $path" >&2
+        echo "ERROR: missing enforcement path: $path" >&2
         exit 1
       fi
       ;;
@@ -123,15 +123,19 @@ while IFS= read -r test_ref; do
         if [[ "$token" == *-* ]]; then
           start="${token%-*}"
           end="${token#*-}"
-          for id in "$start" "$end"; do
-            if [[ -n "$id" ]] && ! printf '%s\n' "$acceptance_ids" | grep -qx "$id"; then
-              echo "ERROR: unknown workflow acceptance test id: $id" >&2
+          if [[ ! "$start" =~ ^[0-9]+$ || ! "$end" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: invalid test range: $token" >&2
+            exit 1
+          fi
+          for id in $(seq "$start" "$end"); do
+            if ! printf '%s\n' "$acceptance_ids" | grep -qx "$id"; then
+              echo "ERROR: unknown test id: $id" >&2
               exit 1
             fi
           done
         else
           if ! printf '%s\n' "$acceptance_ids" | grep -qx "$token"; then
-            echo "ERROR: unknown workflow acceptance test id: $token" >&2
+            echo "ERROR: unknown test id: $token" >&2
             exit 1
           fi
         fi

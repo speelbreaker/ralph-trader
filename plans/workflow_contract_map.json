@@ -264,7 +264,7 @@
       ],
       "tests": [
         "plans/workflow_acceptance.sh (Test 12)",
-        "plans/workflow_acceptance.sh (Test 28.1-28.5)"
+        "plans/workflow_acceptance.sh (Test 28.1, Test 28.2, Test 28.3, Test 28.4, Test 28.5)"
       ]
     },
     {
