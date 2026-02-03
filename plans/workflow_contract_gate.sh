@@ -83,6 +83,9 @@ while IFS= read -r enforcement; do
   [[ -z "$enforcement" ]] && continue
   path="${enforcement%% *}"
   case "$path" in
+    .ralph/*|*\**)
+      # Skip runtime artifacts or globs; these are not repo paths.
+      ;;
     */*|*.sh|*.py|*.json)
       if [[ ! -e "$path" ]]; then
         echo "ERROR: enforcement path missing: $path" >&2
@@ -108,10 +111,15 @@ while IFS= read -r test_ref; do
         echo "ERROR: unable to list workflow acceptance test ids" >&2
         exit 1
       fi
+      if [[ "$test_ref" != *"Test "* ]]; then
+        continue
+      fi
       ids_part="${test_ref#*Test }"
       ids_part="${ids_part%%)*}"
-      ids_part="$(echo "$ids_part" | tr '/,' '  ' | tr -s ' ')"
-      for token in $ids_part; do
+      ids_part="$(echo "$ids_part" | sed 's/Test[[:space:]]//g' | tr '/,' '\n')"
+      while IFS= read -r token; do
+        token="$(echo "$token" | tr -d ' ')"
+        [[ -z "$token" ]] && continue
         if [[ "$token" == *-* ]]; then
           start="${token%-*}"
           end="${token#*-}"
@@ -127,7 +135,7 @@ while IFS= read -r test_ref; do
             exit 1
           fi
         fi
-      done
+      done < <(printf '%s\n' "$ids_part")
       ;;
     *)
       ;;
