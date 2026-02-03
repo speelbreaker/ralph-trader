@@ -10,6 +10,14 @@
 
 2) See `plans/README.md` for the harness workflow entrypoints.
 
+3) Use the clean verify worktree for pushes/verification:
+
+```bash
+ralph-verify-push
+```
+
+This keeps WIP intact and enforces clean-tree verification.
+
 ## CI Note
 
 - Contract coverage strictness is enabled in CI after promotion. Run `./plans/contract_coverage_promote.sh` once you’re ready to enforce it.
