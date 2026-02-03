@@ -1,7 +1,7 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: audit parallel caching + merge tooling; workflow acceptance updates (incl. invariants appendix check + PRD ref-skip CI override); contract kernel refresh; Deribit vendor doc; knowledge index; invariants appendix; review checklist skill-use prompt.
+- Feature/behavior: audit parallel caching + merge tooling; workflow acceptance updates (incl. invariants appendix check + PRD ref-skip CI override); contract kernel refresh; verify-worktree push guard + AGENTS clean-worktree rule; Deribit vendor doc; knowledge index; invariants appendix; review checklist skill-use prompt.
 - What value it has (what problem it solves, upgrade provides): faster audit runs with cache/merge, clearer vendor + invariant references, and better review discipline.
 - Governing contract: workflow (specs/WORKFLOW_CONTRACT.md) + trading behavior (specs/CONTRACT.md).
 

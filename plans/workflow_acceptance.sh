@@ -4113,7 +4113,11 @@ write_valid_prd "$valid_prd_10c" "S1-010"
 # Ensure git sees a change even if the baseline file matches the template.
 printf '\n' >> "$valid_prd_10c"
 run_in_worktree git add "$valid_prd_10c" >/dev/null 2>&1
-run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd non-promo" >/dev/null 2>&1
+if run_in_worktree git diff --cached --quiet -- "$valid_prd_10c"; then
+  run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit --allow-empty -m "acceptance: seed prd non-promo" >/dev/null 2>&1
+else
+  run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd non-promo" >/dev/null 2>&1
+fi
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
 set +e
 test10c_log="$WORKTREE/.ralph/test10c.log"

@@ -190,6 +190,9 @@ If a required script/artifact is missing or invalid, the workflow must produce a
 ## Contract editing rules
 - For idempotency/WAL semantic changes, MUST include at least one crash/restart AT and one retry-policy AT in `specs/CONTRACT.md`.
 - New contract anchors referenced by ATs MUST exist — consider a contract lint step to verify anchor existence.
+- MUST run `./plans/workflow_contract_gate.sh` and update workflow acceptance mapping assertions when editing `specs/WORKFLOW_CONTRACT.md` or `plans/workflow_contract_map.json`.
+- MUST add acceptance coverage that exercises the exact validator path and asserts non-zero exit + specific error message when introducing or tightening workflow validation rules.
+- MUST run verify/push from a clean verify worktree (set `git config --worktree ralph.verify-worktree true`) to avoid clobbering WIP.
 
 ## Top time/token sinks (fix focus)
 - `plans/workflow_acceptance.sh` full runtime → keep acceptance tests targeted; avoid unnecessary workflow file edits; batch changes before full runs.

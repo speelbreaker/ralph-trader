@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Enforce clean verify worktree pushes to avoid clobbering WIP.
+# Override only if explicitly needed: RPH_ALLOW_WIP_PUSH=1
+if [[ "${RPH_ALLOW_WIP_PUSH:-}" != "1" ]]; then
+  verify_flag="$(git config --worktree ralph.verify-worktree 2>/dev/null || true)"
+  if [[ "$verify_flag" != "true" ]]; then
+    echo "ERROR: push must run from a clean verify worktree" >&2
+    echo "Set up once:" >&2
+    echo "  git worktree add ../ralph-verify main" >&2
+    echo "  git -C ../ralph-verify config extensions.worktreeConfig true" >&2
+    echo "  git -C ../ralph-verify config --worktree ralph.verify-worktree true" >&2
+    echo "Then use: ralph-verify-push" >&2
+    exit 1
+  fi
+
+  dirty="$(git status --porcelain 2>/dev/null || true)"
+  if [[ -n "$dirty" ]]; then
+    echo "ERROR: verify worktree is dirty; clean before push" >&2
+    exit 1
+  fi
+fi
+
 # Pre-push hook: run verify.sh full before pushing
 # Skip with: git push --no-verify
 
