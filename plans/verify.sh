@@ -731,11 +731,15 @@ init_change_detection
 # 0.1) Workflow preflight
 # -----------------------------------------------------------------------------
 log "0.1) Workflow preflight"
-preflight_args=()
+preflight_strict=""
 if is_ci || [[ "${VERIFY_PREFLIGHT_STRICT:-0}" == "1" ]]; then
-  preflight_args+=(--strict)
+  preflight_strict="--strict"
 fi
-run_logged "preflight" "30s" ./plans/preflight.sh "${preflight_args[@]}"
+if [[ -n "$preflight_strict" ]]; then
+  run_logged "preflight" "30s" ./plans/preflight.sh "$preflight_strict"
+else
+  run_logged "preflight" "30s" ./plans/preflight.sh
+fi
 
 # -----------------------------------------------------------------------------
 # 0a) Parallel primitives smoke test
