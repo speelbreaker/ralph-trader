@@ -2405,7 +2405,7 @@ chmod +x "$STUB_DIR/agent_invalid_selection.sh"
 cat > "$STUB_DIR/agent_delete_test_file_and_commit.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-file="${DELETE_TEST_FILE:-tests/test_dummy.rs}"
+file="${DELETE_TEST_FILE:-tests/workflow_acceptance_dummy.rs}"
 rm -f "$file"
 git add -u
 git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "delete test" >/dev/null 2>&1
@@ -4583,14 +4583,18 @@ if test_start "16" "cheating detected (deleted test file)"; then
 reset_state
 valid_prd_15="$WORKTREE/.ralph/valid_prd_15.json"
 write_valid_prd "$valid_prd_15" "S1-011"
-# Update scope to include tests/test_dummy.rs
+dummy_test_file="tests/workflow_acceptance_dummy.rs"
+if run_in_worktree test -e "$dummy_test_file"; then
+  dummy_test_file="tests/workflow_acceptance_dummy_${RANDOM}.rs"
+fi
+# Update scope to include dummy test file
 _tmp=$(mktemp)
-run_in_worktree jq '.items[0].scope.touch += ["tests/test_dummy.rs"]' "$valid_prd_15" > "$_tmp" && mv "$_tmp" "$valid_prd_15"
+run_in_worktree jq --arg file "$dummy_test_file" '.items[0].scope.touch += [$file]' "$valid_prd_15" > "$_tmp" && mv "$_tmp" "$valid_prd_15"
 
 # Create a dummy test file to delete
-run_in_worktree mkdir -p tests
-run_in_worktree touch "tests/test_dummy.rs"
-run_in_worktree git add "tests/test_dummy.rs"
+run_in_worktree mkdir -p "$(dirname "$dummy_test_file")"
+run_in_worktree bash -c "echo \"// dummy\" > \"$dummy_test_file\""
+run_in_worktree git add "$dummy_test_file"
 run_in_worktree git -c user.name="test" -c user.email="test@local" commit -m "add dummy test" >/dev/null 2>&1
 start_sha="$(run_in_worktree git rev-parse HEAD)"
 
@@ -4600,6 +4604,7 @@ run_ralph env \
   PRD_FILE="$valid_prd_15" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  DELETE_TEST_FILE="$dummy_test_file" \
   RPH_AGENT_CMD="$STUB_DIR/agent_delete_test_file_and_commit.sh" \
   RPH_CHEAT_DETECTION="block" \
   RPH_SELF_HEAL=1 \
@@ -4638,7 +4643,7 @@ if [[ "$end_sha" != "$last_good" ]]; then
   echo "FAIL: expected HEAD to match last_good_ref after self-heal" >&2
   exit 1
 fi
-if ! run_in_worktree test -f "tests/test_dummy.rs"; then
+if ! run_in_worktree test -f "$dummy_test_file"; then
   echo "FAIL: expected test file restored after self-heal" >&2
   exit 1
 fi
