@@ -2103,6 +2103,12 @@ write_valid_prd() {
   ]
 }
 JSON
+
+  if [[ -n "${WORKTREE:-}" ]]; then
+    local touch_file="crates/soldier_core/src/lib.rs"
+    mkdir -p "$WORKTREE/$(dirname "$touch_file")"
+    : > "$WORKTREE/$touch_file"
+  fi
 }
 
 write_invalid_prd() {
