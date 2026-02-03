@@ -29,6 +29,13 @@
 - [ ] New gate scripts are added to `plans/verify.sh:is_workflow_file` allowlist.
 - [ ] Verify requirement satisfied (local full run or CI) and recorded.
 
+## High-ROI Enforcement Map (Workflow)
+- [ ] Workflow contract/map edits: run `./plans/workflow_contract_gate.sh` and update mapping assertions. Enforcement: script + acceptance. Tests: 12.
+- [ ] PRD edits: run `./plans/prd_gate.sh` + `./plans/prd_audit_check.sh`. Enforcement: script + acceptance. Tests: 0k.1/0k.2/27.
+- [ ] Change-detection helper edits in `plans/verify.sh`: update acceptance assertions. Enforcement: acceptance. Tests: 0k.
+- [ ] Blocked-exit/manifest behavior changes: ensure manifest written. Enforcement: acceptance. Tests: 0g/10c/10d.
+- [ ] New/tightened workflow validation rules: acceptance must call real validator path and assert non-zero + specific error. Enforcement: acceptance. Tests: 22b.
+
 ## Drift / Split-brain Check
 - [ ] Any coupled artifacts (e.g., workflow contract + map) are updated together and called out.
 - [ ] No new duplicate source of truth was introduced without consolidation.
