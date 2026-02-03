@@ -3,22 +3,64 @@ set -euo pipefail
 
 # Enforce clean verify worktree pushes to avoid clobbering WIP.
 # Override only if explicitly needed: RPH_ALLOW_WIP_PUSH=1
-if [[ "${RPH_ALLOW_WIP_PUSH:-}" == "1" ]]; then
+if [[ "${RPH_ALLOW_WIP_PUSH:-}" != "1" ]]; then
+  verify_flag="$(git config --worktree ralph.verify-worktree 2>/dev/null || true)"
+  if [[ "$verify_flag" != "true" ]]; then
+    echo "ERROR: push must run from a clean verify worktree" >&2
+    echo "Set up once:" >&2
+    echo "  git worktree add ../ralph-verify main" >&2
+    echo "  git -C ../ralph-verify config extensions.worktreeConfig true" >&2
+    echo "  git -C ../ralph-verify config --worktree ralph.verify-worktree true" >&2
+    echo "Then use: ralph-verify-push" >&2
+    exit 1
+  fi
+
+  dirty="$(git status --porcelain 2>/dev/null || true)"
+  if [[ -n "$dirty" ]]; then
+    echo "ERROR: verify worktree is dirty; clean before push" >&2
+    exit 1
+  fi
+fi
+
+# Pre-push hook: run verify.sh full before pushing
+# Skip with: git push --no-verify
+
+echo "Running verify.sh full before push..."
+
+# Allow override for emergencies (not recommended)
+if [[ "${SKIP_PRE_PUSH_VERIFY:-0}" == "1" ]]; then
+  echo "WARN: SKIP_PRE_PUSH_VERIFY=1, skipping verification"
   exit 0
 fi
 
-verify_flag="$(git config --worktree ralph.verify-worktree 2>/dev/null || true)"
-if [[ "$verify_flag" != "true" ]]; then
-  echo "ERROR: push must run from a clean verify worktree" >&2
-  echo "Set up once:" >&2
-  echo "  git worktree add ../ralph-verify main" >&2
-  echo "  git -C ../ralph-verify config --worktree ralph.verify-worktree true" >&2
-  echo "Then use: ralph-verify-push" >&2
-  exit 1
-fi
+# Check if we're pushing to main/master (stricter)
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$remote_ref" == "refs/heads/main" || "$remote_ref" == "refs/heads/master" ]]; then
+    echo "Pushing to protected branch: $remote_ref"
+    echo "Running full verification..."
 
-dirty="$(git status --porcelain 2>/dev/null || true)"
-if [[ -n "$dirty" ]]; then
-  echo "ERROR: verify worktree is dirty; clean before push" >&2
-  exit 1
-fi
+    if ! ./plans/verify.sh full; then
+      echo ""
+      echo "ERROR: verify.sh full failed"
+      echo "Fix the issues above before pushing to $remote_ref"
+      echo ""
+      echo "To skip (NOT RECOMMENDED): git push --no-verify"
+      exit 1
+    fi
+  else
+    # Feature branches: quick verification
+    echo "Pushing to feature branch: $remote_ref"
+    echo "Running quick verification..."
+
+    if ! ./plans/verify.sh quick; then
+      echo ""
+      echo "ERROR: verify.sh quick failed"
+      echo "Fix the issues above before pushing"
+      echo ""
+      echo "To skip (NOT RECOMMENDED): git push --no-verify"
+      exit 1
+    fi
+  fi
+done
+
+echo "Verification passed, proceeding with push..."
