@@ -1609,6 +1609,10 @@ if ! grep -qi "small tests first" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must include small tests first instruction" >&2
   exit 1
 fi
+if ! grep -qi "After committing, run full verify" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require verify after commit" >&2
+  exit 1
+fi
 if ! grep -q "RPH_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must define RPH_VERIFY_ONLY" >&2
   exit 1
