@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Parallel slice auditor
+# Parallel slice auditor with incremental caching
 # Runs slice audits concurrently with configurable parallelism
+# Caches PASS/FAIL results to skip unchanged slices
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -12,6 +13,8 @@ MAX_PARALLEL="${MAX_PARALLEL:-4}"
 AUDIT_OUTPUT_DIR="${AUDIT_OUTPUT_DIR:-.context/parallel_audits}"
 # Optional: filter to specific slices (comma-separated, e.g., "0,1,2" or range "0-5")
 AUDIT_SLICES="${AUDIT_SLICES:-}"
+# Set to 1 to force re-audit all slices (ignore cache)
+AUDIT_NO_CACHE="${AUDIT_NO_CACHE:-0}"
 
 if [[ ! -f "$PRD_FILE" ]]; then
   echo "[audit_parallel] ERROR: PRD file not found: $PRD_FILE" >&2
@@ -74,6 +77,9 @@ if [[ -f "docs/ROADMAP.md" ]]; then
   SOURCE_FILE="docs/ROADMAP.md" OUTPUT_FILE=".context/roadmap_digest.json" DIGEST_MODE="slim" ./plans/build_markdown_digest.sh
 elif [[ -f "ROADMAP.md" ]]; then
   SOURCE_FILE="ROADMAP.md" OUTPUT_FILE=".context/roadmap_digest.json" DIGEST_MODE="slim" ./plans/build_markdown_digest.sh
+else
+  rm -f ".context/roadmap_digest.json"
+  echo "[audit_parallel] No roadmap found, removed stale digest" >&2
 fi
 echo "[audit_parallel] Digests ready" >&2
 
@@ -83,21 +89,132 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 mkdir -p "$AUDIT_OUTPUT_DIR"
 
-# Track pids for parallel execution
-declare -a pids=()
+# Build slice list
 declare -a slice_list=()
-
 for slice in $slices; do
   slice_list+=("$slice")
 done
 
+# Check cache to determine which slices need re-auditing
+declare -a valid_slices=()
+declare -a invalid_slices=()
+declare -a reused_slices=()
+
+if [[ "$AUDIT_NO_CACHE" == "1" ]]; then
+  echo "[audit_parallel] Cache disabled (AUDIT_NO_CACHE=1), re-auditing all slices" >&2
+  invalid_slices=("${slice_list[@]}")
+else
+  # Convert slice list to comma-separated for cache check
+  slice_csv=$(IFS=','; echo "${slice_list[*]}")
+
+  echo "[audit_parallel] Checking cache..." >&2
+  if ! cache_result=$(REPO_ROOT="$ROOT" PRD_FILE="$PRD_FILE" AUDIT_OUTPUT_DIR="$AUDIT_OUTPUT_DIR" \
+      python3 plans/prd_cache_check.py --slices "$slice_csv" 2>&1); then
+    echo "[audit_parallel] ERROR: cache check failed: $cache_result" >&2
+    exit 2
+  fi
+
+  # Parse cache result
+  for s in $(echo "$cache_result" | jq -r '.valid_slices[]' 2>/dev/null); do
+    valid_slices+=("$s")
+  done
+  for s in $(echo "$cache_result" | jq -r '.invalid_slices[]' 2>/dev/null); do
+    invalid_slices+=("$s")
+  done
+
+  # If cache check failed, treat all as invalid
+  if [[ ${#valid_slices[@]} -eq 0 ]] && [[ ${#invalid_slices[@]} -eq 0 ]]; then
+    echo "[audit_parallel] Cache check failed, re-auditing all slices" >&2
+    invalid_slices=("${slice_list[@]}")
+  fi
+
+  if [[ ${#valid_slices[@]} -gt 0 ]]; then
+    echo "[audit_parallel] Cache hits: ${valid_slices[*]}" >&2
+  fi
+  if [[ ${#invalid_slices[@]} -gt 0 ]]; then
+    echo "[audit_parallel] Cache misses: ${invalid_slices[*]}" >&2
+  fi
+fi
+
+# Process cached slices: copy from cache and validate
+for slice in "${valid_slices[@]}"; do
+  cached_audit=$(jq -r ".slices[\"$slice\"].audit_json // empty" .context/prd_audit_slice_cache.json 2>/dev/null || true)
+
+  if [[ -n "$cached_audit" ]] && [[ -f "$cached_audit" ]]; then
+    # Validate cached path is under repo root (trust boundary)
+    cached_audit_real=$(python3 - "$cached_audit" "$ROOT" <<'PY'
+import os, sys
+path = os.path.realpath(sys.argv[1])
+root = os.path.realpath(sys.argv[2])
+print(path)
+sys.exit(0 if path.startswith(root + os.sep) else 1)
+PY
+    ) || {
+      echo "[audit_parallel] Slice $slice: cached path outside repo, re-audit" >&2
+      invalid_slices+=("$slice")
+      continue
+    }
+
+    # Copy cached audit to output directory
+    cp "$cached_audit_real" "$AUDIT_OUTPUT_DIR/audit_slice_$slice.json"
+
+    # Prepare slice PRD and digests for merge (run slice_prepare in prep-only mode)
+    # If prep fails, treat as cache miss and re-audit
+    if ! PRD_FILE="$PRD_FILE" \
+         PRD_SLICE="$slice" \
+         CONTRACT_DIGEST=".context/contract_digest.json" \
+         PLAN_DIGEST=".context/plan_digest.json" \
+         ROADMAP_DIGEST=".context/roadmap_digest.json" \
+         OUT_PRD_SLICE="$AUDIT_OUTPUT_DIR/prd_slice_$slice.json" \
+         OUT_CONTRACT_DIGEST="$AUDIT_OUTPUT_DIR/contract_digest_$slice.json" \
+         OUT_PLAN_DIGEST="$AUDIT_OUTPUT_DIR/plan_digest_$slice.json" \
+         OUT_ROADMAP_DIGEST="$AUDIT_OUTPUT_DIR/roadmap_digest_$slice.json" \
+         OUT_AUDIT_FILE="$AUDIT_OUTPUT_DIR/audit_slice_$slice.json" \
+         OUT_META="$AUDIT_OUTPUT_DIR/meta_$slice.json" \
+         ./plans/prd_slice_prepare.sh >/dev/null 2>&1; then
+      echo "[audit_parallel] Slice $slice: cache prep failed, re-audit" >&2
+      invalid_slices+=("$slice")
+      continue
+    fi
+
+    # Validate cached audit
+    if AUDIT_PROMISE_REQUIRED=0 \
+       PRD_FILE="$AUDIT_OUTPUT_DIR/prd_slice_$slice.json" \
+       AUDIT_FILE="$AUDIT_OUTPUT_DIR/audit_slice_$slice.json" \
+       AUDIT_META_FILE="$AUDIT_OUTPUT_DIR/meta_$slice.json" \
+       ./plans/prd_audit_check.sh >/dev/null 2>&1; then
+      echo "[audit_parallel] Slice $slice: CACHE HIT (reused)" >&2
+      reused_slices+=("$slice")
+    else
+      echo "[audit_parallel] Slice $slice: CACHE HIT but validation failed, will re-audit" >&2
+      # Add to invalid list for re-audit
+      invalid_slices+=("$slice")
+    fi
+  else
+    echo "[audit_parallel] Slice $slice: CACHE HIT but file missing, will re-audit" >&2
+    invalid_slices+=("$slice")
+  fi
+done
+
+# Run parallel audits for invalid slices
+declare -a pids=()
+declare -a audited_slices=()
+
+# Check wait -n support (bash 4.3+; macOS ships bash 3.2 by default)
+_wait_n_supported=0
+if [[ ${BASH_VERSINFO[0]} -gt 4 ]] || \
+   [[ ${BASH_VERSINFO[0]} -eq 4 && ${BASH_VERSINFO[1]} -ge 3 ]]; then
+  _wait_n_supported=1
+fi
+
 running=0
 idx=0
 
-while [[ $idx -lt ${#slice_list[@]} ]] || [[ $running -gt 0 ]]; do
+while [[ $idx -lt ${#invalid_slices[@]} ]] || [[ $running -gt 0 ]]; do
   # Launch new jobs if under limit and jobs remain
-  while [[ $running -lt $MAX_PARALLEL ]] && [[ $idx -lt ${#slice_list[@]} ]]; do
-    slice="${slice_list[$idx]}"
+  while [[ $running -lt $MAX_PARALLEL ]] && [[ $idx -lt ${#invalid_slices[@]} ]]; do
+    slice="${invalid_slices[$idx]}"
+    audited_slices+=("$slice")
     (
       AUDIT_SCOPE=slice \
       AUDIT_SLICE="$slice" \
@@ -122,10 +239,23 @@ while [[ $idx -lt ${#slice_list[@]} ]] || [[ $running -gt 0 ]]; do
 
   # Wait for at least one job to finish
   if [[ $running -gt 0 ]]; then
-    wait -n 2>/dev/null || true
+    if [[ "$_wait_n_supported" == "1" ]]; then
+      # bash 4.3+: use wait -n (ignore exit code, we check job status separately)
+      wait -n 2>/dev/null || true
+    else
+      # bash <4.3: poll for any PID to finish
+      while :; do
+        for slice in "${invalid_slices[@]}"; do
+          if [[ -n "${pids[$slice]:-}" ]] && ! kill -0 "${pids[$slice]}" 2>/dev/null; then
+            break 2
+          fi
+        done
+        sleep 0.2
+      done
+    fi
     # Count still running
     running=0
-    for slice in "${slice_list[@]}"; do
+    for slice in "${invalid_slices[@]}"; do
       if [[ -n "${pids[$slice]:-}" ]] && kill -0 "${pids[$slice]}" 2>/dev/null; then
         ((running++)) || true
       fi
@@ -136,10 +266,10 @@ done
 # Wait for all remaining jobs
 wait
 
-# Collect results
+# Collect results for audited slices
 failed=0
 passed=0
-for slice in "${slice_list[@]}"; do
+for slice in "${audited_slices[@]}"; do
   rc_file="$WORK_DIR/rc_$slice"
   if [[ -f "$rc_file" ]]; then
     rc=$(cat "$rc_file")
@@ -151,17 +281,40 @@ for slice in "${slice_list[@]}"; do
     echo "[audit_parallel] Slice $slice FAILED (rc=$rc)" >&2
     failed=1
   else
-    echo "[audit_parallel] Slice $slice PASS" >&2
+    echo "[audit_parallel] Slice $slice PASS (fresh audit)" >&2
     ((passed++)) || true
   fi
 done
 
-echo "[audit_parallel] Summary: ${passed}/${#slice_list[@]} slices passed" >&2
+# Update cache for all freshly audited slices (sequential to avoid race)
+# Note: cache update errors are non-fatal (audit already succeeded, we just can't cache it)
+echo "[audit_parallel] Updating cache for ${#audited_slices[@]} audited slices..." >&2
+for slice in "${audited_slices[@]}"; do
+  audit_file="$AUDIT_OUTPUT_DIR/audit_slice_$slice.json"
+  if [[ -f "$audit_file" ]]; then
+    cache_err=$(REPO_ROOT="$ROOT" PRD_FILE="$PRD_FILE" \
+      python3 plans/prd_cache_update.py "$slice" "$audit_file" 2>&1) || {
+      echo "[audit_parallel] WARNING: cache update failed for slice $slice: $cache_err" >&2
+    }
+  fi
+done
+
+# Count total passed (cached + fresh)
+total_passed=$((${#reused_slices[@]} + passed))
+echo "[audit_parallel] Summary: $total_passed/${#slice_list[@]} slices passed (${#reused_slices[@]} cached, $passed fresh)" >&2
 
 if [[ $failed -ne 0 ]]; then
   echo "[audit_parallel] FAILED: Some slices failed" >&2
   exit 1
 fi
 
-echo "[audit_parallel] PASS: All slices passed" >&2
+echo "[audit_parallel] All slices passed, merging..." >&2
+
+# Merge slice audits into single prd_audit.json
+if ! ./plans/prd_audit_merge.sh "$AUDIT_OUTPUT_DIR"; then
+  echo "[audit_parallel] ERROR: Merge failed" >&2
+  exit 1
+fi
+
+echo "[audit_parallel] PASS: Merged audit written to plans/prd_audit.json" >&2
 exit 0

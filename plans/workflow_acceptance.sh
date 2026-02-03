@@ -630,6 +630,10 @@ OVERLAY_FILES=(
   "plans/build_contract_digest.sh"
   "plans/build_plan_digest.sh"
   "plans/prd_slice_prepare.sh"
+  "plans/prd_cache_check.py"
+  "plans/prd_cache_update.py"
+  "plans/prd_audit_merge.py"
+  "plans/prd_audit_merge.sh"
   "plans/contract_check.sh"
   "plans/contract_coverage_matrix.py"
   "plans/contract_coverage_promote.sh"
@@ -645,6 +649,7 @@ OVERLAY_FILES=(
   "plans/tests/test_prd_audit_check.sh"
   "plans/tests/test_contract_coverage_matrix.sh"
   "plans/tests/test_workflow_acceptance_fallback.sh"
+  "plans/tests/test_prd_cache.sh"
   "plans/fixtures/prd/deps_order_same_slice.json"
   "plans/fixtures/prd/deps_cycle_same_slice.json"
   "plans/fixtures/prd/deps_forward_slice.json"
@@ -745,6 +750,8 @@ scripts_to_chmod=(
   "tests/test_prd_gate.sh"
   "tests/test_prd_audit_check.sh"
   "tests/test_workflow_acceptance_fallback.sh"
+  "tests/test_prd_cache.sh"
+  "prd_audit_merge.sh"
 )
 for script in "${scripts_to_chmod[@]}"; do
   if [[ -f "$WORKTREE/plans/$script" ]]; then
@@ -1780,6 +1787,12 @@ if test_start "0k.12" "Reject empty or comment-only allowlist" 1; then
     exit 1
   fi
   test_pass "0k.12"
+fi
+
+if test_start "0k.13" "PRD cache integration tests" 1; then
+  # Run the PRD cache integration test suite
+  run_in_worktree bash -c 'set -euo pipefail; bash plans/tests/test_prd_cache.sh'
+  test_pass "0k.13"
 fi
 
 if test_start "0l" "--list prints test ids"; then
