@@ -4110,6 +4110,8 @@ if test_start "10c" "update_task blocks non-promotion verify"; then
 reset_state
 valid_prd_10c="$WORKTREE/plans/prd_acceptance_non_promo.json"
 write_valid_prd "$valid_prd_10c" "S1-010"
+# Ensure git sees a change even if the baseline file matches the template.
+printf '\n' >> "$valid_prd_10c"
 run_in_worktree git add "$valid_prd_10c" >/dev/null 2>&1
 run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd non-promo" >/dev/null 2>&1
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
