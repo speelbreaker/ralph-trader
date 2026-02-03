@@ -176,9 +176,20 @@ If a required script/artifact is missing or invalid, the workflow must produce a
 - MUST keep fast precheck set limited to schema/self-dep/shellcheck/traceability.
 - SHOULD keep workflow_acceptance test IDs stable and listable.
 - MUST avoid brittle acceptance checks that grep long prose sentences; prefer stable markers (the HTML comments at top) and short headers.
+- MUST avoid bash 4+ builtins (mapfile/readarray) in harness scripts — macOS ships bash 3.2.
+
+## Workflow editing rules
+- MUST add new fixture paths to `plans/workflow_acceptance.sh` overlays when introducing new workflow fixtures under `plans/fixtures/**`.
+- MUST update workflow acceptance assertions when modifying change-detection helpers (`is_*_affecting_file`, `should_run_*`) in `plans/verify.sh`.
 - MUST run `./plans/workflow_contract_gate.sh` and update workflow acceptance mapping assertions when editing `specs/WORKFLOW_CONTRACT.md` or `plans/workflow_contract_map.json`.
 - MUST add acceptance coverage that exercises the exact validator path and asserts non-zero exit + specific error message when introducing or tightening workflow validation rules.
-- MUST run verify/push from a clean verify worktree (set `git config --worktree ralph.verify-worktree true`) to avoid clobbering WIP.
+- When blocked artifact naming changes, MUST add/update a deterministic acceptance test proving correct naming.
+- SHOULD rebase onto `origin/main` before editing workflow contract/map files to avoid duplicate WF-* entries and traceability gate failures.
+- Any new blocked-exit path MUST either call a shared manifest helper or add an acceptance test proving manifest creation.
+
+## Contract editing rules
+- For idempotency/WAL semantic changes, MUST include at least one crash/restart AT and one retry-policy AT in `specs/CONTRACT.md`.
+- New contract anchors referenced by ATs MUST exist — consider a contract lint step to verify anchor existence.
 
 ## Top time/token sinks (fix focus)
 - `plans/workflow_acceptance.sh` full runtime → keep acceptance tests targeted; avoid unnecessary workflow file edits; batch changes before full runs.

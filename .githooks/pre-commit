@@ -20,7 +20,18 @@ if git diff --cached --name-only | grep -q "specs/CONTRACT.md"; then
   fi
 fi
 
-# 3. Check for unwrap() in staged Rust files (safety-critical paths only)
+# 3. PRD schema check (if prd.json is staged)
+if git diff --cached --name-only | grep -q "plans/prd.json"; then
+  echo "prd.json staged - running schema check..."
+  if ! plans/prd_schema_check.sh plans/prd.json; then
+    echo ""
+    echo "ERROR: PRD schema validation failed"
+    echo "Run 'plans/prd_gate.sh' for full diagnostics"
+    exit 1
+  fi
+fi
+
+# 4. Check for unwrap() in staged Rust files (safety-critical paths only)
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^crates/soldier_core/.*\.rs$" || true)
 if [[ -n "$STAGED_RS" ]]; then
   echo "Checking staged soldier_core files for unwrap()..."

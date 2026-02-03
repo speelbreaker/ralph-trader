@@ -256,15 +256,15 @@
       "id": "WF-1.17",
       "title": "plans/preflight.sh  fast sanity gate (shell syntax, PRD schema, postmortem)",
       "enforcement": [
-        "plans/preflight.sh",
-        "plans/verify.sh"
+        "plans/verify.sh (preflight gate)",
+        "plans/preflight.sh"
       ],
       "artifacts": [
         "plans/preflight.sh"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (Test 12)",
-        "plans/workflow_acceptance.sh (Test 28.1, Test 28.2, Test 28.3, Test 28.4, Test 28.5)"
+        "plans/workflow_acceptance.sh (Test 12b/12c)",
+        "plans/workflow_acceptance.sh (Test 28.1/28.2/28.3)"
       ]
     },
     {

@@ -73,7 +73,7 @@ if (( JOBS < 1 )); then
   exit 2
 fi
 
-# Get unique test IDs from --list output (dedupe duplicates like 10c)
+# Get unique test IDs from --list output (dedupe duplicates if present)
 ALL_IDS=()
 while IFS= read -r id; do
   [[ -z "$id" ]] && continue

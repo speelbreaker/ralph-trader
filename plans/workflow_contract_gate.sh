@@ -7,9 +7,9 @@ map_file="${WORKFLOW_CONTRACT_MAP:-plans/workflow_contract_map.json}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 
-# Check that at least one of rg or grep is available
-if ! command -v rg >/dev/null 2>&1 && ! command -v grep >/dev/null 2>&1; then
-  echo "ERROR: either ripgrep or grep required" >&2
+# grep is required for test token extraction; rg is optional (used for ID extraction if available)
+if ! command -v grep >/dev/null 2>&1; then
+  echo "ERROR: grep required" >&2
   exit 2
 fi
 if [[ ! -f "$spec_file" ]]; then
@@ -33,6 +33,163 @@ extract_ids() {
     rg -o 'WF-[0-9]+(\.[0-9]+)*' "$file" | sort -u
   else
     grep -oE 'WF-[0-9]+(\.[0-9]+)*' "$file" | sort -u
+  fi
+}
+
+# Skip markers that don't represent files
+is_marker() {
+  local entry="$1"
+  case "$entry" in
+    manual|CI) return 0 ;;
+    .ralph/*) return 0 ;;
+    "CI logs") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Extract path from annotated entry like "plans/ralph.sh (preflight)"
+extract_path() {
+  local entry="$1"
+  echo "$entry" | sed -E 's/[[:space:]]*\([^)]*\)[[:space:]]*$//'
+}
+
+# Check if path exists
+path_exists() {
+  local path="$1"
+  [[ -f "$path" ]] || [[ -d "$path" ]]
+}
+
+validate_enforcement() {
+  local errors="" entry path rule_id
+
+  while IFS=$'\t' read -r rule_id entry; do
+    [[ -z "$entry" ]] && continue
+    is_marker "$entry" && continue
+
+    path="$(extract_path "$entry")"
+    if ! path_exists "$path"; then
+      errors="${errors}${rule_id}: missing enforcement: ${path}\n"
+    fi
+  done < <(jq -r '.rules[] | "\(.id)\t\(.enforcement[])"' "$map_file")
+
+  if [[ -n "$errors" ]]; then
+    echo "ERROR: enforcement scripts/files not found:" >&2
+    printf '%b' "$errors" | sed 's/^/- /' >&2
+    return 1
+  fi
+}
+
+get_acceptance_test_ids() {
+  # Parse test_start lines directly (don't call --list, which has setup overhead)
+  local ids dup_check
+  ids="$(sed -nE 's/^[[:space:]]*(if[[:space:]]+)?test_start[[:space:]]+"([^"]+)".*/\2/p' \
+    plans/workflow_acceptance.sh)"
+
+  # Check for duplicates
+  dup_check="$(printf '%s\n' "$ids" | sort | uniq -d)"
+  if [[ -n "$dup_check" ]]; then
+    echo "ERROR: duplicate test IDs in workflow_acceptance.sh:" >&2
+    echo "$dup_check" | sed 's/^/- /' >&2
+    return 1
+  fi
+
+  printf '%s\n' "$ids" | sort -u
+}
+
+# Helper: extract Test tokens with grep (required)
+extract_test_tokens() {
+  local input="$1"
+  if ! command -v grep >/dev/null 2>&1; then
+    echo "ERROR: grep required for test token extraction" >&2
+    return 1
+  fi
+  printf '%s' "$input" | grep -oE 'Test[[:space:]]+[^,)]+' || true
+}
+
+extract_test_ids() {
+  local test_ref="$1"
+  local tokens token ids segment left right i segments_str
+
+  # Pull only explicit "Test ..." tokens; ignore descriptive text.
+  # Examples matched: "Test 12", "Test 0h/0i/0j/12", "Test 6-9"
+  tokens="$(extract_test_tokens "$test_ref")"
+  [[ -z "$tokens" ]] && return 0
+
+  while IFS= read -r token; do
+    ids="${token#Test }"
+    ids="$(printf '%s' "$ids" | tr -d '[:space:]')"
+
+    # Split on slash or comma: 0h/0i/0j/12, 1,2,3
+    # Use here-string to avoid subshell (pipe creates subshell, losing output)
+    segments_str="$(printf '%s' "$ids" | tr '/,' '\n')"
+    while IFS= read -r segment; do
+      [[ -z "$segment" ]] && continue
+      if [[ "$segment" == *-* ]]; then
+        left="${segment%%-*}"
+        right="${segment##*-}"
+        # Only allow numeric ranges; reject anything else
+        if [[ ! "$left" =~ ^[0-9]+$ || ! "$right" =~ ^[0-9]+$ ]]; then
+          echo "__RANGE_INVALID__:${segment}"
+          continue
+        fi
+        # Pure bash range expansion (no seq dependency)
+        if (( left <= right )); then
+          for ((i=left; i<=right; i++)); do
+            echo "$i"
+          done
+        else
+          for ((i=left; i>=right; i--)); do
+            echo "$i"
+          done
+        fi
+      else
+        echo "$segment"
+      fi
+    done <<< "$segments_str"
+  done <<< "$tokens"
+}
+
+validate_tests() {
+  local errors=""
+
+  # Pre-load acceptance test IDs once (direct sed parsing, not --list which has setup overhead)
+  local acceptance_ids=""
+  if [[ -f "plans/workflow_acceptance.sh" ]]; then
+    acceptance_ids="$(get_acceptance_test_ids)"
+  fi
+
+  while IFS=$'\t' read -r rule_id test_ref; do
+    [[ -z "$test_ref" ]] && continue
+    is_marker "$test_ref" && continue
+
+    local script_path
+    script_path="$(extract_path "$test_ref")"
+
+    if ! path_exists "$script_path"; then
+      errors="${errors}${rule_id}: missing test script: ${script_path}\n"
+      continue
+    fi
+
+    if [[ "$script_path" == "plans/workflow_acceptance.sh" ]]; then
+      while IFS= read -r test_id; do
+        [[ -z "$test_id" ]] && continue
+        # Handle invalid range marker from extract_test_ids
+        if [[ "$test_id" == __RANGE_INVALID__:* ]]; then
+          local bad_range="${test_id#__RANGE_INVALID__:}"
+          errors="${errors}${rule_id}: invalid test range '${bad_range}' in ${test_ref} (ranges must be numeric; list explicit ids)\n"
+          continue
+        fi
+        if ! echo "$acceptance_ids" | grep -qFx "$test_id"; then
+          errors="${errors}${rule_id}: unknown test id '${test_id}' in ${test_ref}\n"
+        fi
+      done < <(extract_test_ids "$test_ref")
+    fi
+  done < <(jq -r '.rules[] | "\(.id)\t\(.tests[])"' "$map_file")
+
+  if [[ -n "$errors" ]]; then
+    echo "ERROR: test references not found:" >&2
+    printf '%b' "$errors" | sed 's/^/- /' >&2
+    return 1
   fi
 }
 
@@ -78,72 +235,12 @@ if [[ -n "$dup_ids" ]]; then
   exit 1
 fi
 
-# Validate enforcement paths (if token looks like a repo path, it must exist).
-while IFS= read -r enforcement; do
-  [[ -z "$enforcement" ]] && continue
-  path="${enforcement%% *}"
-  case "$path" in
-    .ralph/*|*\**)
-      # Skip runtime artifacts or globs; these are not repo paths.
-      ;;
-    */*|*.sh|*.py|*.json)
-      if [[ ! -e "$path" ]]; then
-        echo "ERROR: missing enforcement path: $path" >&2
-        exit 1
-      fi
-      ;;
-    *)
-      ;;
-  esac
-done < <(jq -r '.rules[].enforcement[]' "$map_file")
-
-# Validate workflow acceptance test references if present in map.
-acceptance_ids=""
-if [[ -x "plans/workflow_acceptance.sh" ]]; then
-  acceptance_ids="$(./plans/workflow_acceptance.sh --list 2>/dev/null | awk '{print $1}')"
+if ! validate_enforcement; then
+  exit 1
 fi
 
-while IFS= read -r test_ref; do
-  [[ -z "$test_ref" ]] && continue
-  case "$test_ref" in
-    *"plans/workflow_acceptance.sh"*)
-      if [[ -z "$acceptance_ids" ]]; then
-        echo "ERROR: unable to list workflow acceptance test ids" >&2
-        exit 1
-      fi
-      if [[ "$test_ref" != *"Test "* ]]; then
-        continue
-      fi
-      ids_part="${test_ref#*Test }"
-      ids_part="${ids_part%%)*}"
-      ids_part="$(echo "$ids_part" | sed 's/Test[[:space:]]//g' | tr '/,' '\n')"
-      while IFS= read -r token; do
-        token="$(echo "$token" | tr -d ' ')"
-        [[ -z "$token" ]] && continue
-        if [[ "$token" == *-* ]]; then
-          start="${token%-*}"
-          end="${token#*-}"
-          if [[ ! "$start" =~ ^[0-9]+$ || ! "$end" =~ ^[0-9]+$ ]]; then
-            echo "ERROR: invalid test range: $token" >&2
-            exit 1
-          fi
-          for id in $(seq "$start" "$end"); do
-            if ! printf '%s\n' "$acceptance_ids" | grep -qx "$id"; then
-              echo "ERROR: unknown test id: $id" >&2
-              exit 1
-            fi
-          done
-        else
-          if ! printf '%s\n' "$acceptance_ids" | grep -qx "$token"; then
-            echo "ERROR: unknown test id: $token" >&2
-            exit 1
-          fi
-        fi
-      done < <(printf '%s\n' "$ids_part")
-      ;;
-    *)
-      ;;
-  esac
-done < <(jq -r '.rules[].tests[]' "$map_file")
+if ! validate_tests; then
+  exit 1
+fi
 
 echo "workflow contract gate: OK"
