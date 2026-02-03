@@ -178,6 +178,7 @@ If a required script/artifact is missing or invalid, the workflow must produce a
 - MUST avoid brittle acceptance checks that grep long prose sentences; prefer stable markers (the HTML comments at top) and short headers.
 - MUST run `./plans/workflow_contract_gate.sh` and update workflow acceptance mapping assertions when editing `specs/WORKFLOW_CONTRACT.md` or `plans/workflow_contract_map.json`.
 - MUST add acceptance coverage that exercises the exact validator path and asserts non-zero exit + specific error message when introducing or tightening workflow validation rules.
+- MUST run verify/push from a clean verify worktree (set `git config --worktree ralph.verify-worktree true`) to avoid clobbering WIP.
 
 ## Top time/token sinks (fix focus)
 - `plans/workflow_acceptance.sh` full runtime → keep acceptance tests targeted; avoid unnecessary workflow file edits; batch changes before full runs.
