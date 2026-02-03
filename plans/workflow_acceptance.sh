@@ -1395,6 +1395,14 @@ if ! run_in_worktree grep -Fq "MUST keep fast precheck set limited to schema/sel
   echo "FAIL: AGENTS.md missing fast precheck constraint" >&2
   exit 1
 fi
+if ! run_in_worktree grep -Fq 'MUST run `./plans/workflow_contract_gate.sh` and update workflow acceptance mapping assertions when editing `specs/WORKFLOW_CONTRACT.md` or `plans/workflow_contract_map.json`.' "AGENTS.md"; then
+  echo "FAIL: AGENTS.md missing workflow contract/map gate rule" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq 'MUST add acceptance coverage that exercises the exact validator path and asserts non-zero exit + specific error message when introducing or tightening workflow validation rules.' "AGENTS.md"; then
+  echo "FAIL: AGENTS.md missing workflow validator acceptance rule" >&2
+  exit 1
+fi
 if ! run_in_worktree grep -Fq "<!-- AGENTS_STUB_V2 -->" "AGENTS.md"; then
   echo "FAIL: AGENTS.md missing stub marker" >&2
   exit 1
@@ -4831,7 +4839,11 @@ reset_state
 rate_prd="$WORKTREE/plans/prd_rate_limit.json"
 write_valid_prd "$rate_prd" "S1-014"
 run_in_worktree git add "$rate_prd" >/dev/null 2>&1
-run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd rate limit" >/dev/null 2>&1
+if run_in_worktree git diff --cached --quiet -- "$rate_prd"; then
+  run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit --allow-empty -m "acceptance: seed prd rate limit" >/dev/null 2>&1
+else
+  run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed prd rate limit" >/dev/null 2>&1
+fi
 cat > "$STUB_DIR/agent_select.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
