@@ -4110,6 +4110,8 @@ if test_start "10c" "update_task blocks non-promotion verify"; then
 reset_state
 valid_prd_10c="$WORKTREE/plans/prd_acceptance_non_promo.json"
 write_valid_prd "$valid_prd_10c" "S1-010"
+# Ensure git sees a change even if the baseline file matches the template.
+printf '\n' >> "$valid_prd_10c"
 run_in_worktree git add "$valid_prd_10c" >/dev/null 2>&1
 if run_in_worktree git diff --cached --quiet -- "$valid_prd_10c"; then
   run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit --allow-empty -m "acceptance: seed prd non-promo" >/dev/null 2>&1
@@ -5125,6 +5127,66 @@ JSON
   fi
 '
   test_pass "22"
+fi
+
+if test_start "22b" "allowlist_check reports missing entries with error message"; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  tmpdir=".ralph/allowlist_check_message"
+  mkdir -p "$tmpdir"
+  allowlist="$tmpdir/allowlist.txt"
+  prd="$tmpdir/prd.json"
+
+  cat > "$allowlist" <<EOF
+bash -n plans/verify.sh
+EOF
+
+  cat > "$prd" <<JSON
+{
+  "project": "Test",
+  "source": {"implementation_plan_path": "x", "contract_path": "y"},
+  "rules": {},
+  "items": [
+    {
+      "id": "T-002",
+      "priority": 1,
+      "phase": 1,
+      "slice": 1,
+      "category": "test",
+      "description": "test",
+      "contract_refs": [],
+      "plan_refs": [],
+      "scope": {"touch": ["plans/verify.sh"]},
+      "acceptance": ["a", "b", "c"],
+      "steps": ["1", "2", "3", "4", "5"],
+      "verify": ["./plans/verify.sh", "cargo test --not-in-allowlist"],
+      "evidence": [],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": false
+    }
+  ]
+}
+JSON
+
+  set +e
+  output=$(RPH_STORY_VERIFY_ALLOWLIST_FILE="$allowlist" ./plans/story_verify_allowlist_check.sh "$prd" 2>&1)
+  rc=$?
+  set -e
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: allowlist_check should exit non-zero on missing entries" >&2
+    exit 1
+  fi
+  if ! echo "$output" | grep -Fq "[allowlist_check] ERROR: Missing allowlist entries"; then
+    echo "FAIL: allowlist_check missing expected error message" >&2
+    echo "$output" >&2
+    exit 1
+  fi
+'
+  test_pass "22b"
 fi
 
 if test_start "23" "allowlist_check passes when all entries present" 1; then
