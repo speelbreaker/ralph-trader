@@ -4,7 +4,12 @@
 - [ ] All modified/added files are enumerated (code + docs + scripts + tests).
 - [ ] Each file has a 1-line review note (what changed + risk).
 - [ ] New files are intentional and referenced in the review summary.
+- [ ] Skills consulted are listed (SKILLS/*) or explicitly marked "none".
 - [ ] Any validator/contract scripts referenced by a plan are opened and reviewed (source of truth beats plan text).
+- [ ] Concurrency check: identify shared files written without locks (cache/logs/artifacts) and assess multi-process risks.
+- [ ] Aggregation/merge check: verify expected inputs are complete (e.g., all slices present) and missing inputs are fail-closed.
+- [ ] Cache trust boundary: validate cache schema/path safety; cached paths must be constrained to repo.
+- [ ] Platform assumptions: check for macOS bash incompatibilities (e.g., wait -n) or GNU-only tools.
 
 ## Evidence Gate (Required)
 - [ ] Proof includes exact commands, 1–3 key output lines, and artifact/log paths.
@@ -33,6 +38,8 @@
 - [ ] Line-number references are avoided or validated; prefer function names/snippets.
 - [ ] Schema fields and counts referenced in plans/pseudocode are verified against validator scripts (e.g., `plans/prd_audit_check.sh`).
 - [ ] Cache key/dependency scope claims are traced to actual inputs (prompt templates, slice prep, validators, runner scripts).
+- [ ] Fail-closed audit: any `|| true`, suppressed errors, or ignored exits are reviewed for silent-success risk.
+- [ ] New workflow paths include at least one integration/smoke test (or an explicit rationale for omission).
 
 ## Block Conditions
 Mark the PR BLOCKED if any are true:

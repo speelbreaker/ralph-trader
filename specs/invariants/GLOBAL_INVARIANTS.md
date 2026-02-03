@@ -226,3 +226,48 @@ Scope note: Only numbered sections, Definitions, and Appendix A are normative.
 - **Observability:** metric: wal_duplicate_send_blocked, event: intent_resend_blocked
 - **Contract refs:** §1.1.1, §2.4
 - **AT coverage:** AT-928, AT-233
+
+---
+
+## Appendix A (Normative) — Risk Gate + State Machine Summary
+
+This appendix summarizes contract-required safety behavior for risk gating,
+reconciliation, and idempotency. It is not a full policy spec; it is a
+fail-closed baseline that MUST hold for every dispatch path.
+
+### A.1 Risk gate inputs (fail-closed)
+- Required inputs for any OPEN intent evaluation:
+  - balances/collateral snapshot
+  - positions snapshot
+  - open orders snapshot
+  - market data (mark/last/bid/ask as required by instrument)
+  - instrument metadata (tick size, min amount, amount step, contract multiplier)
+- If any required input is missing or stale, DENY new OPENs and allow only
+  risk-reducing actions (ReduceOnly/CLOSE/HEDGE) per TradingMode rules.
+- If staleness cannot be computed, treat as stale and degrade.
+- **Contract refs:** §2.2.1.1 (critical input freshness), Appendix A defaults
+
+### A.2 RiskState ladder (fail-closed)
+- Allowed values: `Healthy`, `Degraded`, `Maintenance`, `Kill`.
+- Unknown or unparseable RiskState MUST map to `Degraded`.
+- When RiskState != `Healthy`, PolicyGuard MUST compute TradingMode
+  `ReduceOnly` or `Kill` and block OPENs.
+- **Contract refs:** §2.2.3, §3.4
+
+### A.3 Reconciliation and unknown exchange state
+- On restart, WS sequencing gap, session termination, or ambiguity in order
+  truth, the open-permission latch MUST be set with reconcile-class reason codes.
+- OPENs remain blocked until reconciliation clears all reason codes.
+- Reconcile MUST verify open orders/trades before any new OPENs are allowed.
+- **Contract refs:** §2.2.4, §3.4
+
+### A.4 Idempotency and no blind resend
+- `client_order_id` (or equivalent) MUST be stable for a given intent.
+- Do NOT resend unless the WAL marks the intent unsent AND reconcile proves the
+  order does not exist on the exchange.
+- **Contract refs:** §2.4, §3.4
+
+### A.5 Rate limits and session termination
+- On 429/10028 or explicit session termination, enter a degraded state and block
+  OPENs until reconnect + reconcile succeed.
+- **Contract refs:** §3.3, §2.2.4

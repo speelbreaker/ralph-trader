@@ -54,6 +54,10 @@ This Patch Summary is non-normative; see §0.0 for normative scope.
 ## Definitions
 Profile: CSP
 
+Note: Global fail-closed risk gates and reconciliation/idempotency invariants are
+summarized in `specs/invariants/GLOBAL_INVARIANTS.md` Appendix A. This appendix
+does not replace this contract; it is a convenience index.
+
 ### Acceptance Test Isolation Requirements (Normative)
 
 For any **new guard** (a rule, latch, monitor, or gate) that can block an OPEN, change TradingMode, or emit a SafetyOverride:

@@ -200,6 +200,46 @@ except ValidationError as e:
 
 ## Recommended Workflows
 
+### Mandatory Skill Lookup (BEFORE Starting Tasks)
+
+**CRITICAL: Before performing these tasks, check SKILLS/ for relevant skills and USE them.**
+
+| Task | Required Skill | Why |
+|------|----------------|-----|
+| Review a plan | `/plan-review` | Ad-hoc reviews miss failure modes |
+| Review a PR | `/pr-review` | Systematic checklist prevents omissions |
+| Review risky code | `/failure-mode-review` | Traces failure paths, not just happy paths |
+| Implement PRD story | `/ralph-loop` | Enforces WIP=1, verification gates |
+| Write acceptance test | `/acceptance-test` | Contract alignment |
+| Check contracts | `/contract-check` | Cross-reference validation |
+
+**Process:**
+```
+1. User requests: "review this plan"
+2. FIRST: Check if SKILLS/*review*.md or similar exists
+3. Read the skill file
+4. Follow the skill's checklist systematically
+5. Do NOT do ad-hoc work that the skill covers
+```
+
+**Why this matters:**
+- Skills encode lessons learned from past failures
+- Ad-hoc reviews have happy-path bias
+- Checklists catch what intuition misses
+- Skipping skills = repeating past mistakes
+
+**Anti-pattern:**
+```
+User: "review this plan"
+Agent: [reads plan, gives opinions]  # WRONG - skipped skill lookup
+```
+
+**Correct pattern:**
+```
+User: "review this plan"
+Agent: [checks SKILLS/, finds plan-review.md, reads it, follows checklist]  # RIGHT
+```
+
 ### PRD Story Implementation (MANDATORY: Ralph Loop Only)
 
 **CRITICAL: Pending PRD stories (`passes=false`) in `plans/prd.json` MUST be implemented via the Ralph harness.**
@@ -338,6 +378,20 @@ For each claimed change in the PR:
 - [ ] Test validates invocation (not just existence)
 - [ ] Ordering/sequencing is correct
 - [ ] Error paths handled
+
+**6. Failure mode analysis (for risky code)**
+
+Use `/failure-mode-review` skill when PR touches:
+- Caching or persistence logic
+- Cross-script/cross-module integrations (env vars, file paths)
+- State machines or lifecycle management
+- Code handling external inputs (files, JSON, env vars)
+
+Key questions:
+- For each env var: did you verify the consumer reads that exact name?
+- For each cache: what happens when source disappears but cache remains?
+- For each error return: what does the caller do with it?
+- For each `|| true` or silent catch: is silent failure safe here?
 
 ## PRD Audit Patterns
 

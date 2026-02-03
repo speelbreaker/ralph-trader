@@ -21,6 +21,9 @@
 - `plans/prd.json` (story backlog).
 - `plans/progress.txt`, `plans/ideas.md`, `plans/pause.md` (handoff/notes).
 
+## Documentation index
+- `docs/codebase/knowledge_index.md` (authoritative doc entry points).
+
 ## Generated artifacts
 - `Cargo.lock`.
 - `plans/logs/*` and `.ralph/*` (harness runtime).

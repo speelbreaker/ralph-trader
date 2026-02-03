@@ -144,6 +144,16 @@ Use `/contract-review` instead (or in addition) when PR touches:
 - `specs/state_machines/`
 - Any TradingMode, PolicyGuard, or dispatch logic
 
+## When to Use /failure-mode-review
+
+Use `/failure-mode-review` for adversarial analysis when PR touches:
+- Caching or persistence logic (ask: "what if cache is stale?")
+- Cross-script integrations with env vars (ask: "does consumer read this var name?")
+- State machines or lifecycle management (ask: "what if source disappears?")
+- External input handling (files, JSON, env vars) (ask: "what if malformed?")
+
+This skill focuses on "how will this code fail" rather than "does this code look right."
+
 ## Review Depth by File Type
 
 | File Type | Depth | Focus |
