@@ -112,11 +112,11 @@ while IFS= read -r test_ref; do
       ids_part="${ids_part%%)*}"
       ids_part="$(echo "$ids_part" | tr '/,' '  ' | tr -s ' ')"
       for token in $ids_part; do
-        if [[ "$token" =~ ^[0-9]+-[0-9]+$ ]]; then
+        if [[ "$token" == *-* ]]; then
           start="${token%-*}"
           end="${token#*-}"
-          for id in $(seq "$start" "$end"); do
-            if ! printf '%s\n' "$acceptance_ids" | grep -qx "$id"; then
+          for id in "$start" "$end"; do
+            if [[ -n "$id" ]] && ! printf '%s\n' "$acceptance_ids" | grep -qx "$id"; then
               echo "ERROR: unknown workflow acceptance test id: $id" >&2
               exit 1
             fi
