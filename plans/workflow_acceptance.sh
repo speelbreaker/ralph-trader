@@ -779,6 +779,7 @@ if [[ -f "$WORKTREE/verify.sh" ]]; then
   chmod +x "$WORKTREE/verify.sh" >/dev/null 2>&1 || true
 fi
 run_in_worktree git update-index --skip-worktree "${OVERLAY_FILES[@]}" >/dev/null 2>&1 || true
+run_in_worktree git update-index --no-skip-worktree "plans/fixtures/acceptance_touch.txt" >/dev/null 2>&1 || true
 
 if test_start "0f.1" "ssot lint"; then
   run_in_worktree bash -c 'set -euo pipefail; bash plans/ssot_lint.sh'
