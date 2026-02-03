@@ -616,8 +616,7 @@ MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
 CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
 SPEC_LINT_TIMEOUT="${SPEC_LINT_TIMEOUT:-2m}"
 POSTMORTEM_CHECK_TIMEOUT="${POSTMORTEM_CHECK_TIMEOUT:-1m}"
-PREFLIGHT_TIMEOUT="${PREFLIGHT_TIMEOUT:-30s}"
-WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-30m}"
+WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-20m}"
 WORKFLOW_ACCEPTANCE_JOBS="${WORKFLOW_ACCEPTANCE_JOBS:-auto}"
 VENDOR_DOCS_LINT_TIMEOUT="${VENDOR_DOCS_LINT_TIMEOUT:-1m}"
 CONTRACT_COVERAGE_CI_SENTINEL="${CONTRACT_COVERAGE_CI_SENTINEL:-plans/contract_coverage_ci_strict}"
@@ -736,7 +735,7 @@ preflight_args=()
 if is_ci || [[ "${VERIFY_PREFLIGHT_STRICT:-0}" == "1" ]]; then
   preflight_args+=(--strict)
 fi
-run_logged "preflight" "$PREFLIGHT_TIMEOUT" ./plans/preflight.sh "${preflight_args[@]}"
+run_logged "preflight" "30s" ./plans/preflight.sh "${preflight_args[@]}"
 
 # -----------------------------------------------------------------------------
 # 0a) Parallel primitives smoke test

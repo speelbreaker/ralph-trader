@@ -7,9 +7,9 @@ map_file="${WORKFLOW_CONTRACT_MAP:-plans/workflow_contract_map.json}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 
-# grep is required for test token extraction; rg is optional (used for ID extraction if available)
-if ! command -v grep >/dev/null 2>&1; then
-  echo "ERROR: grep required" >&2
+# Check that at least one of rg or grep is available
+if ! command -v rg >/dev/null 2>&1 && ! command -v grep >/dev/null 2>&1; then
+  echo "ERROR: either ripgrep or grep required" >&2
   exit 2
 fi
 if [[ ! -f "$spec_file" ]]; then
@@ -86,14 +86,14 @@ get_acceptance_test_ids() {
     plans/workflow_acceptance.sh)"
 
   # Check for duplicates
-  dup_check="$(printf '%s\n' "$ids" | sort | uniq -d)"
+  dup_check="$(echo "$ids" | sort | uniq -d)"
   if [[ -n "$dup_check" ]]; then
     echo "ERROR: duplicate test IDs in workflow_acceptance.sh:" >&2
     echo "$dup_check" | sed 's/^/- /' >&2
     return 1
   fi
 
-  printf '%s\n' "$ids" | sort -u
+  echo "$ids" | sort -u
 }
 
 # Helper: extract Test tokens with grep (required)
@@ -153,7 +153,7 @@ validate_tests() {
   local errors=""
 
   # Pre-load acceptance test IDs once (direct sed parsing, not --list which has setup overhead)
-  local acceptance_ids=""
+  local acceptance_ids
   if [[ -f "plans/workflow_acceptance.sh" ]]; then
     acceptance_ids="$(get_acceptance_test_ids)"
   fi

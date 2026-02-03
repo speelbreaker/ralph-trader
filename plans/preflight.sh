@@ -32,8 +32,6 @@ for arg in "$@"; do
   esac
 done
 
-CONTRACT_FILE="${CONTRACT_FILE:-specs/CONTRACT.md}"
-
 # --- Counters ---
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -99,7 +97,7 @@ check_file() {
 }
 
 check_file "plans/prd.json" "PRD file"
-check_file "$CONTRACT_FILE" "Contract spec"
+check_file "specs/CONTRACT.md" "Contract spec"
 
 # =============================================================================
 # Tier 2: Fast checks (<30s)
@@ -141,34 +139,29 @@ fi
 
 # 6. Postmortem check: plans/postmortem_check.sh
 POSTMORTEM_CHECK="plans/postmortem_check.sh"
-POSTMORTEM_GATE="${POSTMORTEM_GATE:-1}"
-if [[ "$POSTMORTEM_GATE" == "0" && -z "${CI:-}" ]]; then
-  warn "POSTMORTEM_GATE=0 (disabled locally)"
-else
-  if [[ -x "$POSTMORTEM_CHECK" ]]; then
-    # Check if BASE_REF is resolvable
-    BASE_REF="${BASE_REF:-origin/main}"
-    if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-      if [[ "$STRICT_MODE" == "1" ]]; then
-        fail "Cannot verify BASE_REF=$BASE_REF (required in --strict mode)"
-      else
-        warn "Cannot verify BASE_REF=$BASE_REF (postmortem check skipped)"
-      fi
+if [[ -x "$POSTMORTEM_CHECK" ]]; then
+  # Check if BASE_REF is resolvable
+  BASE_REF="${BASE_REF:-origin/main}"
+  if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+    if [[ "$STRICT_MODE" == "1" ]]; then
+      fail "Cannot verify BASE_REF=$BASE_REF (required in --strict mode)"
     else
-      # Run the postmortem check
-      if BASE_REF="$BASE_REF" "$POSTMORTEM_CHECK" >/dev/null 2>&1; then
-        pass "Postmortem check"
-      else
-        fail "Postmortem check failed (run $POSTMORTEM_CHECK for details)"
-      fi
+      warn "Cannot verify BASE_REF=$BASE_REF (postmortem check skipped)"
     fi
-  elif [[ -f "$POSTMORTEM_CHECK" ]]; then
-    echo "[FAIL] Postmortem check not executable: $POSTMORTEM_CHECK (setup error)" >&2
-    exit 2
   else
-    echo "[FAIL] Missing postmortem check: $POSTMORTEM_CHECK (setup error)" >&2
-    exit 2
+    # Run the postmortem check
+    if BASE_REF="$BASE_REF" "$POSTMORTEM_CHECK" >/dev/null 2>&1; then
+      pass "Postmortem check"
+    else
+      fail "Postmortem check failed (run $POSTMORTEM_CHECK for details)"
+    fi
   fi
+elif [[ -f "$POSTMORTEM_CHECK" ]]; then
+  echo "[FAIL] Postmortem check not executable: $POSTMORTEM_CHECK (setup error)" >&2
+  exit 2
+else
+  echo "[FAIL] Missing postmortem check: $POSTMORTEM_CHECK (setup error)" >&2
+  exit 2
 fi
 
 # =============================================================================
