@@ -1246,7 +1246,7 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "preflight_strict="--strict"" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q 'preflight_strict="--strict"' "plans/verify.sh"; then
     echo "FAIL: verify must pass --strict to preflight in CI or when requested" >&2
     exit 1
   fi
