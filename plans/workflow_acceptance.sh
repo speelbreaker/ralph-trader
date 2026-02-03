@@ -673,6 +673,7 @@ OVERLAY_FILES=(
   "plans/fixtures/prd/reason_code_missing_values.json"
   "plans/fixtures/prd/missing_failure_mode.json"
   "plans/fixtures/prd/placeholder_todo.json"
+  "plans/fixtures/acceptance_touch.txt"
   "specs/CONTRACT.md"
   "specs/IMPLEMENTATION_PLAN.md"
   "specs/POLICY.md"
@@ -2080,7 +2081,7 @@ write_valid_prd() {
       "contract_refs": ["CONTRACT.md §1"],
       "plan_refs": ["IMPLEMENTATION_PLAN.md §1"],
       "scope": {
-        "touch": ["crates/soldier_core/src/lib.rs"],
+        "touch": ["plans/fixtures/acceptance_touch.txt"],
         "avoid": []
       },
       "acceptance": ["a", "b", "c"],
@@ -2104,11 +2105,6 @@ write_valid_prd() {
 }
 JSON
 
-  if [[ -n "${WORKTREE:-}" ]]; then
-    local touch_file="crates/soldier_core/src/lib.rs"
-    mkdir -p "$WORKTREE/$(dirname "$touch_file")"
-    : > "$WORKTREE/$touch_file"
-  fi
 }
 
 write_invalid_prd() {
@@ -2338,7 +2334,7 @@ cat > "$STUB_DIR/agent_mark_pass_with_commit.sh" <<'EOF'
 set -euo pipefail
 id="${SELECTED_ID:-S1-001}"
 progress="${PROGRESS_FILE:-plans/progress.txt}"
-touch_file="${ACCEPTANCE_TOUCH_FILE:-crates/soldier_core/src/lib.rs}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
@@ -2383,7 +2379,7 @@ cat > "$STUB_DIR/agent_commit_with_progress.sh" <<'EOF'
 set -euo pipefail
 id="${SELECTED_ID:-S1-001}"
 progress="${PROGRESS_FILE:-plans/progress.txt}"
-touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
@@ -2423,7 +2419,7 @@ cat > "$STUB_DIR/agent_mentions_complete.sh" <<'EOF'
 set -euo pipefail
 id="${SELECTED_ID:-S1-001}"
 progress="${PROGRESS_FILE:-plans/progress.txt}"
-touch_file="${ACCEPTANCE_TOUCH_FILE:-acceptance_tick.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
 ts="$(date +%Y-%m-%d)"
 cat >> "$progress" <<EOT
 ${ts} - ${id}
@@ -3448,7 +3444,7 @@ run_ralph env \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mentions_complete.sh" \
   SELECTED_ID="S1-002" \
-  ACCEPTANCE_TOUCH_FILE="crates/soldier_core/src/lib.rs" \
+  ACCEPTANCE_TOUCH_FILE="plans/fixtures/acceptance_touch.txt" \
   RPH_PROMPT_FLAG="" \
   RPH_AGENT_ARGS="" \
   RPH_RATE_LIMIT_ENABLED=0 \
