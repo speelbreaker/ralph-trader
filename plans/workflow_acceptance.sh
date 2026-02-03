@@ -1319,12 +1319,12 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q 'WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-20m}"' "plans/verify.sh"; then
-    echo "FAIL: verify must default WORKFLOW_ACCEPTANCE_TIMEOUT to 20m" >&2
+  if ! run_in_worktree grep -q 'WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-30m}"' "plans/verify.sh"; then
+    echo "FAIL: verify must default WORKFLOW_ACCEPTANCE_TIMEOUT to 30m" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "preflight_args+=(--strict)" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q 'preflight_strict="--strict"' "plans/verify.sh"; then
     echo "FAIL: verify must pass --strict to preflight in CI or when requested" >&2
     exit 1
   fi
