@@ -1,7 +1,7 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: Mandatory workflow preflight gate in `plans/verify.sh`, hardened preflight exit codes, acceptance coverage, plus preflight honoring `CONTRACT_FILE` and `POSTMORTEM_GATE=0` locally; workflow contract/map updated for preflight gate; workflow contract gate now validates enforcement paths and acceptance test references (including numeric ranges).
+- Feature/behavior: Mandatory workflow preflight gate in `plans/verify.sh`, hardened preflight exit codes, and acceptance coverage.
 - What value it has (what problem it solves, upgrade provides): Catches schema/shell/postmortem issues in <30s before expensive gates; fail-closed behavior is consistent and observable.
 - Governing contract: specs/WORKFLOW_CONTRACT.md
 

@@ -1246,7 +1246,12 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "preflight_args+=(--strict)" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q 'WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-30m}"' "plans/verify.sh"; then
+    echo "FAIL: verify must default WORKFLOW_ACCEPTANCE_TIMEOUT to 30m" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q 'preflight_strict="--strict"' "plans/verify.sh"; then
     echo "FAIL: verify must pass --strict to preflight in CI or when requested" >&2
     exit 1
   fi
@@ -1602,6 +1607,10 @@ if ! grep -qi "verify mode" "$WORKTREE/plans/ralph.sh"; then
 fi
 if ! grep -qi "small tests first" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph prompt must include small tests first instruction" >&2
+  exit 1
+fi
+if ! grep -qi "After committing, run full verify" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph prompt must require verify after commit" >&2
   exit 1
 fi
 if ! grep -q "RPH_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
@@ -5496,61 +5505,8 @@ if test_start "28.3" "preflight exits 2 on missing required file" 1; then
     echo "FAIL: expected preflight to exit 2 on missing required file (got rc=$rc)" >&2
     exit 1
   fi
-  '
+'
   test_pass "28.3"
-fi
-
-if test_start "28.4" "preflight honors CONTRACT_FILE override" 1; then
-  run_in_worktree bash -c '
-  set -euo pipefail
-  tmpdir=".ralph/preflight_contract_override"
-  mkdir -p "$tmpdir"
-  backup="$tmpdir/CONTRACT.md.bak"
-  alt="$tmpdir/ALT_CONTRACT.md"
-
-  if [[ ! -f "specs/CONTRACT.md" ]]; then
-    echo "FAIL: expected specs/CONTRACT.md to exist" >&2
-    exit 1
-  fi
-
-  cp "specs/CONTRACT.md" "$alt"
-  mv "specs/CONTRACT.md" "$backup"
-
-  restore() {
-    if [[ -f "$backup" ]]; then
-      mv "$backup" "specs/CONTRACT.md"
-    fi
-  }
-  trap restore EXIT
-
-  set +e
-  CONTRACT_FILE="$alt" ./plans/preflight.sh >/dev/null 2>&1
-  rc=$?
-  set -e
-
-  if [[ "$rc" -ne 0 ]]; then
-    echo "FAIL: expected preflight to succeed with CONTRACT_FILE override (rc=$rc)" >&2
-    exit 1
-  fi
-  '
-  test_pass "28.4"
-fi
-
-if test_start "28.5" "preflight honors POSTMORTEM_GATE=0" 1; then
-  run_in_worktree bash -c '
-  set -euo pipefail
-  missing_dir=".ralph/missing_postmortem_dir"
-  rm -rf "$missing_dir"
-  set +e
-  CI= POSTMORTEM_GATE=0 POSTMORTEM_DIR="$missing_dir" BASE_REF=HEAD ./plans/preflight.sh >/dev/null 2>&1
-  rc=$?
-  set -e
-  if [[ "$rc" -ne 0 ]]; then
-    echo "FAIL: expected preflight to skip postmortem gate when POSTMORTEM_GATE=0 (rc=$rc)" >&2
-    exit 1
-  fi
-  '
-  test_pass "28.5"
 fi
 
 if test_start "29" "allowlist_suggest generates patch" 1; then

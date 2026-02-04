@@ -15,6 +15,7 @@ evals/
 # Local IDE/Agent state
 .claude/
 .obsidian/
+.code/
 
 # Local temp files
 proxy.log

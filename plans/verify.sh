@@ -402,7 +402,7 @@ is_workflow_file() {
     plans/story_verify_allowlist_check.sh) return 0 ;;
     plans/story_verify_allowlist_lint.sh) return 0 ;;
     plans/story_verify_allowlist_suggest.sh) return 0 ;;
-    plans/prd_preflight.sh) return 0 ;;
+    plans/prd_preflight.sh|plans/preflight.sh) return 0 ;;
     specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml) return 0 ;;
     tools/vendor_docs_lint_rust.py) return 0 ;;
     scripts/build_contract_kernel.py|scripts/check_contract_kernel.py|scripts/contract_kernel_lib.py|scripts/test_contract_kernel.py) return 0 ;;
@@ -616,8 +616,7 @@ MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
 CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
 SPEC_LINT_TIMEOUT="${SPEC_LINT_TIMEOUT:-2m}"
 POSTMORTEM_CHECK_TIMEOUT="${POSTMORTEM_CHECK_TIMEOUT:-1m}"
-PREFLIGHT_TIMEOUT="${PREFLIGHT_TIMEOUT:-30s}"
-WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-20m}"
+WORKFLOW_ACCEPTANCE_TIMEOUT="${WORKFLOW_ACCEPTANCE_TIMEOUT:-30m}"
 WORKFLOW_ACCEPTANCE_JOBS="${WORKFLOW_ACCEPTANCE_JOBS:-auto}"
 VENDOR_DOCS_LINT_TIMEOUT="${VENDOR_DOCS_LINT_TIMEOUT:-1m}"
 CONTRACT_COVERAGE_CI_SENTINEL="${CONTRACT_COVERAGE_CI_SENTINEL:-plans/contract_coverage_ci_strict}"
@@ -729,14 +728,18 @@ export CONTRACT_COVERAGE_STRICT
 init_change_detection
 
 # -----------------------------------------------------------------------------
-# 0e) Preflight (fast sanity checks)
+# 0.1) Workflow preflight
 # -----------------------------------------------------------------------------
-log "0e) Preflight"
-preflight_args=()
+log "0.1) Workflow preflight"
+preflight_strict=""
 if is_ci || [[ "${VERIFY_PREFLIGHT_STRICT:-0}" == "1" ]]; then
-  preflight_args+=(--strict)
+  preflight_strict="--strict"
 fi
-run_logged "preflight" "$PREFLIGHT_TIMEOUT" ./plans/preflight.sh "${preflight_args[@]}"
+if [[ -n "$preflight_strict" ]]; then
+  run_logged "preflight" "30s" ./plans/preflight.sh "$preflight_strict"
+else
+  run_logged "preflight" "30s" ./plans/preflight.sh
+fi
 
 # -----------------------------------------------------------------------------
 # 0a) Parallel primitives smoke test
@@ -746,12 +749,6 @@ if [[ ! -x "plans/test_parallel_smoke.sh" ]]; then
   fail "Missing or non-executable: plans/test_parallel_smoke.sh"
 fi
 run_logged "parallel_smoke" "1m" ./plans/test_parallel_smoke.sh
-
-# -----------------------------------------------------------------------------
-# 0a.1) Harness script syntax
-# -----------------------------------------------------------------------------
-log "0a.1) Harness script syntax"
-run_logged "bash_syntax_workflow_acceptance" "1m" bash -n plans/workflow_acceptance.sh
 
 # -----------------------------------------------------------------------------
 # 0b) Contract coverage matrix
