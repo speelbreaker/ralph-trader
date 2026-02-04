@@ -4,6 +4,9 @@ set -euo pipefail
 # Pre-commit hook: run safety checks before committing
 # Skip with: git commit --no-verify
 
+# Ensure we're at repo root (hooks run from caller's working directory)
+cd "$(git rev-parse --show-toplevel)"
+
 echo "Running pre-commit checks..."
 
 # 1. SSOT lint (existing)

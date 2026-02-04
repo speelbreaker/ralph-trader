@@ -97,7 +97,10 @@ check_file() {
 }
 
 check_file "plans/prd.json" "PRD file"
-check_file "specs/CONTRACT.md" "Contract spec"
+
+# Honor CONTRACT_FILE override (consistent with verify.sh/ralph.sh)
+CONTRACT_FILE="${CONTRACT_FILE:-specs/CONTRACT.md}"
+check_file "$CONTRACT_FILE" "Contract spec"
 
 # =============================================================================
 # Tier 2: Fast checks (<30s)
@@ -139,7 +142,12 @@ fi
 
 # 6. Postmortem check: plans/postmortem_check.sh
 POSTMORTEM_CHECK="plans/postmortem_check.sh"
-if [[ -x "$POSTMORTEM_CHECK" ]]; then
+POSTMORTEM_GATE="${POSTMORTEM_GATE:-1}"
+
+# Honor POSTMORTEM_GATE=0 for local runs (consistent with verify.sh)
+if [[ "$POSTMORTEM_GATE" == "0" && -z "${CI:-}" ]]; then
+  warn "POSTMORTEM_GATE=0 (postmortem check skipped locally)"
+elif [[ -x "$POSTMORTEM_CHECK" ]]; then
   # Check if BASE_REF is resolvable
   BASE_REF="${BASE_REF:-origin/main}"
   if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
