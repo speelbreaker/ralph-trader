@@ -16,6 +16,26 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+normalize_cache_dir() {
+  local path="$1"
+  if [[ -z "$path" ]]; then
+    echo ""
+    return 0
+  fi
+  if [[ "$path" != /* ]]; then
+    echo "$ROOT/$path"
+  else
+    echo "$path"
+  fi
+}
+
+# Default cache location unless explicitly set (empty disables cache).
+if [[ -z "${WORKFLOW_ACCEPTANCE_CACHE_DIR+x}" ]]; then
+  WORKFLOW_ACCEPTANCE_CACHE_DIR="$ROOT/.ralph/workflow_acceptance_cache"
+fi
+WORKFLOW_ACCEPTANCE_CACHE_DIR="$(normalize_cache_dir "${WORKFLOW_ACCEPTANCE_CACHE_DIR:-}")"
+export WORKFLOW_ACCEPTANCE_CACHE_DIR
+
 usage() {
   cat <<'EOF'
 Usage: ./plans/workflow_acceptance_parallel.sh [jobs] [extra_args...]
@@ -25,6 +45,37 @@ Options:
   --jobs N   Number of parallel workers (default: 4)
   --help     Show this help
 EOF
+}
+
+prepare_cache_repo() {
+  local cache_dir="$1"
+  local err_file
+  if [[ -z "$cache_dir" ]]; then
+    return 0
+  fi
+  err_file="$(mktemp)"
+  mkdir -p "$(dirname "$cache_dir")"
+  if [[ -d "$cache_dir" ]]; then
+    if [[ ! -d "$cache_dir/objects" ]]; then
+      echo "FAIL: cache dir exists but is not a git repo: $cache_dir" >&2
+      rm -f "$err_file"
+      return 1
+    fi
+    git -C "$cache_dir" remote set-url origin "$ROOT" >/dev/null 2>&1 || true
+    if ! git -C "$cache_dir" fetch --prune origin >/dev/null 2>"$err_file"; then
+      echo "FAIL: cache fetch failed: $(cat "$err_file" 2>/dev/null || true)" >&2
+      rm -f "$err_file"
+      return 1
+    fi
+  else
+    if ! git clone --mirror "$ROOT" "$cache_dir" >/dev/null 2>"$err_file"; then
+      echo "FAIL: cache clone failed: $(cat "$err_file" 2>/dev/null || true)" >&2
+      rm -f "$err_file"
+      return 1
+    fi
+  fi
+  rm -f "$err_file"
+  return 0
 }
 
 JOBS=""
@@ -71,6 +122,13 @@ fi
 if (( JOBS < 1 )); then
   echo "FAIL: jobs must be >= 1 (got: $JOBS)" >&2
   exit 2
+fi
+
+if [[ -n "$WORKFLOW_ACCEPTANCE_CACHE_DIR" ]]; then
+  if ! prepare_cache_repo "$WORKFLOW_ACCEPTANCE_CACHE_DIR"; then
+    exit 1
+  fi
+  export WORKFLOW_ACCEPTANCE_CACHE_READY=1
 fi
 
 # Get unique test IDs from --list output (dedupe duplicates if present)
