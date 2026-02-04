@@ -1387,27 +1387,27 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "should_run_rust_gates" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "should_run_rust_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware rust gate selection" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "should_run_python_gates" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "should_run_python_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware python gate selection" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "ruff.toml" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "ruff.toml" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must detect ruff config changes for python gates" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "should_run_node_gates" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "should_run_node_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware node gate selection" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q ".node-version" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q ".node-version" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must detect .node-version changes for node gates" >&2
     exit 1
   fi
