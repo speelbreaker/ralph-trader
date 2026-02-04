@@ -687,7 +687,11 @@ OVERLAY_FILES=(
   "plans/ralph.sh"
   "plans/verify.sh"
   "plans/workflow_files_allowlist.txt"
+  "plans/lib/verify_utils.sh"
   "plans/lib/change_detection.sh"
+  "plans/lib/rust_gates.sh"
+  "plans/lib/python_gates.sh"
+  "plans/lib/node_gates.sh"
   "plans/workflow_verify.sh"
   "plans/update_task.sh"
   "plans/prd.json"
@@ -810,6 +814,9 @@ done
 scripts_to_chmod=(
   "ralph.sh"
   "verify.sh"
+  "lib/rust_gates.sh"
+  "lib/python_gates.sh"
+  "lib/node_gates.sh"
   "workflow_verify.sh"
   "workflow_acceptance_parallel.sh"
   "update_task.sh"
@@ -1774,14 +1781,15 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
     set -euo pipefail
 
     verify="plans/verify.sh"
+    utils="plans/lib/verify_utils.sh"
 
     # 1. Core functions exist
-    if ! grep -q "^run_parallel_group()" "$verify"; then
+    if ! grep -q "^run_parallel_group()" "$verify" && ! grep -q "^run_parallel_group()" "$utils"; then
       echo "FAIL: run_parallel_group() not found" >&2
       exit 1
     fi
 
-    if ! grep -q "^detect_cpus()" "$verify"; then
+    if ! grep -q "^detect_cpus()" "$verify" && ! grep -q "^detect_cpus()" "$utils"; then
       echo "FAIL: detect_cpus() not found" >&2
       exit 1
     fi
@@ -1800,21 +1808,32 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
     done
 
     # 3. Timing artifacts (E-RE, ordering tolerant)
-    if ! grep -Eq '\''\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time'\'' "$verify"; then
+    if ! grep -Eq '\''\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time'\'' "$verify" && \
+       ! grep -Eq '\''\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time'\'' "$utils"; then
       echo "FAIL: Timing artifact pattern not found" >&2
       exit 1
     fi
 
     # 4. Safety guards
     for var in RUN_LOGGED_SUPPRESS_EXCERPT RUN_LOGGED_SKIP_FAILED_GATE RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL; do
-      if ! grep -q "\${${var}:-}" "$verify"; then
+      if ! grep -q "\${${var}:-}" "$verify" && ! grep -q "\${${var}:-}" "$utils"; then
         echo "FAIL: Unbound guard for ${var} not found" >&2
         exit 1
       fi
     done
 
+    # 4b. Stack scripts must preserve parallel guard vars
+    for script in plans/lib/rust_gates.sh plans/lib/python_gates.sh plans/lib/node_gates.sh; do
+      for var in RUN_LOGGED_SUPPRESS_EXCERPT RUN_LOGGED_SKIP_FAILED_GATE RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL; do
+        if ! grep -q "${var}=\"\${${var}:-}\"" "$script"; then
+          echo "FAIL: ${script} does not preserve ${var}" >&2
+          exit 1
+        fi
+      done
+    done
+
     # 5. Precedence fix (marker-based, robust to formatting)
-    if ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$verify"; then
+    if ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$verify" && ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$utils"; then
       echo "FAIL: Timeout precedence fix marker not found" >&2
       exit 1
     fi
