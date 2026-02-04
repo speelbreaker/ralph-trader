@@ -1,8 +1,8 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: Added shared clone cache wiring for workflow acceptance parallel runs (WORKFLOW_ACCEPTANCE_CACHE_DIR) with acceptance assertions and overlay support for workflow_acceptance_parallel.sh.
-- What value it has (what problem it solves, upgrade provides): Cuts workflow acceptance setup time by reusing the git object store across workers while keeping full coverage.
+- Feature/behavior: Added shared clone cache wiring for workflow acceptance parallel runs (WORKFLOW_ACCEPTANCE_CACHE_DIR) with acceptance assertions and overlay support for workflow_acceptance_parallel.sh. Preflight now honors CONTRACT_FILE and POSTMORTEM_GATE overrides; pre-commit hook now enforces repo-root execution.
+- What value it has (what problem it solves, upgrade provides): Cuts workflow acceptance setup time by reusing the git object store across workers while keeping full coverage; keeps preflight/postmortem behavior consistent with verify/ralph and avoids hook misfires from non-root working directories.
 - Governing contract: specs/WORKFLOW_CONTRACT.md
 
 ## 1) Constraint (ONE)

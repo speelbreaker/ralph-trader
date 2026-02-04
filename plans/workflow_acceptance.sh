@@ -1314,6 +1314,16 @@ fi
     exit 1
   fi
 
+  if ! run_in_worktree grep -q "CONTRACT_FILE" "plans/preflight.sh"; then
+    echo "FAIL: preflight must honor CONTRACT_FILE override" >&2
+    exit 1
+  fi
+
+  if ! run_in_worktree grep -q "POSTMORTEM_GATE" "plans/preflight.sh"; then
+    echo "FAIL: preflight must honor POSTMORTEM_GATE override" >&2
+    exit 1
+  fi
+
   if ! run_in_worktree grep -q "run_logged \"preflight\"" "plans/verify.sh"; then
     echo "FAIL: verify must run plans/preflight.sh under run_logged" >&2
     exit 1
