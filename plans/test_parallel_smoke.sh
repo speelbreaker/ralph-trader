@@ -6,13 +6,15 @@ set -euo pipefail
 # Determine script directory and root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VERIFY_UTILS="$SCRIPT_DIR/lib/verify_utils.sh"
 cd "$ROOT"
 
 echo "Running parallel verify smoke test..."
 echo "Verifying bash syntax and structural changes..."
 
 # 1. Check that run_parallel_group function exists
-if ! grep -q "^run_parallel_group()" "$SCRIPT_DIR/verify.sh"; then
+if ! grep -q "^run_parallel_group()" "$SCRIPT_DIR/verify.sh" && \
+   ! grep -q "^run_parallel_group()" "$VERIFY_UTILS"; then
   echo "[FAIL] run_parallel_group() function not found"
   exit 1
 fi
@@ -40,14 +42,16 @@ fi
 echo "[OK] workflow_acceptance invoked via run_logged"
 
 # 5. Timing instrumentation (E-RE, tolerates ordering)
-if ! grep -Eq '\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time' "$SCRIPT_DIR/verify.sh"; then
+if ! grep -Eq '\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time' "$SCRIPT_DIR/verify.sh" && \
+   ! grep -Eq '\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time' "$VERIFY_UTILS"; then
   echo "[FAIL] Timing file pattern not found"
   exit 1
 fi
 echo "[OK] Timing instrumentation exists"
 
 # 6. detect_cpus function
-if ! grep -q "^detect_cpus()" "$SCRIPT_DIR/verify.sh"; then
+if ! grep -q "^detect_cpus()" "$SCRIPT_DIR/verify.sh" && \
+   ! grep -q "^detect_cpus()" "$VERIFY_UTILS"; then
   echo "[FAIL] detect_cpus() not found"
   exit 1
 fi
@@ -69,7 +73,8 @@ echo "[OK] Status fixtures use parallel runner"
 
 # 9. Unbound variable guards
 for var in RUN_LOGGED_SUPPRESS_EXCERPT RUN_LOGGED_SKIP_FAILED_GATE RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL; do
-  if ! grep -q "\${${var}:-}" "$SCRIPT_DIR/verify.sh"; then
+  if ! grep -q "\${${var}:-}" "$SCRIPT_DIR/verify.sh" && \
+     ! grep -q "\${${var}:-}" "$VERIFY_UTILS"; then
     echo "[FAIL] Unbound guard missing for ${var}"
     exit 1
   fi
@@ -77,7 +82,8 @@ done
 echo "[OK] Unbound variable guards present"
 
 # 10. Operator precedence fix (marker-based, robust to formatting)
-if ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$SCRIPT_DIR/verify.sh"; then
+if ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$SCRIPT_DIR/verify.sh" && \
+   ! grep -q "VERIFY_TIMEOUT_PAREN_FIX" "$VERIFY_UTILS"; then
   echo "[FAIL] Timeout precedence fix marker not found"
   exit 1
 fi
