@@ -90,11 +90,7 @@ required=(
   plans/workflow_files_allowlist.txt
   plans/tests/test_workflow_allowlist_coverage.sh
   plans/tests/test_change_detection_routing.sh
-  plans/lib/verify_utils.sh
   plans/lib/change_detection.sh
-  plans/lib/rust_gates.sh
-  plans/lib/python_gates.sh
-  plans/lib/node_gates.sh
 )
 
 for path in "${required[@]}"; do

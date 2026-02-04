@@ -11,10 +11,6 @@ plans/contract_coverage_promote.sh
 plans/contract_review_validate.sh
 plans/init.sh
 plans/lib/change_detection.sh
-plans/lib/node_gates.sh
-plans/lib/python_gates.sh
-plans/lib/rust_gates.sh
-plans/lib/verify_utils.sh
 plans/prd_audit_check.sh
 plans/prd_audit_merge.py
 plans/prd_audit_merge.sh

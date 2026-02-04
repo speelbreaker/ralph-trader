@@ -124,14 +124,6 @@ if (( JOBS < 1 )); then
   exit 2
 fi
 
-if [[ -z "${WORKFLOW_ACCEPTANCE_CACHE_PARALLEL+x}" ]]; then
-  WORKFLOW_ACCEPTANCE_CACHE_PARALLEL=0
-fi
-
-if (( JOBS > 1 )) && [[ "$WORKFLOW_ACCEPTANCE_CACHE_PARALLEL" != "1" ]]; then
-  WORKFLOW_ACCEPTANCE_CACHE_DIR=""
-fi
-
 if [[ -n "$WORKFLOW_ACCEPTANCE_CACHE_DIR" ]]; then
   if ! prepare_cache_repo "$WORKFLOW_ACCEPTANCE_CACHE_DIR"; then
     exit 1
