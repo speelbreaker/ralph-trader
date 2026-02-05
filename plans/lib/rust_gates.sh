@@ -12,24 +12,6 @@ RUN_LOGGED_SUPPRESS_EXCERPT="${RUN_LOGGED_SUPPRESS_EXCERPT:-}"
 RUN_LOGGED_SKIP_FAILED_GATE="${RUN_LOGGED_SKIP_FAILED_GATE:-}"
 RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL="${RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL:-}"
 
-emit_inner_excerpt() {
-  local name="$1"
-  if [[ -n "${RUN_LOGGED_SUPPRESS_EXCERPT:-}" ]]; then
-    emit_fail_excerpt "$name" "${VERIFY_ARTIFACTS_DIR}/${name}.log"
-  fi
-}
-
-run_logged_or_exit() {
-  local name="$1"
-  local timeout="$2"
-  shift 2
-  if ! run_logged "$name" "$timeout" "$@"; then
-    local rc=$?
-    emit_inner_excerpt "$name"
-    exit "$rc"
-  fi
-}
-
 need cargo
 
 log "2a) Rust format"

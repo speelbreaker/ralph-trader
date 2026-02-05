@@ -120,6 +120,13 @@ emit_fail_excerpt() {
   fi
 }
 
+emit_inner_excerpt() {
+  local name="$1"
+  if [[ -n "${RUN_LOGGED_SUPPRESS_EXCERPT:-}" ]]; then
+    emit_fail_excerpt "$name" "${VERIFY_ARTIFACTS_DIR}/${name}.log"
+  fi
+}
+
 run_logged() {
   local name="$1"
   local duration="$2"
@@ -178,4 +185,25 @@ run_logged() {
     fail "Timeout running ${name} (limit=${duration})"
   fi
   return "$rc"
+}
+
+run_logged_or_exit() {
+  local name="$1"
+  local timeout="$2"
+  shift 2
+  local rc
+  local errexit=0
+  case "$-" in *e*) errexit=1 ;; esac
+
+  set +e
+  run_logged "$name" "$timeout" "$@"
+  rc=$?
+  if [[ "$errexit" == "1" ]]; then
+    set -e
+  fi
+
+  if [[ "$rc" != "0" ]]; then
+    emit_inner_excerpt "$name"
+    exit "$rc"
+  fi
 }
