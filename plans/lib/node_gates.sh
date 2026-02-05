@@ -12,10 +12,6 @@ RUN_LOGGED_SUPPRESS_EXCERPT="${RUN_LOGGED_SUPPRESS_EXCERPT:-}"
 RUN_LOGGED_SKIP_FAILED_GATE="${RUN_LOGGED_SKIP_FAILED_GATE:-}"
 RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL="${RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL:-}"
 
-if [[ "${VERIFY_PARALLEL_STACK:-0}" == "1" ]]; then
-  VERIFY_CONSOLE="quiet"
-fi
-
 if [[ -z "${NODE_PM:-}" ]]; then
   warn "No recognized lockfile; skipping node gates"
   exit 0
