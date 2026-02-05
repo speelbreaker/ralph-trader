@@ -2197,6 +2197,15 @@ if test_start "0k.19" "preflight census passthrough" 1; then
   '
   test_pass "0k.19"
 fi
+
+if test_start "0k.20" "PRD includes S1-012 F1 cert tooling" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    jq -e ".items[] | select(.id==\"S1-012\" and .slice==1)" plans/prd.json >/dev/null
+    grep -q "S1.12 — F1 cert tooling" specs/IMPLEMENTATION_PLAN.md
+  '
+  test_pass "0k.20"
+fi
 if test_start "0l" "--list prints test ids"; then
   list_output="$("$ROOT/plans/workflow_acceptance.sh" --list)"
   if [[ -z "$list_output" ]]; then

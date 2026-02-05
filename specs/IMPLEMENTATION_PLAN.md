@@ -245,6 +245,20 @@ crates/soldier\_core/tests/test\_expiry\_guard.rs::test\_expiry\_no\_retry\_loop
 Evidence artifacts: none  
 Rollout \+ rollback: core safety; rollback via revert only.  
 Observability hooks: counter instrument\_expired\_reject\_total.  
+S1.12 — F1 cert tooling (moved from PL-10; Slice 1 exception)  
+Allowed paths: python/tools/f1_certify.py, scripts/f1_certify.py, artifacts/F1_CERT.json, artifacts/F1_CERT.md, python/tests/test_f1_certify.py  
+New/changed endpoints: none  
+Acceptance criteria:  
+- python/tools/f1_certify.py supports `--window` and `--out` and writes artifacts/F1_CERT.json with required keys: status, generated_ts_ms, build_id, runtime_config_hash, contract_version, expires_at_ts_ms, release_gate_metrics.  
+- scripts/f1_certify.py exists and is a thin wrapper that invokes python/tools/f1_certify.py with identical CLI args.  
+- artifacts/F1_CERT.md summary is produced alongside artifacts/F1_CERT.json.  
+Tests:  
+python/tests/test_f1_certify.py::test_f1_certify_outputs_required_fields  
+python/tests/test_f1_certify.py::test_f1_certify_emits_md_summary  
+Evidence artifacts: artifacts/F1_CERT.json, artifacts/F1_CERT.md  
+Rollout \+ rollback: tooling only; rollback via revert only.  
+Observability hooks: none.  
+Reason: C-2.2.1-F1CERT-001, C-8.2-TEST_SUITE-001  
 Slice 2 — Quantization \+ Labeling \+ Idempotency  
 Slice intent: Deterministic quantization and idempotency across restarts/reconnects.
 
@@ -549,13 +563,14 @@ Rollout \+ rollback: make dispatch helpers pub(crate) so other modules cannot by
 Observability hooks: log GateSequence{steps,result}.  
 F) Dependencies DAG (Phase 1\)  
 S1.1 → S1.2 → S1.3 → S1.4  
+S1.12 (F1 cert tooling) is independent (tooling only).  
 S2.1 → S2.2 → S2.3 → S2.4 → S2.5  
 S3.1 → S3.2 → S3.3  
 S4.1 → S4.2 → S4.3 → S4.4  
 S5.1 → S5.2 → S5.3 → S5.4 → S5.5  
 Hard: S2.\* \+ S3.\* \+ S4.\* must exist before S5.5 is “complete”.  
 G) De-scope line (Phase 1\)  
-No multi-leg atomic execution, no PolicyGuard/Cortex, no endpoints, no replay/canary/F1 cert generation, no Parquet truth/attribution yet.  
+No multi-leg atomic execution, no PolicyGuard/Cortex, no endpoints, no replay/canary, no Parquet truth/attribution yet.  
 PHASE 2 — Guardrails (Slices 6–9)  
 A) Phase Objective  
 Implement runtime containment and safety enforcement: inventory/pending/global exposure gates, margin headroom, AtomicGroup execution with bounded rescue and deterministic emergency close, plus PolicyGuard precedence including runtime F1 certification gate, EvidenceGuard, and Bunker Mode. Add resilience (rate limiting \+ WS gaps \+ reconciliation \+ zombie sweeps) and required owner control-plane endpoints.
@@ -1448,6 +1463,9 @@ test_svi_depth_min_applies_loosened_thresholds()
 If implementation uses different internal test names, add wrapper/alias tests with these exact names calling the real ones.
 
 **PL-10 — f1_certify CLI + F1_CERT schema completeness (contract):**
+
+Exception (2026-02-05): moved into Slice 1 as S1.12 to unblock promotion verify.  
+The requirements below apply to S1.12.
 
 Implement scripts/f1_certify.py --out artifacts/F1_CERT.json (exact CLI) and ensure F1_CERT includes required schema keys: status, generated_ts_ms, build_id, runtime_config_hash, contract_version, expires_at_ts_ms, release_gate_metrics.
 

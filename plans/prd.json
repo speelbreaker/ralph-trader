@@ -1343,6 +1343,77 @@
       "implementation_tests": []
     },
     {
+      "id": "S1-012",
+      "priority": 97,
+      "phase": 1,
+      "slice": 1,
+      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "story_ref": "S1.12 F1 cert tooling",
+      "category": "tooling",
+      "description": "Implement f1_certify tooling and F1_CERT artifacts required for promotion verify.",
+      "contract_refs": [
+        "CONTRACT.md Runtime F1 Gate in PolicyGuard (HARD, runtime enforcement)",
+        "CONTRACT.md - `f1_cert` (from `artifacts/F1_CERT.json`: `{status, generated_ts_ms, build_id, runtime_config_hash, contract_version}`)",
+        "CONTRACT.md outputs `artifacts/F1_CERT.json` and `artifacts/F1_CERT.md`"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md PL-10 — f1_certify CLI + F1_CERT schema completeness (contract)",
+        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.12 — F1 cert tooling (moved from PL-10; Slice 1 exception)"
+      ],
+      "scope": {
+        "touch": [
+          "python/tools/f1_certify.py",
+          "scripts/f1_certify.py",
+          "python/tests/test_f1_certify.py",
+          "artifacts/F1_CERT.json",
+          "artifacts/F1_CERT.md"
+        ],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN python/tools/f1_certify.py WHEN run with --window=24h and --out artifacts/F1_CERT.json THEN it writes artifacts/F1_CERT.json with required keys {status, generated_ts_ms, build_id, runtime_config_hash, contract_version, expires_at_ts_ms, release_gate_metrics}.",
+        "GIVEN scripts/f1_certify.py WHEN invoked with the same CLI args THEN it delegates to python/tools/f1_certify.py and produces identical outputs.",
+        "GIVEN a successful run WHEN artifacts/F1_CERT.json is written THEN artifacts/F1_CERT.md summary is also written."
+      ],
+      "steps": [
+        "Create python/tools/f1_certify.py with CLI --window and --out.",
+        "Generate artifacts/F1_CERT.json with required schema keys and PASS/FAIL status based on available metrics.",
+        "Write artifacts/F1_CERT.md summary alongside F1_CERT.json.",
+        "Add scripts/f1_certify.py wrapper that delegates to python/tools/f1_certify.py with identical CLI args.",
+        "Add python/tests/test_f1_certify.py covering required keys and summary output."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "bash -n plans/verify.sh"
+      ],
+      "evidence": [
+        "artifacts/F1_CERT.json",
+        "artifacts/F1_CERT.md",
+        "python/tests/test_f1_certify.py"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "python/tests/test_f1_certify.py"
+      ]
+    },
+    {
       "id": "S2-000",
       "priority": 100,
       "phase": 1,
