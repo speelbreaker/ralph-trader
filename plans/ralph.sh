@@ -38,6 +38,7 @@ RPH_PROFILE_REQUIRE_MARK_PASS=""
 RPH_PROFILE_REQUIRE_STORY_VERIFY=""
 RPH_PROFILE_REQUIRE_FULL_VERIFY=""
 RPH_PROFILE_REQUIRE_PROMOTION_VERIFY=""
+RPH_PROFILE_BOOTSTRAP_MODE=""
 RPH_PROFILE_WARNING=""
 
 case "$RPH_PROFILE" in
@@ -76,6 +77,12 @@ case "$RPH_PROFILE" in
     RPH_PROFILE_REQUIRE_FULL_VERIFY="1"
     RPH_PROFILE_REQUIRE_PROMOTION_VERIFY="1"
     ;;
+  bootstrap)
+    RPH_PROFILE_MODE="bootstrap"
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_FORBID_MARK_PASS="1"
+    RPH_PROFILE_BOOTSTRAP_MODE="1"
+    ;;
   max)
     RPH_PROFILE_MODE="max"
     RPH_PROFILE_VERIFY_MODE="full"
@@ -108,6 +115,7 @@ RPH_REQUIRE_MARK_PASS="${RPH_REQUIRE_MARK_PASS:-${RPH_PROFILE_REQUIRE_MARK_PASS:
 RPH_REQUIRE_STORY_VERIFY_GATE="${RPH_REQUIRE_STORY_VERIFY_GATE:-${RPH_PROFILE_REQUIRE_STORY_VERIFY:-0}}"  # 0|1
 RPH_REQUIRE_FULL_VERIFY="${RPH_REQUIRE_FULL_VERIFY:-${RPH_PROFILE_REQUIRE_FULL_VERIFY:-0}}"  # 0|1
 RPH_REQUIRE_PROMOTION_VERIFY="${RPH_REQUIRE_PROMOTION_VERIFY:-${RPH_PROFILE_REQUIRE_PROMOTION_VERIFY:-0}}"  # 0|1
+RPH_BOOTSTRAP_MODE="${RPH_BOOTSTRAP_MODE:-${RPH_PROFILE_BOOTSTRAP_MODE:-0}}"  # 0|1
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 # Default model depends on agent
 _RPH_DEFAULT_MODEL="gpt-5.2-codex"
@@ -207,6 +215,10 @@ LOCK_ACQUIRED=0
 
 if [[ -n "$RPH_PROFILE_WARNING" ]]; then
   echo "WARN: unknown RPH_PROFILE=$RPH_PROFILE (ignoring profile presets)" | tee -a "$LOG_FILE"
+fi
+
+if [[ "$RPH_BOOTSTRAP_MODE" == "1" ]]; then
+  RPH_FORBID_MARK_PASS="1"
 fi
 
 if [[ "$RPH_CHEAT_DETECTION" != "block" ]]; then
@@ -1366,6 +1378,84 @@ verify_log_has_sha() {
   grep -q '^VERIFY_SH_SHA=' "$log"
 }
 
+workspace_missing_reason() {
+  if [[ ! -f "Cargo.toml" ]]; then
+    echo "missing_Cargo.toml"
+    return 0
+  fi
+  if [[ ! -d "crates/soldier_core" ]]; then
+    echo "missing_crates/soldier_core"
+    return 0
+  fi
+  if [[ ! -d "crates/soldier_infra" ]]; then
+    echo "missing_crates/soldier_infra"
+    return 0
+  fi
+  return 1
+}
+
+write_bootstrap_verify_pre_log() {
+  local log="$1"
+  local missing_reason="${2:-}"
+  local summary_file
+  summary_file="$(dirname "$log")/verify_summary.txt"
+  local verify_sha
+  verify_sha="$(sha256_file "$VERIFY_SH")"
+  {
+    echo "VERIFY_SH_SHA=${verify_sha}"
+    echo "bootstrap_skip_reason=missing_workspace"
+    if [[ -n "$missing_reason" ]]; then
+      echo "bootstrap_missing_reason=${missing_reason}"
+    fi
+  } > "$log"
+  {
+    echo "bootstrap_skip_reason=missing_workspace"
+    if [[ -n "$missing_reason" ]]; then
+      echo "bootstrap_missing_reason=${missing_reason}"
+    fi
+  } > "$summary_file"
+}
+
+bootstrap_preflight_cmd() {
+  local log="$1"
+  local summary_file="$2"
+  local label="$3"
+  shift 3
+  local cmd=("$@")
+  local exe="${cmd[0]}"
+  if [[ ! -x "$exe" ]]; then
+    echo "bootstrap_preflight_missing=${exe}" >> "$log"
+    echo "bootstrap_preflight_fail=${label} rc=2" >> "$log"
+    echo "bootstrap_preflight_fail=${label} rc=2" > "$summary_file"
+    return 2
+  fi
+  echo "bootstrap_preflight_cmd=${label} ${cmd[*]}" >> "$log"
+  "${cmd[@]}" >> "$log" 2>&1
+  local rc=$?
+  if (( rc != 0 )); then
+    echo "bootstrap_preflight_fail=${label} rc=${rc}" >> "$log"
+    echo "bootstrap_preflight_fail=${label} rc=${rc}" > "$summary_file"
+    return "$rc"
+  fi
+  echo "bootstrap_preflight_ok=${label}" >> "$log"
+  return 0
+}
+
+run_bootstrap_preflight() {
+  local log="$1"
+  local missing_reason="${2:-}"
+  local summary_file
+  summary_file="$(dirname "$log")/verify_summary.txt"
+  write_bootstrap_verify_pre_log "$log" "$missing_reason"
+  bootstrap_preflight_cmd "$log" "$summary_file" "preflight" "./plans/preflight.sh" "--strict" || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_preflight" "./plans/prd_preflight.sh" "--strict" "$PRD_FILE" || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_auditor" "./plans/run_prd_auditor.sh" || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_audit_check" "./plans/prd_audit_check.sh" || return $?
+  echo "bootstrap_preflight=ok" >> "$log"
+  echo "bootstrap_preflight=ok" > "$summary_file"
+  return 0
+}
+
 extract_verify_log_sha() {
   local log="$1"
   local line=""
@@ -2402,10 +2492,23 @@ PROMPT
 
   VERIFY_PRE_LOG_PATH="${ITER_DIR}/verify_pre.log"
   verify_pre_rc=0
-  if run_verify "${ITER_DIR}/verify_pre.log"; then
-    verify_pre_rc=0
+  bootstrap_missing_reason=""
+  if [[ "$RPH_BOOTSTRAP_MODE" == "1" ]]; then
+    bootstrap_missing_reason="$(workspace_missing_reason || true)"
+  fi
+  if [[ "$RPH_BOOTSTRAP_MODE" == "1" && -n "$bootstrap_missing_reason" ]]; then
+    add_skipped_check "verify_pre" "bootstrap_missing_workspace"
+    if run_bootstrap_preflight "${ITER_DIR}/verify_pre.log" "$bootstrap_missing_reason"; then
+      verify_pre_rc=0
+    else
+      verify_pre_rc=$?
+    fi
   else
-    verify_pre_rc=$?
+    if run_verify "${ITER_DIR}/verify_pre.log"; then
+      verify_pre_rc=0
+    else
+      verify_pre_rc=$?
+    fi
   fi
   state_merge \
     --argjson last_verify_pre_rc "$verify_pre_rc" \
