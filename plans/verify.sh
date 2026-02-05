@@ -91,26 +91,7 @@ fi
 # -----------------------------------------------------------------------------
 # Logging & Utilities
 # -----------------------------------------------------------------------------
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log()  { echo -e "\n${GREEN}=== $* ===${NC}"; }
-warn() { echo -e "${YELLOW}WARN: $*${NC}" >&2; }
-fail() { echo -e "${RED}FAIL: $*${NC}" >&2; exit 1; }
-is_ci(){ [[ -n "${CI:-}" ]]; }
-
-detect_cpus() {
-  # Auto-detect CPU cores (portable: macOS + Linux)
-  local cpus=2
-  if command -v nproc >/dev/null 2>&1; then
-    cpus=$(nproc)
-  elif command -v sysctl >/dev/null 2>&1; then
-    cpus=$(sysctl -n hw.ncpu 2>/dev/null || echo 2)
-  fi
-  echo "$cpus"
-}
+source "$ROOT/plans/lib/verify_utils.sh"
 
 workflow_acceptance_jobs() {
   local jobs
@@ -149,61 +130,6 @@ case "$VERIFY_CONSOLE" in
     ;;
 esac
 
-need() {
-  command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
-}
-
-ensure_python() {
-  if command -v python >/dev/null 2>&1; then
-    PYTHON_BIN="python"
-    return 0
-  fi
-  if command -v python3 >/dev/null 2>&1; then
-    PYTHON_BIN="python3"
-    return 0
-  fi
-  fail "Missing required command: python (or python3)"
-}
-
-node_script_exists() {
-  local script="$1"
-  command -v node >/dev/null 2>&1 || return 1
-  node -e "const s=require('./package.json').scripts||{}; process.exit(s['$script']?0:1)" >/dev/null 2>&1
-}
-
-node_run_script() {
-  local script="$1"
-  case "$NODE_PM" in
-    pnpm) pnpm -s run "$script" --if-present ;;
-    npm) npm run -s "$script" --if-present ;;
-    yarn)
-      if node_script_exists "$script"; then
-        yarn -s run "$script"
-      fi
-      ;;
-    *) fail "No node package manager selected (missing lockfile)" ;;
-  esac
-}
-
-node_run_bin() {
-  local bin="$1"
-  shift
-  if [[ -x "./node_modules/.bin/$bin" ]]; then
-    "./node_modules/.bin/$bin" "$@"
-    return 0
-  fi
-  if command -v "$bin" >/dev/null 2>&1; then
-    "$bin" "$@"
-    return 0
-  fi
-  case "$NODE_PM" in
-    pnpm) pnpm -s exec "$bin" -- "$@" ;;
-    npm) npx --no-install "$bin" -- "$@" ;;
-    yarn) yarn -s "$bin" "$@" ;;
-    *) return 1 ;;
-  esac
-}
-
 TIMEOUT_BIN=""
 if command -v timeout >/dev/null 2>&1; then
   TIMEOUT_BIN="timeout"
@@ -212,103 +138,6 @@ elif command -v gtimeout >/dev/null 2>&1; then
 fi
 TIMEOUT_WARNED=0
 ENABLE_TIMEOUTS="${ENABLE_TIMEOUTS:-1}"
-
-run_with_timeout() {
-  local duration="$1"
-  shift
-  if [[ "$ENABLE_TIMEOUTS" != "1" || -z "$duration" ]]; then
-    "$@"
-    return $?
-  fi
-  if [[ -z "$TIMEOUT_BIN" ]]; then
-    "$@"
-    return $?
-  fi
-  "$TIMEOUT_BIN" "$duration" "$@"
-}
-
-emit_fail_excerpt() {
-  local name="$1"
-  local logfile="$2"
-  local tail_lines="${VERIFY_FAIL_TAIL_LINES:-80}"
-  local summary_lines="${VERIFY_FAIL_SUMMARY_LINES:-20}"
-  local summary=""
-
-  if [[ ! -f "$logfile" ]]; then
-    warn "Logfile missing for ${name} (${logfile})"
-    return 0
-  fi
-
-  echo "---- ${name} failure tail (last ${tail_lines} lines) ----"
-  tail -n "$tail_lines" "$logfile" || true
-  echo "---- ${name} failure summary (grep error:|FAIL|FAILED|panicked) ----"
-  summary="$(grep -nE "error:|FAIL|FAILED|panicked" "$logfile" || true)"
-  if [[ -n "$summary" ]]; then
-    echo "$summary" | tail -n "$summary_lines" || true
-  else
-    echo "(no summary matches)"
-  fi
-}
-
-run_logged() {
-  local name="$1"
-  local duration="$2"
-  shift 2
-  local logfile="${VERIFY_ARTIFACTS_DIR}/${name}.log"
-  local rc=0
-  local start_time end_time elapsed
-
-  if [[ "$ENABLE_TIMEOUTS" == "1" && -n "$duration" && -z "$TIMEOUT_BIN" && "$TIMEOUT_WARNED" == "0" ]]; then
-    warn "timeout not available; running without time limits (install coreutils for gtimeout on macOS)"
-    TIMEOUT_WARNED=1
-  fi
-
-  # Timing instrumentation
-  start_time=$(date +%s)
-
-  if [[ "$VERIFY_CONSOLE" == "verbose" ]]; then
-    if [[ "$VERIFY_LOG_CAPTURE" == "1" ]]; then
-      set +e
-      run_with_timeout "$duration" "$@" 2>&1 | tee "$logfile"
-      rc="${PIPESTATUS[0]}"
-      set -e
-    else
-      run_with_timeout "$duration" "$@"
-      rc=$?
-    fi
-  else
-    # Quiet console: always capture logs to artifacts for debugging.
-    set +e
-    run_with_timeout "$duration" "$@" > "$logfile" 2>&1
-    rc=$?
-    set -e
-    if [[ "$rc" != "0" && -z "${RUN_LOGGED_SUPPRESS_EXCERPT:-}" ]]; then
-      emit_fail_excerpt "$name" "$logfile"
-    fi
-  fi
-
-  # Timing instrumentation: write elapsed time
-  end_time=$(date +%s)
-  elapsed=$((end_time - start_time))
-  echo "$elapsed" > "${VERIFY_ARTIFACTS_DIR}/${name}.time"
-
-  # WRITE .rc FOR ALL GATES (pass or fail) - immediately after rc is known
-  echo "$rc" > "${VERIFY_ARTIFACTS_DIR}/${name}.rc"
-
-  # WRITE FAILED_GATE only for first failure (before timeout check)
-  # Skip if RUN_LOGGED_SKIP_FAILED_GATE is set (parallel runner handles this)
-  if [[ "$rc" != "0" && ! -f "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE" && -z "${RUN_LOGGED_SKIP_FAILED_GATE:-}" ]]; then
-    echo "$name" > "${VERIFY_ARTIFACTS_DIR}/FAILED_GATE"
-  fi
-
-  # VERIFY_TIMEOUT_PAREN_FIX: in [[ ]], && binds tighter than ||.
-  # Without parens: (rc==124 || rc==137 && suppress) becomes
-  # rc==124 || (rc==137 && suppress), so rc=124 ignores suppress.
-  if [[ ( "$rc" == "124" || "$rc" == "137" ) && -z "${RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL:-}" ]]; then
-    fail "Timeout running ${name} (limit=${duration})"
-  fi
-  return "$rc"
-}
 
 run_parallel_group() {
   # Wave-based parallel execution for Bash 3.2+ compatibility
@@ -453,12 +282,215 @@ init_change_detection() {
   echo "info: change_detection_ok=$CHANGE_DETECTION_OK files=$CHANGED_FILES_COUNT base_ref=$BASE_REF"
 }
 
+export_stack_env() {
+  export ROOT MODE VERIFY_ARTIFACTS_DIR VERIFY_CONSOLE VERIFY_LOG_CAPTURE
+  export TIMEOUT_BIN ENABLE_TIMEOUTS VERIFY_FAIL_TAIL_LINES VERIFY_FAIL_SUMMARY_LINES TIMEOUT_WARNED
+  export RUST_FMT_TIMEOUT RUST_CLIPPY_TIMEOUT RUST_TEST_TIMEOUT
+  export RUFF_TIMEOUT PYTEST_TIMEOUT MYPY_TIMEOUT
+  export NODE_LINT_TIMEOUT NODE_TYPECHECK_TIMEOUT NODE_TEST_TIMEOUT
+  export NODE_PM PYTHON_BIN
+}
+
+run_stack_gates_sequential() {
+  local rust_enabled="$1"
+  local python_enabled="$2"
+  local node_enabled="$3"
+
+  if [[ "$rust_enabled" == "1" ]]; then
+    bash "$ROOT/plans/lib/rust_gates.sh"
+  fi
+  if [[ "$python_enabled" == "1" ]]; then
+    bash "$ROOT/plans/lib/python_gates.sh"
+  fi
+  if [[ "$node_enabled" == "1" ]]; then
+    bash "$ROOT/plans/lib/node_gates.sh"
+  fi
+}
+
+run_stack_gates_parallel() {
+  local rust_enabled="$1"
+  local python_enabled="$2"
+  local node_enabled="$3"
+  local enabled_count="$4"
+
+  local total_cores per_stack_threads available_mem_mb PARALLEL_MIN_CORES
+
+  total_cores=$(detect_cpus)
+  per_stack_threads=$(( total_cores / enabled_count ))
+  [[ "$per_stack_threads" -lt 1 ]] && per_stack_threads=1
+
+  [[ -z "${RUST_TEST_THREADS:-}" ]] && export RUST_TEST_THREADS="$per_stack_threads"
+  [[ -z "${CARGO_BUILD_JOBS:-}" ]] && export CARGO_BUILD_JOBS="$per_stack_threads"
+  [[ -z "${PYTEST_XDIST_NUMPROCESSES:-}" ]] && export PYTEST_XDIST_NUMPROCESSES="$per_stack_threads"
+
+  available_mem_mb=""
+  if command -v free >/dev/null 2>&1; then
+    available_mem_mb=$(free -m | awk '/^Mem:/{print $7}')
+  elif command -v vm_stat >/dev/null 2>&1; then
+    parse_vm_stat() {
+      local key="$1"
+      vm_stat | awk -v key="$key" '
+        $0 ~ key {
+          gsub(/[^0-9]/, "", $NF)
+          print $NF
+          exit
+        }'
+    }
+    page_size=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
+    pages_free=$(parse_vm_stat "Pages free")
+    pages_inactive=$(parse_vm_stat "Pages inactive")
+    if [[ "$pages_free" =~ ^[0-9]+$ && "$pages_inactive" =~ ^[0-9]+$ ]]; then
+      available_mem_mb=$(( (pages_free + pages_inactive) * page_size / 1024 / 1024 ))
+    fi
+  fi
+
+  PARALLEL_MIN_CORES="${PARALLEL_MIN_CORES:-2}"
+
+  if [[ "$total_cores" -lt "$PARALLEL_MIN_CORES" ]]; then
+    warn "Low core count ($total_cores), running sequential"
+    run_stack_gates_sequential "$rust_enabled" "$python_enabled" "$node_enabled"
+    return $?
+  fi
+  if [[ -n "$available_mem_mb" && "$available_mem_mb" -lt 4096 ]]; then
+    warn "Low available memory (${available_mem_mb}MB), running sequential"
+    run_stack_gates_sequential "$rust_enabled" "$python_enabled" "$node_enabled"
+    return $?
+  fi
+
+  local prev_console="$VERIFY_CONSOLE"
+  local prev_parallel="${VERIFY_PARALLEL_STACK:-}"
+  VERIFY_CONSOLE="quiet"
+  VERIFY_PARALLEL_STACK=1
+  export VERIFY_CONSOLE VERIFY_PARALLEL_STACK
+
+  log "PARALLEL_STACK_MODE: stacks=${enabled_count}"
+
+  local -a STACK_SPECS
+  STACK_SPECS=()
+  if [[ "$rust_enabled" == "1" ]]; then
+    STACK_SPECS+=("rust_stack||bash plans/lib/rust_gates.sh")
+  fi
+  if [[ "$python_enabled" == "1" ]]; then
+    STACK_SPECS+=("python_stack||bash plans/lib/python_gates.sh")
+  fi
+  if [[ "$node_enabled" == "1" ]]; then
+    STACK_SPECS+=("node_stack||bash plans/lib/node_gates.sh")
+  fi
+
+  local prev_exit_trap prev_int_trap prev_term_trap
+  prev_exit_trap="$(trap -p EXIT | sed "s/^trap -- '\\(.*\\)' EXIT$/\\1/")"
+  prev_int_trap="$(trap -p INT | sed "s/^trap -- '\\(.*\\)' INT$/\\1/")"
+  prev_term_trap="$(trap -p TERM | sed "s/^trap -- '\\(.*\\)' TERM$/\\1/")"
+
+  cleanup_parallel() {
+    local rc=$?
+    local pids
+    pids="$(jobs -p 2>/dev/null || true)"
+    if [[ -n "$pids" ]]; then
+      kill $pids 2>/dev/null || true
+    fi
+    wait 2>/dev/null || true
+    if [[ -n "$prev_exit_trap" ]]; then eval "$prev_exit_trap"; fi
+    if [[ -n "$prev_int_trap" ]]; then eval "$prev_int_trap"; fi
+    if [[ -n "$prev_term_trap" ]]; then eval "$prev_term_trap"; fi
+    return $rc
+  }
+  trap cleanup_parallel EXIT INT TERM
+
+  run_parallel_group STACK_SPECS "$enabled_count"
+  local rc=$?
+
+  if [[ -n "$prev_exit_trap" ]]; then
+    trap "$prev_exit_trap" EXIT
+  else
+    trap - EXIT
+  fi
+  if [[ -n "$prev_int_trap" ]]; then
+    trap "$prev_int_trap" INT
+  else
+    trap - INT
+  fi
+  if [[ -n "$prev_term_trap" ]]; then
+    trap "$prev_term_trap" TERM
+  else
+    trap - TERM
+  fi
+
+  VERIFY_CONSOLE="$prev_console"
+  if [[ -n "$prev_parallel" ]]; then
+    VERIFY_PARALLEL_STACK="$prev_parallel"
+  else
+    VERIFY_PARALLEL_STACK=""
+  fi
+  export VERIFY_CONSOLE VERIFY_PARALLEL_STACK
+
+  return "$rc"
+}
+
+run_stack_gates() {
+  local rust_present=0 python_present=0 node_present=0
+  local rust_enabled=0 python_enabled=0 node_enabled=0
+
+  if [[ -f Cargo.toml ]]; then
+    rust_present=1
+    if should_run_rust_gates; then
+      rust_enabled=1
+    else
+      echo "info: rust gates skipped (no rust-affecting changes detected)"
+    fi
+  fi
+
+  if [[ -f pyproject.toml || -f requirements.txt ]]; then
+    python_present=1
+    if should_run_python_gates; then
+      python_enabled=1
+    else
+      echo "info: python gates skipped (no python-affecting changes detected)"
+    fi
+  fi
+
+  if [[ -f package.json ]]; then
+    node_present=1
+    if should_run_node_gates; then
+      node_enabled=1
+    else
+      echo "info: node gates skipped (no node-affecting changes detected)"
+    fi
+  fi
+
+  local enabled_count=$((rust_enabled + python_enabled + node_enabled))
+  if [[ "$enabled_count" -eq 0 ]]; then
+    return 0
+  fi
+
+  export_stack_env
+
+  if [[ "${VERIFY_SEQUENTIAL:-0}" == "1" ]]; then
+    run_stack_gates_sequential "$rust_enabled" "$python_enabled" "$node_enabled"
+    return $?
+  fi
+
+  if [[ "${VERIFY_FORCE_PARALLEL_TEST:-0}" == "1" ]]; then
+    run_stack_gates_parallel "$rust_enabled" "$python_enabled" "$node_enabled" "$enabled_count"
+    return $?
+  fi
+
+  if [[ "$enabled_count" -le 1 ]]; then
+    run_stack_gates_sequential "$rust_enabled" "$python_enabled" "$node_enabled"
+    return $?
+  fi
+
+  run_stack_gates_parallel "$rust_enabled" "$python_enabled" "$node_enabled" "$enabled_count"
+}
 RUST_FMT_TIMEOUT="${RUST_FMT_TIMEOUT:-10m}"
 RUST_CLIPPY_TIMEOUT="${RUST_CLIPPY_TIMEOUT:-20m}"
 RUST_TEST_TIMEOUT="${RUST_TEST_TIMEOUT:-20m}"
 PYTEST_TIMEOUT="${PYTEST_TIMEOUT:-10m}"
 RUFF_TIMEOUT="${RUFF_TIMEOUT:-5m}"
 MYPY_TIMEOUT="${MYPY_TIMEOUT:-10m}"
+NODE_LINT_TIMEOUT="${NODE_LINT_TIMEOUT:-5m}"
+NODE_TYPECHECK_TIMEOUT="${NODE_TYPECHECK_TIMEOUT:-5m}"
+NODE_TEST_TIMEOUT="${NODE_TEST_TIMEOUT:-10m}"
 CONTRACT_COVERAGE_TIMEOUT="${CONTRACT_COVERAGE_TIMEOUT:-2m}"
 SPEC_LINT_TIMEOUT="${SPEC_LINT_TIMEOUT:-2m}"
 POSTMORTEM_CHECK_TIMEOUT="${POSTMORTEM_CHECK_TIMEOUT:-1m}"
@@ -789,118 +821,9 @@ if [[ -f Cargo.toml ]]; then
 fi
 
 # -----------------------------------------------------------------------------
-# 2) Rust gates (if Rust project present)
+# 2-4) Stack gates (Rust, Python, Node)
 # -----------------------------------------------------------------------------
-if [[ -f Cargo.toml ]]; then
-  if should_run_rust_gates; then
-    need cargo
-
-    log "2a) Rust format"
-    run_logged "rust_fmt" "$RUST_FMT_TIMEOUT" cargo fmt --all -- --check
-
-    if [[ "$MODE" == "full" ]]; then
-      log "2b) Rust clippy"
-      run_logged "rust_clippy" "$RUST_CLIPPY_TIMEOUT" cargo clippy --workspace --all-targets --all-features -- -D warnings
-    else
-      warn "Skipping clippy in quick mode"
-    fi
-
-    log "2c) Rust tests"
-    if [[ "$MODE" == "full" ]]; then
-      run_logged "rust_tests_full" "$RUST_TEST_TIMEOUT" cargo test --workspace --all-features --locked
-    else
-      run_logged "rust_tests_quick" "$RUST_TEST_TIMEOUT" cargo test --workspace --lib --locked
-    fi
-
-    echo "✓ rust gates passed"
-  else
-    echo "info: rust gates skipped (no rust-affecting changes detected)"
-  fi
-fi
-
-# -----------------------------------------------------------------------------
-# 3) Python gates (if Python project present)
-# -----------------------------------------------------------------------------
-if [[ -f pyproject.toml || -f requirements.txt ]]; then
-  if should_run_python_gates; then
-    ensure_python
-
-    # Ruff: required in CI (best ROI for agent-heavy workflows)
-    if command -v ruff >/dev/null 2>&1; then
-      log "3a) Python ruff lint"
-      run_logged "python_ruff_check" "$RUFF_TIMEOUT" ruff check .
-
-      log "3b) Python ruff format"
-      run_logged "python_ruff_format" "$RUFF_TIMEOUT" ruff format --check .
-    else
-      if is_ci; then
-        fail "ruff not found in CI (install it or adjust verify.sh)"
-      else
-        warn "ruff not found (install: pip install ruff) — skipping lint/format"
-      fi
-    fi
-
-    # Pytest: required in CI if present in toolchain
-    if command -v pytest >/dev/null 2>&1; then
-      log "3c) Python tests"
-      if [[ "$MODE" == "quick" ]]; then
-        PYTEST_QUICK_EXPR="${PYTEST_QUICK_EXPR:-not integration and not slow}"
-        if ! run_logged "python_pytest_quick" "$PYTEST_TIMEOUT" pytest -q -m "$PYTEST_QUICK_EXPR"; then
-          warn "pytest quick selection failed; retrying full pytest -q"
-          run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
-        fi
-      else
-        run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
-      fi
-    else
-      if is_ci; then
-        fail "pytest not found in CI (install it or adjust verify.sh)"
-      else
-        warn "pytest not found — skipping python tests"
-      fi
-    fi
-
-    # MyPy optional: can be made strict with REQUIRE_MYPY=1
-    REQUIRE_MYPY="${REQUIRE_MYPY:-0}"
-    if command -v mypy >/dev/null 2>&1; then
-      log "3d) Python mypy"
-      if [[ "$REQUIRE_MYPY" == "1" ]]; then
-        run_logged "python_mypy" "$MYPY_TIMEOUT" mypy .
-      else
-        run_logged "python_mypy" "$MYPY_TIMEOUT" mypy . --ignore-missing-imports || warn "mypy reported issues"
-      fi
-    else
-      if [[ "$REQUIRE_MYPY" == "1" ]]; then
-        fail "REQUIRE_MYPY=1 but mypy is not installed"
-      fi
-    fi
-
-    echo "✓ python gates passed"
-  else
-    echo "info: python gates skipped (no python-affecting changes detected)"
-  fi
-fi
-
-# -----------------------------------------------------------------------------
-# 4) Node/TS gates (if package.json present)
-# -----------------------------------------------------------------------------
-if [[ -f package.json ]]; then
-  if should_run_node_gates; then
-    log "4) Node/TS gates"
-
-    if [[ -z "$NODE_PM" ]]; then
-      warn "No recognized lockfile; skipping node gates"
-    else
-      need "$NODE_PM"
-      node_run_script lint
-      node_run_script typecheck
-      node_run_script test
-      echo "✓ node gates passed ($NODE_PM)"
-    fi
-  else
-    echo "info: node gates skipped (no node-affecting changes detected)"
-  fi
-fi
+run_stack_gates
 
 # -----------------------------------------------------------------------------
 # 5) Optional project-specific evidence / cert / smoke hooks
