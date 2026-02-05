@@ -569,6 +569,16 @@ release_lock() {
   fi
 }
 
+cleanup() {
+  local rc=$?
+  trap - EXIT INT TERM
+  if declare -f unlock_state_files >/dev/null 2>&1; then
+    unlock_state_files || true
+  fi
+  release_lock || true
+  exit "$rc"
+}
+
 write_blocked_basic() {
   local reason="$1"
   local details="$2"
@@ -679,7 +689,7 @@ fi
 if ! acquire_lock; then
   block_preflight "lock_held" "Ralph lock exists at $LOCK_DIR. If no run is active, remove $LOCK_DIR and retry."
 fi
-trap release_lock EXIT INT TERM
+trap cleanup EXIT INT TERM
 
 # --- preflight ---
 command -v git >/dev/null 2>&1 || block_preflight "missing_git" "git required"
@@ -1136,7 +1146,11 @@ prune_old_iterations() {
       local base
       base="$(basename "$dir")"
       # Compress and move to archive
-      tar -czf "$archive_dir/${base}.tar.gz" -C "$state_dir" "$base" 2>/dev/null && rm -rf "$dir" || true
+      if tar -czf "$archive_dir/${base}.tar.gz" -C "$state_dir" "$base" 2>/dev/null; then
+        rm -rf "$dir" || true
+      else
+        echo "WARN: Failed to archive ${base}; keeping original" | tee -a "$LOG_FILE"
+      fi
     done
   else
     # Just delete old iterations
@@ -1146,6 +1160,44 @@ prune_old_iterations() {
 
 # Fix 9: Metrics file - structured JSONL for monitoring
 METRICS_FILE="${RPH_METRICS_FILE:-.ralph/metrics.jsonl}"
+RPH_METRICS_MAX_BYTES="${RPH_METRICS_MAX_BYTES:-5242880}"
+
+metrics_file_size_bytes() {
+  local file="$1"
+  local size
+  size="$(wc -c < "$file" 2>/dev/null | tr -d ' ')"
+  if ! [[ "$size" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  echo "$size"
+}
+
+rotate_metrics_if_needed() {
+  local file="$1"
+  local max_bytes="$2"
+  if [[ -z "$max_bytes" || "$max_bytes" == "0" ]]; then
+    return 0
+  fi
+  if ! [[ "$max_bytes" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  local size
+  size="$(metrics_file_size_bytes "$file" || true)"
+  if [[ -z "$size" || ! "$size" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if (( size < max_bytes )); then
+    return 0
+  fi
+  local ts
+  ts="$(date +%Y%m%d-%H%M%S)"
+  if mv "$file" "${file}.${ts}.bak" 2>/dev/null; then
+    echo "WARN: metrics file rotated (${size} bytes >= ${max_bytes})" | tee -a "$LOG_FILE"
+  fi
+}
 
 append_metrics() {
   local iter="$1"
@@ -1161,6 +1213,7 @@ append_metrics() {
   ts="$(date +%s)"
 
   mkdir -p "$(dirname "$METRICS_FILE")"
+  rotate_metrics_if_needed "$METRICS_FILE" "$RPH_METRICS_MAX_BYTES"
 
   jq -nc \
     --argjson ts "$ts" \
@@ -2487,8 +2540,6 @@ PROMPT
 
   # Fix 6: Lock state files before agent runs
   lock_state_files
-  # Ensure we unlock even on unexpected exit
-  trap 'unlock_state_files' EXIT
 
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
     rate_limit_before_call
@@ -2523,7 +2574,6 @@ PROMPT
 
   # Fix 6: Unlock state files after agent exits
   unlock_state_files
-  trap - EXIT
 
   set -e
   echo "Agent exit code: $AGENT_RC" | tee -a "$LOG_FILE"

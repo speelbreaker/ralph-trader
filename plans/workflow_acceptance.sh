@@ -1715,6 +1715,26 @@ if ! grep -q "RPH_PROFILE_MODE" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must expose RPH_PROFILE_MODE for profile behavior checks" >&2
   exit 1
 fi
+if ! grep -q "trap cleanup EXIT INT TERM" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must trap cleanup for lock + state-file release" >&2
+  exit 1
+fi
+if grep -q "trap 'unlock_state_files' EXIT" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must not replace cleanup trap with unlock_state_files" >&2
+  exit 1
+fi
+if ! grep -q "RPH_METRICS_MAX_BYTES" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_METRICS_MAX_BYTES for metrics rotation" >&2
+  exit 1
+fi
+if ! grep -q "rotate_metrics_if_needed" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must rotate metrics file when size limit hit" >&2
+  exit 1
+fi
+if ! grep -q "WARN: Failed to archive" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must warn when iteration archive fails" >&2
+  exit 1
+fi
 if ! grep -q "RPH_TEST_COCHANGE_STRICT" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must define RPH_TEST_COCHANGE_STRICT default" >&2
   exit 1
