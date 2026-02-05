@@ -722,6 +722,20 @@
       ]
     },
     {
+      "id": "WF-5.5.2",
+      "title": "Bootstrap verify_pre exception (missing workspace)",
+      "enforcement": [
+        "plans/ralph.sh (bootstrap verify_pre skip + bootstrap preflight)"
+      ],
+      "artifacts": [
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/artifacts.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 14c, Test 14d)"
+      ]
+    },
+    {
       "id": "WF-5.6",
       "title": "5.6 Story verify requirement gate",
       "enforcement": [

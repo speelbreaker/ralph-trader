@@ -1412,6 +1412,11 @@ fi
     exit 1
   fi
 
+  if ! run_in_worktree grep -q "VERIFY_CHECKPOINT_COUNTER" "plans/verify.sh"; then
+    echo "FAIL: verify must support VERIFY_CHECKPOINT_COUNTER for checkpoint metrics" >&2
+    exit 1
+  fi
+
   if ! run_in_worktree grep -q "should_run_rust_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware rust gate selection" >&2
     exit 1
@@ -1713,6 +1718,26 @@ if ! grep -q "RPH_PROFILE_VERIFY_ONLY" "$WORKTREE/plans/ralph.sh"; then
 fi
 if ! grep -q "RPH_PROFILE_MODE" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must expose RPH_PROFILE_MODE for profile behavior checks" >&2
+  exit 1
+fi
+if ! grep -q "trap cleanup EXIT INT TERM" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must trap cleanup for lock + state-file release" >&2
+  exit 1
+fi
+if grep -q "trap 'unlock_state_files' EXIT" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must not replace cleanup trap with unlock_state_files" >&2
+  exit 1
+fi
+if ! grep -q "RPH_METRICS_MAX_BYTES" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must define RPH_METRICS_MAX_BYTES for metrics rotation" >&2
+  exit 1
+fi
+if ! grep -q "rotate_metrics_if_needed" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must rotate metrics file when size limit hit" >&2
+  exit 1
+fi
+if ! grep -q "WARN: Failed to archive" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must warn when iteration archive fails" >&2
   exit 1
 fi
 if ! grep -q "RPH_TEST_COCHANGE_STRICT" "$WORKTREE/plans/ralph.sh"; then
@@ -2023,12 +2048,17 @@ fi
 if test_start "0k.18" "verify.sh census flags" 1; then
   run_in_worktree bash -c '
     set -euo pipefail
+    rm -f .ralph/verify_checkpoint.json
     out="$(./plans/verify.sh --census)"
     echo "$out" | grep -q "VERIFY CENSUS REPORT"
 
     out_json="$(./plans/verify.sh --census-json)"
     printf "%s" "$out_json" | head -c1 | grep -q "{"
     echo "$out_json" | grep -q "\"census\":true"
+    if [[ -f .ralph/verify_checkpoint.json ]]; then
+      echo "FAIL: census must not write verify_checkpoint.json" >&2
+      exit 1
+    fi
   '
   test_pass "0k.18"
 fi
@@ -2333,6 +2363,103 @@ write_invalid_prd() {
   ]
 }
 JSON
+}
+
+write_audit_stub() {
+  local prd="$1"
+  local out_dir="$2"
+  run_in_worktree bash -c '
+  set -euo pipefail
+  prd="$1"
+  out_dir="$2"
+  mkdir -p "$out_dir"
+  audit="$out_dir/prd_audit.json"
+  cache="$out_dir/prd_audit_cache.json"
+  stdout_log="$out_dir/prd_auditor_stdout.log"
+  prompt="prompts/auditor.md"
+  if [[ -f "specs/CONTRACT.md" ]]; then
+    contract="specs/CONTRACT.md"
+  else
+    contract="CONTRACT.md"
+  fi
+  if [[ -f "specs/IMPLEMENTATION_PLAN.md" ]]; then
+    plan="specs/IMPLEMENTATION_PLAN.md"
+  else
+    plan="IMPLEMENTATION_PLAN.md"
+  fi
+  if [[ -f "specs/WORKFLOW_CONTRACT.md" ]]; then
+    workflow="specs/WORKFLOW_CONTRACT.md"
+  else
+    workflow="WORKFLOW_CONTRACT.md"
+  fi
+  hash_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum "$1" | awk "{print \$1}"
+    else
+      shasum -a 256 "$1" | awk "{print \$1}"
+    fi
+  }
+  prd_sha="$(hash_file "$prd")"
+  contract_sha="$(hash_file "$contract")"
+  plan_sha="$(hash_file "$plan")"
+  workflow_sha="$(hash_file "$workflow")"
+  prompt_sha="$(hash_file "$prompt")"
+  cat > "$audit" <<JSON
+{
+  "prd_sha256": "$prd_sha",
+  "summary": {
+    "items_total": 1,
+    "items_pass": 1,
+    "items_fail": 0,
+    "items_blocked": 0,
+    "must_fix_count": 0
+  },
+  "global_findings": {
+    "must_fix": [],
+    "risk": [],
+    "improvements": []
+  },
+  "items": [
+    {
+      "id": "S1-010",
+      "slice": 1,
+      "status": "PASS",
+      "reasons": [],
+      "schema_check": { "missing_fields": [], "notes": ["checked schema"] },
+      "contract_check": {
+        "refs_present": true,
+        "refs_specific": true,
+        "contract_refs_resolved": true,
+        "acceptance_enforces_invariant": true,
+        "contradiction": false,
+        "notes": []
+      },
+      "verify_check": {
+        "has_verify_sh": true,
+        "has_targeted_checks": true,
+        "evidence_concrete": true,
+        "notes": []
+      },
+      "scope_check": { "too_broad": false, "est_size_too_large": false, "notes": [] },
+      "dependency_check": { "invalid": false, "forward_dep": false, "cycle": false, "notes": [] },
+      "patch_suggestions": ["n/a"]
+    }
+  ]
+}
+JSON
+  cat > "$cache" <<JSON
+{
+  "prd_sha256": "$prd_sha",
+  "contract_sha256": "$contract_sha",
+  "impl_plan_sha256": "$plan_sha",
+  "workflow_contract_sha256": "$workflow_sha",
+  "auditor_prompt_sha256": "$prompt_sha",
+  "audited_scope": "full",
+  "decision": "PASS"
+}
+JSON
+  echo "<promise>AUDIT_COMPLETE</promise>" > "$stdout_log"
+  ' _ "$prd" "$out_dir"
 }
 
 cat > "$STUB_DIR/verify_once_then_fail.sh" <<'EOF'
@@ -4800,6 +4927,120 @@ if ! grep -q "line 300" "$verify_tail_log"; then
   exit 1
 fi
   test_pass "14b"
+fi
+
+if test_start "14c" "bootstrap mode skips verify_pre when workspace missing"; then
+reset_state
+valid_prd_14c="$WORKTREE/.ralph/valid_prd_14c.json"
+write_valid_prd "$valid_prd_14c" "S1-010"
+write_audit_stub "$valid_prd_14c" "$WORKTREE/.ralph/bootstrap_audit_14c"
+start_sha="$(run_in_worktree git rev-parse HEAD)"
+run_in_worktree mv Cargo.toml Cargo.toml.bootstrap.bak
+set +e
+run_ralph env \
+  PRD_FILE="$valid_prd_14c" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_fail.sh" \
+  RPH_BOOTSTRAP_MODE=1 \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  SELECTED_ID="S1-010" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  AUDIT_OUTPUT_JSON="$WORKTREE/.ralph/bootstrap_audit_14c/prd_audit.json" \
+  AUDIT_CACHE_FILE="$WORKTREE/.ralph/bootstrap_audit_14c/prd_audit_cache.json" \
+  AUDIT_STDOUT_LOG="$WORKTREE/.ralph/bootstrap_audit_14c/prd_auditor_stdout.log" \
+  AUDIT_FILE="$WORKTREE/.ralph/bootstrap_audit_14c/prd_audit.json" \
+  AUDIT_STDOUT="$WORKTREE/.ralph/bootstrap_audit_14c/prd_auditor_stdout.log" \
+  AUDITOR_AGENT_CMD="/usr/bin/false" \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+run_in_worktree mv Cargo.toml.bootstrap.bak Cargo.toml
+run_in_worktree git reset --hard "$start_sha" >/dev/null 2>&1
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for bootstrap mark_pass forbidden" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "mark_pass_forbidden")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected mark_pass_forbidden blocked artifact in bootstrap mode" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]] || ! run_in_worktree test -f "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected verify_pre.log for bootstrap skip" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "^VERIFY_SH_SHA=" "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected VERIFY_SH_SHA in verify_pre.log for bootstrap skip" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "bootstrap_skip_reason=missing_workspace" "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected bootstrap skip reason in verify_pre.log" >&2
+  exit 1
+fi
+manifest_path=".ralph/artifacts.json"
+if ! run_in_worktree jq -e '.skipped_checks[]? | select(.name=="verify_pre" and .reason=="bootstrap_missing_workspace")' "$manifest_path" >/dev/null 2>&1; then
+  echo "FAIL: expected skipped verify_pre entry in manifest for bootstrap mode" >&2
+  exit 1
+fi
+  test_pass "14c"
+fi
+
+if test_start "14d" "bootstrap mode still runs verify_pre when workspace present"; then
+reset_state
+valid_prd_14d="$WORKTREE/.ralph/valid_prd_14d.json"
+write_valid_prd "$valid_prd_14d" "S1-010"
+write_audit_stub "$valid_prd_14d" "$WORKTREE/.ralph/bootstrap_audit_14d"
+set +e
+run_ralph env \
+  PRD_FILE="$valid_prd_14d" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_fail.sh" \
+  RPH_BOOTSTRAP_MODE=1 \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
+  SELECTED_ID="S1-010" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  AUDIT_PRD_FILE="$valid_prd_14d" \
+  AUDIT_OUTPUT_JSON="$WORKTREE/.ralph/bootstrap_audit_14d/prd_audit.json" \
+  AUDIT_CACHE_FILE="$WORKTREE/.ralph/bootstrap_audit_14d/prd_audit_cache.json" \
+  AUDIT_STDOUT_LOG="$WORKTREE/.ralph/bootstrap_audit_14d/prd_auditor_stdout.log" \
+  AUDIT_FILE="$WORKTREE/.ralph/bootstrap_audit_14d/prd_audit.json" \
+  AUDIT_STDOUT="$WORKTREE/.ralph/bootstrap_audit_14d/prd_auditor_stdout.log" \
+  AUDITOR_AGENT_CMD="/usr/bin/false" \
+  ./plans/ralph.sh 1 >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for verify_pre failure in bootstrap mode" >&2
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "verify_pre_failed")"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected verify_pre_failed blocked artifact when workspace present" >&2
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]] || ! run_in_worktree test -f "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected verify_pre.log for bootstrap verify_pre run" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -q "^VERIFY_SH_SHA=" "$iter_dir/verify_pre.log"; then
+  echo "FAIL: expected VERIFY_SH_SHA in verify_pre.log for bootstrap verify_pre run" >&2
+  exit 1
+fi
+if run_in_worktree grep -q "bootstrap_skip_reason=missing_workspace" "$iter_dir/verify_pre.log"; then
+  echo "FAIL: unexpected bootstrap skip reason when workspace present" >&2
+  exit 1
+fi
+  test_pass "14d"
 fi
 
 # NOTE: Tests 11–21 are intentionally ordered by runtime workflow rather than

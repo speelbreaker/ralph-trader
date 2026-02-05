@@ -38,6 +38,7 @@ RPH_PROFILE_REQUIRE_MARK_PASS=""
 RPH_PROFILE_REQUIRE_STORY_VERIFY=""
 RPH_PROFILE_REQUIRE_FULL_VERIFY=""
 RPH_PROFILE_REQUIRE_PROMOTION_VERIFY=""
+RPH_PROFILE_BOOTSTRAP_MODE=""
 RPH_PROFILE_WARNING=""
 
 case "$RPH_PROFILE" in
@@ -76,6 +77,12 @@ case "$RPH_PROFILE" in
     RPH_PROFILE_REQUIRE_FULL_VERIFY="1"
     RPH_PROFILE_REQUIRE_PROMOTION_VERIFY="1"
     ;;
+  bootstrap)
+    RPH_PROFILE_MODE="bootstrap"
+    RPH_PROFILE_VERIFY_MODE="full"
+    RPH_PROFILE_FORBID_MARK_PASS="1"
+    RPH_PROFILE_BOOTSTRAP_MODE="1"
+    ;;
   max)
     RPH_PROFILE_MODE="max"
     RPH_PROFILE_VERIFY_MODE="full"
@@ -108,6 +115,7 @@ RPH_REQUIRE_MARK_PASS="${RPH_REQUIRE_MARK_PASS:-${RPH_PROFILE_REQUIRE_MARK_PASS:
 RPH_REQUIRE_STORY_VERIFY_GATE="${RPH_REQUIRE_STORY_VERIFY_GATE:-${RPH_PROFILE_REQUIRE_STORY_VERIFY:-0}}"  # 0|1
 RPH_REQUIRE_FULL_VERIFY="${RPH_REQUIRE_FULL_VERIFY:-${RPH_PROFILE_REQUIRE_FULL_VERIFY:-0}}"  # 0|1
 RPH_REQUIRE_PROMOTION_VERIFY="${RPH_REQUIRE_PROMOTION_VERIFY:-${RPH_PROFILE_REQUIRE_PROMOTION_VERIFY:-0}}"  # 0|1
+RPH_BOOTSTRAP_MODE="${RPH_BOOTSTRAP_MODE:-${RPH_PROFILE_BOOTSTRAP_MODE:-0}}"  # 0|1
 RPH_AGENT_CMD="${RPH_AGENT_CMD:-codex}"        # codex|claude|opencode|etc
 # Default model depends on agent
 _RPH_DEFAULT_MODEL="gpt-5.2-codex"
@@ -207,6 +215,10 @@ LOCK_ACQUIRED=0
 
 if [[ -n "$RPH_PROFILE_WARNING" ]]; then
   echo "WARN: unknown RPH_PROFILE=$RPH_PROFILE (ignoring profile presets)" | tee -a "$LOG_FILE"
+fi
+
+if [[ "$RPH_BOOTSTRAP_MODE" == "1" ]]; then
+  RPH_FORBID_MARK_PASS="1"
 fi
 
 if [[ "$RPH_CHEAT_DETECTION" != "block" ]]; then
@@ -569,6 +581,16 @@ release_lock() {
   fi
 }
 
+cleanup() {
+  local rc=$?
+  trap - EXIT INT TERM
+  if declare -f unlock_state_files >/dev/null 2>&1; then
+    unlock_state_files || true
+  fi
+  release_lock || true
+  exit "$rc"
+}
+
 write_blocked_basic() {
   local reason="$1"
   local details="$2"
@@ -679,7 +701,7 @@ fi
 if ! acquire_lock; then
   block_preflight "lock_held" "Ralph lock exists at $LOCK_DIR. If no run is active, remove $LOCK_DIR and retry."
 fi
-trap release_lock EXIT INT TERM
+trap cleanup EXIT INT TERM
 
 # --- preflight ---
 command -v git >/dev/null 2>&1 || block_preflight "missing_git" "git required"
@@ -1136,7 +1158,11 @@ prune_old_iterations() {
       local base
       base="$(basename "$dir")"
       # Compress and move to archive
-      tar -czf "$archive_dir/${base}.tar.gz" -C "$state_dir" "$base" 2>/dev/null && rm -rf "$dir" || true
+      if tar -czf "$archive_dir/${base}.tar.gz" -C "$state_dir" "$base" 2>/dev/null; then
+        rm -rf "$dir" || true
+      else
+        echo "WARN: Failed to archive ${base}; keeping original" | tee -a "$LOG_FILE"
+      fi
     done
   else
     # Just delete old iterations
@@ -1146,6 +1172,44 @@ prune_old_iterations() {
 
 # Fix 9: Metrics file - structured JSONL for monitoring
 METRICS_FILE="${RPH_METRICS_FILE:-.ralph/metrics.jsonl}"
+RPH_METRICS_MAX_BYTES="${RPH_METRICS_MAX_BYTES:-5242880}"
+
+metrics_file_size_bytes() {
+  local file="$1"
+  local size
+  size="$(wc -c < "$file" 2>/dev/null | tr -d ' ')"
+  if ! [[ "$size" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  echo "$size"
+}
+
+rotate_metrics_if_needed() {
+  local file="$1"
+  local max_bytes="$2"
+  if [[ -z "$max_bytes" || "$max_bytes" == "0" ]]; then
+    return 0
+  fi
+  if ! [[ "$max_bytes" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  local size
+  size="$(metrics_file_size_bytes "$file" || true)"
+  if [[ -z "$size" || ! "$size" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  if (( size < max_bytes )); then
+    return 0
+  fi
+  local ts
+  ts="$(date +%Y%m%d-%H%M%S)"
+  if mv "$file" "${file}.${ts}.bak" 2>/dev/null; then
+    echo "WARN: metrics file rotated (${size} bytes >= ${max_bytes})" | tee -a "$LOG_FILE"
+  fi
+}
 
 append_metrics() {
   local iter="$1"
@@ -1161,6 +1225,7 @@ append_metrics() {
   ts="$(date +%s)"
 
   mkdir -p "$(dirname "$METRICS_FILE")"
+  rotate_metrics_if_needed "$METRICS_FILE" "$RPH_METRICS_MAX_BYTES"
 
   jq -nc \
     --argjson ts "$ts" \
@@ -1311,6 +1376,84 @@ extract_mark_pass_id() {
 verify_log_has_sha() {
   local log="$1"
   grep -q '^VERIFY_SH_SHA=' "$log"
+}
+
+workspace_missing_reason() {
+  if [[ ! -f "Cargo.toml" ]]; then
+    echo "missing_Cargo.toml"
+    return 0
+  fi
+  if [[ ! -d "crates/soldier_core" ]]; then
+    echo "missing_crates/soldier_core"
+    return 0
+  fi
+  if [[ ! -d "crates/soldier_infra" ]]; then
+    echo "missing_crates/soldier_infra"
+    return 0
+  fi
+  return 1
+}
+
+write_bootstrap_verify_pre_log() {
+  local log="$1"
+  local missing_reason="${2:-}"
+  local summary_file
+  summary_file="$(dirname "$log")/verify_summary.txt"
+  local verify_sha
+  verify_sha="$(sha256_file "$VERIFY_SH")"
+  {
+    echo "VERIFY_SH_SHA=${verify_sha}"
+    echo "bootstrap_skip_reason=missing_workspace"
+    if [[ -n "$missing_reason" ]]; then
+      echo "bootstrap_missing_reason=${missing_reason}"
+    fi
+  } > "$log"
+  {
+    echo "bootstrap_skip_reason=missing_workspace"
+    if [[ -n "$missing_reason" ]]; then
+      echo "bootstrap_missing_reason=${missing_reason}"
+    fi
+  } > "$summary_file"
+}
+
+bootstrap_preflight_cmd() {
+  local log="$1"
+  local summary_file="$2"
+  local label="$3"
+  shift 3
+  local cmd=("$@")
+  local exe="${cmd[0]}"
+  if [[ ! -x "$exe" ]]; then
+    echo "bootstrap_preflight_missing=${exe}" >> "$log"
+    echo "bootstrap_preflight_fail=${label} rc=2" >> "$log"
+    echo "bootstrap_preflight_fail=${label} rc=2" > "$summary_file"
+    return 2
+  fi
+  echo "bootstrap_preflight_cmd=${label} ${cmd[*]}" >> "$log"
+  "${cmd[@]}" >> "$log" 2>&1
+  local rc=$?
+  if (( rc != 0 )); then
+    echo "bootstrap_preflight_fail=${label} rc=${rc}" >> "$log"
+    echo "bootstrap_preflight_fail=${label} rc=${rc}" > "$summary_file"
+    return "$rc"
+  fi
+  echo "bootstrap_preflight_ok=${label}" >> "$log"
+  return 0
+}
+
+run_bootstrap_preflight() {
+  local log="$1"
+  local missing_reason="${2:-}"
+  local summary_file
+  summary_file="$(dirname "$log")/verify_summary.txt"
+  write_bootstrap_verify_pre_log "$log" "$missing_reason"
+  bootstrap_preflight_cmd "$log" "$summary_file" "preflight" "./plans/preflight.sh" "--strict" || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_preflight" "./plans/prd_preflight.sh" "--strict" "$PRD_FILE" || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_auditor" env AUDIT_PRD_FILE="$PRD_FILE" ./plans/run_prd_auditor.sh || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_audit_check" env PRD_FILE="$PRD_FILE" ./plans/prd_audit_check.sh || return $?
+  echo "bootstrap_preflight=ok" >> "$log"
+  echo "bootstrap_preflight=ok" > "$summary_file"
+  return 0
 }
 
 extract_verify_log_sha() {
@@ -2349,10 +2492,23 @@ PROMPT
 
   VERIFY_PRE_LOG_PATH="${ITER_DIR}/verify_pre.log"
   verify_pre_rc=0
-  if run_verify "${ITER_DIR}/verify_pre.log"; then
-    verify_pre_rc=0
+  bootstrap_missing_reason=""
+  if [[ "$RPH_BOOTSTRAP_MODE" == "1" ]]; then
+    bootstrap_missing_reason="$(workspace_missing_reason || true)"
+  fi
+  if [[ "$RPH_BOOTSTRAP_MODE" == "1" && -n "$bootstrap_missing_reason" ]]; then
+    add_skipped_check "verify_pre" "bootstrap_missing_workspace"
+    if run_bootstrap_preflight "${ITER_DIR}/verify_pre.log" "$bootstrap_missing_reason"; then
+      verify_pre_rc=0
+    else
+      verify_pre_rc=$?
+    fi
   else
-    verify_pre_rc=$?
+    if run_verify "${ITER_DIR}/verify_pre.log"; then
+      verify_pre_rc=0
+    else
+      verify_pre_rc=$?
+    fi
   fi
   state_merge \
     --argjson last_verify_pre_rc "$verify_pre_rc" \
@@ -2487,8 +2643,6 @@ PROMPT
 
   # Fix 6: Lock state files before agent runs
   lock_state_files
-  # Ensure we unlock even on unexpected exit
-  trap 'unlock_state_files' EXIT
 
   if [[ -n "$RPH_PROMPT_FLAG" ]]; then
     rate_limit_before_call
@@ -2523,7 +2677,6 @@ PROMPT
 
   # Fix 6: Unlock state files after agent exits
   unlock_state_files
-  trap - EXIT
 
   set -e
   echo "Agent exit code: $AGENT_RC" | tee -a "$LOG_FILE"

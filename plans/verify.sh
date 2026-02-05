@@ -121,6 +121,8 @@ cd "$ROOT"
 CI_GATES_SOURCE="${CI_GATES_SOURCE:-auto}"
 VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
+VERIFY_CHECKPOINT_COUNTER="${VERIFY_CHECKPOINT_COUNTER:-auto}" # auto|1|0
+VERIFY_CHECKPOINT_FILE="${VERIFY_CHECKPOINT_FILE:-$ROOT/.ralph/verify_checkpoint.json}"
 VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture in verbose mode
 WORKFLOW_ACCEPTANCE_POLICY="${WORKFLOW_ACCEPTANCE_POLICY:-auto}"
 BASE_REF="${BASE_REF:-origin/main}"
@@ -155,6 +157,232 @@ fi
 # Logging & Utilities
 # -----------------------------------------------------------------------------
 source "$ROOT/plans/lib/verify_utils.sh"
+
+CHECKPOINT_COUNTER_ENABLED=0
+CHECKPOINT_ELIGIBLE=0
+CHECKPOINT_WOULD_HIT=0
+CHECKPOINT_FINGERPRINT=""
+CHECKPOINT_PREV_FINGERPRINT=""
+CHECKPOINT_HEAD_SHA=""
+CHECKPOINT_HEAD_TREE=""
+CHECKPOINT_CHANGED_FILES_HASH=""
+CHECKPOINT_INELIGIBLE_REASON=""
+CHECKPOINT_DIRTY="0"
+
+sha256_string() {
+  local payload="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$payload" | sha256sum | awk '{print $1}'
+  else
+    printf '%s' "$payload" | shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+checkpoint_counter_enabled() {
+  local mode="${VERIFY_CHECKPOINT_COUNTER:-auto}"
+  if [[ "$mode" == "auto" ]]; then
+    if is_ci; then
+      mode="0"
+    else
+      mode="1"
+    fi
+  fi
+  [[ "$mode" == "1" ]]
+}
+
+checkpoint_counter_load_prev() {
+  local file="$VERIFY_CHECKPOINT_FILE"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  local pybin=""
+  if command -v python3 >/dev/null 2>&1; then
+    pybin="python3"
+  elif command -v python >/dev/null 2>&1; then
+    pybin="python"
+  else
+    return 0
+  fi
+  set +e
+  CHECKPOINT_PREV_FINGERPRINT="$(VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" "$pybin" - <<'PY'
+import json
+import os
+
+path = os.environ.get("VERIFY_CHECKPOINT_FILE")
+if not path:
+    raise SystemExit(0)
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    fp = data.get("last_success", {}).get("fingerprint", "")
+    if fp:
+        print(fp)
+except Exception:
+    pass
+PY
+  )"
+  set -e
+}
+
+checkpoint_counter_init() {
+  CHECKPOINT_COUNTER_ENABLED=0
+  CHECKPOINT_ELIGIBLE=0
+  CHECKPOINT_WOULD_HIT=0
+  CHECKPOINT_FINGERPRINT=""
+  CHECKPOINT_PREV_FINGERPRINT=""
+  CHECKPOINT_HEAD_SHA=""
+  CHECKPOINT_HEAD_TREE=""
+  CHECKPOINT_CHANGED_FILES_HASH=""
+  CHECKPOINT_INELIGIBLE_REASON=""
+  CHECKPOINT_DIRTY="0"
+
+  if [[ "${CENSUS:-0}" == "1" ]]; then
+    return 0
+  fi
+  if ! checkpoint_counter_enabled; then
+    return 0
+  fi
+  CHECKPOINT_COUNTER_ENABLED=1
+
+  if [[ -n "${dirty_status:-}" ]]; then
+    CHECKPOINT_DIRTY="1"
+    CHECKPOINT_INELIGIBLE_REASON="dirty_worktree"
+  elif ! command -v git >/dev/null 2>&1; then
+    CHECKPOINT_INELIGIBLE_REASON="missing_git"
+  elif [[ "${CHANGE_DETECTION_OK:-0}" != "1" ]]; then
+    CHECKPOINT_INELIGIBLE_REASON="change_detection_unavailable"
+  else
+    CHECKPOINT_ELIGIBLE=1
+  fi
+
+  if [[ "$CHECKPOINT_ELIGIBLE" != "1" ]]; then
+    return 0
+  fi
+
+  CHECKPOINT_HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+  CHECKPOINT_HEAD_TREE="$(git rev-parse HEAD^{tree} 2>/dev/null || true)"
+  CHECKPOINT_CHANGED_FILES_HASH="$(sha256_string "${CHANGED_FILES:-}")"
+
+  local verify_mode="${VERIFY_MODE:-none}"
+  local fingerprint_payload
+  fingerprint_payload="verify_sh_sha=$VERIFY_SH_SHA
+mode=$MODE
+verify_mode=$verify_mode
+base_ref=$BASE_REF
+head_sha=$CHECKPOINT_HEAD_SHA
+head_tree=$CHECKPOINT_HEAD_TREE
+change_detection_ok=${CHANGE_DETECTION_OK:-0}
+changed_files_hash=$CHECKPOINT_CHANGED_FILES_HASH"
+  CHECKPOINT_FINGERPRINT="$(sha256_string "$fingerprint_payload")"
+
+  checkpoint_counter_load_prev
+  if [[ -n "$CHECKPOINT_PREV_FINGERPRINT" && "$CHECKPOINT_PREV_FINGERPRINT" == "$CHECKPOINT_FINGERPRINT" ]]; then
+    CHECKPOINT_WOULD_HIT=1
+  fi
+}
+
+checkpoint_counter_record_success() {
+  if [[ "$CHECKPOINT_COUNTER_ENABLED" != "1" ]]; then
+    return 0
+  fi
+  local pybin=""
+  if command -v python3 >/dev/null 2>&1; then
+    pybin="python3"
+  elif command -v python >/dev/null 2>&1; then
+    pybin="python"
+  else
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$VERIFY_CHECKPOINT_FILE")" 2>/dev/null || true
+  local verify_mode="${VERIFY_MODE:-none}"
+  local would_hit="$CHECKPOINT_WOULD_HIT"
+  local eligible="$CHECKPOINT_ELIGIBLE"
+  local ineligible_reason="$CHECKPOINT_INELIGIBLE_REASON"
+
+  set +e
+  VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" \
+    CHECKPOINT_WOULD_HIT="$would_hit" \
+    CHECKPOINT_ELIGIBLE="$eligible" \
+    CHECKPOINT_INELIGIBLE_REASON="$ineligible_reason" \
+    CHECKPOINT_FINGERPRINT="$CHECKPOINT_FINGERPRINT" \
+    CHECKPOINT_HEAD_SHA="$CHECKPOINT_HEAD_SHA" \
+    CHECKPOINT_HEAD_TREE="$CHECKPOINT_HEAD_TREE" \
+    CHECKPOINT_CHANGED_FILES_HASH="$CHECKPOINT_CHANGED_FILES_HASH" \
+    CHECKPOINT_MODE="$MODE" \
+    CHECKPOINT_VERIFY_MODE="$verify_mode" \
+    CHECKPOINT_BASE_REF="$BASE_REF" \
+    CHECKPOINT_DIRTY="$CHECKPOINT_DIRTY" \
+    "$pybin" - <<'PY'
+import json
+import os
+import time
+
+path = os.environ.get("VERIFY_CHECKPOINT_FILE")
+if not path:
+    raise SystemExit(0)
+
+def _int_env(name, default=0):
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except Exception:
+        return default
+
+data = {
+    "schema_version": 1,
+    "success_runs": 0,
+    "eligible_success_runs": 0,
+    "would_hit_success_runs": 0,
+    "would_miss_success_runs": 0,
+    "ineligible_success_runs": 0,
+    "last_success": {},
+}
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        loaded = json.load(fh)
+        if isinstance(loaded, dict):
+            data.update(loaded)
+except Exception:
+    pass
+
+data["success_runs"] = int(data.get("success_runs", 0)) + 1
+eligible = _int_env("CHECKPOINT_ELIGIBLE", 0)
+would_hit = _int_env("CHECKPOINT_WOULD_HIT", 0)
+if eligible == 1:
+    data["eligible_success_runs"] = int(data.get("eligible_success_runs", 0)) + 1
+    if would_hit == 1:
+        data["would_hit_success_runs"] = int(data.get("would_hit_success_runs", 0)) + 1
+    else:
+        data["would_miss_success_runs"] = int(data.get("would_miss_success_runs", 0)) + 1
+else:
+    data["ineligible_success_runs"] = int(data.get("ineligible_success_runs", 0)) + 1
+
+if eligible == 1:
+    last = {
+        "ts": int(time.time()),
+        "fingerprint": os.environ.get("CHECKPOINT_FINGERPRINT", ""),
+        "mode": os.environ.get("CHECKPOINT_MODE", ""),
+        "verify_mode": os.environ.get("CHECKPOINT_VERIFY_MODE", ""),
+        "base_ref": os.environ.get("CHECKPOINT_BASE_REF", ""),
+        "head_sha": os.environ.get("CHECKPOINT_HEAD_SHA", ""),
+        "head_tree": os.environ.get("CHECKPOINT_HEAD_TREE", ""),
+        "changed_files_hash": os.environ.get("CHECKPOINT_CHANGED_FILES_HASH", ""),
+        "dirty": bool(_int_env("CHECKPOINT_DIRTY", 0)),
+        "eligible": bool(eligible),
+        "ineligible_reason": os.environ.get("CHECKPOINT_INELIGIBLE_REASON", ""),
+    }
+    data["last_success"] = last
+
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, separators=(",", ":"))
+os.replace(tmp, path)
+PY
+  set -e
+}
 
 CENSUS_ENTRIES=()
 
@@ -1010,6 +1238,7 @@ export CONTRACT_COVERAGE_STRICT
 
 # Change detection for stack gating (fail-closed if unavailable)
 init_change_detection
+checkpoint_counter_init
 
 # -----------------------------------------------------------------------------
 # 0.1) Workflow preflight
@@ -1403,4 +1632,5 @@ for f in "${VERIFY_ARTIFACTS_DIR}"/*.time; do
   echo "  $name: ${elapsed}s"
 done
 
+checkpoint_counter_record_success
 log "VERIFY OK (mode=$MODE)"
