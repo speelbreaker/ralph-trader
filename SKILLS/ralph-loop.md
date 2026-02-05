@@ -252,6 +252,10 @@ rm -rf .ralph/lock/
 
 # Check PRD validity
 ./plans/prd_schema_check.sh plans/prd.json
+
+# If blocked with BLOCKED_RALPH_DIR_MODIFIED
+# Run locally with CI unset to avoid workflow acceptance worktrees under .ralph
+CI= RPH_PROFILE=thorough ./plans/ralph.sh 1
 ```
 
 ### Iteration keeps timing out
