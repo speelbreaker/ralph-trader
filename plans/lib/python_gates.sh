@@ -12,15 +12,33 @@ RUN_LOGGED_SUPPRESS_EXCERPT="${RUN_LOGGED_SUPPRESS_EXCERPT:-}"
 RUN_LOGGED_SKIP_FAILED_GATE="${RUN_LOGGED_SKIP_FAILED_GATE:-}"
 RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL="${RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL:-}"
 
+emit_inner_excerpt() {
+  local name="$1"
+  if [[ -n "${RUN_LOGGED_SUPPRESS_EXCERPT:-}" ]]; then
+    emit_fail_excerpt "$name" "${VERIFY_ARTIFACTS_DIR}/${name}.log"
+  fi
+}
+
+run_logged_or_exit() {
+  local name="$1"
+  local timeout="$2"
+  shift 2
+  if ! run_logged "$name" "$timeout" "$@"; then
+    local rc=$?
+    emit_inner_excerpt "$name"
+    exit "$rc"
+  fi
+}
+
 ensure_python
 
 # Ruff: required in CI (best ROI for agent-heavy workflows)
 if command -v ruff >/dev/null 2>&1; then
   log "3a) Python ruff lint"
-  run_logged "python_ruff_check" "$RUFF_TIMEOUT" ruff check .
+  run_logged_or_exit "python_ruff_check" "$RUFF_TIMEOUT" ruff check .
 
   log "3b) Python ruff format"
-  run_logged "python_ruff_format" "$RUFF_TIMEOUT" ruff format --check .
+  run_logged_or_exit "python_ruff_format" "$RUFF_TIMEOUT" ruff format --check .
 else
   if is_ci; then
     fail "ruff not found in CI (install it or adjust verify.sh)"
@@ -35,11 +53,12 @@ if command -v pytest >/dev/null 2>&1; then
   if [[ "${MODE:-}" == "quick" ]]; then
     PYTEST_QUICK_EXPR="${PYTEST_QUICK_EXPR:-not integration and not slow}"
     if ! run_logged "python_pytest_quick" "$PYTEST_TIMEOUT" pytest -q -m "$PYTEST_QUICK_EXPR"; then
+      emit_inner_excerpt "python_pytest_quick"
       warn "pytest quick selection failed; retrying full pytest -q"
-      run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
+      run_logged_or_exit "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
     fi
   else
-    run_logged "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
+    run_logged_or_exit "python_pytest_full" "$PYTEST_TIMEOUT" pytest -q
   fi
 else
   if is_ci; then
@@ -54,9 +73,12 @@ REQUIRE_MYPY="${REQUIRE_MYPY:-0}"
 if command -v mypy >/dev/null 2>&1; then
   log "3d) Python mypy"
   if [[ "$REQUIRE_MYPY" == "1" ]]; then
-    run_logged "python_mypy" "$MYPY_TIMEOUT" mypy .
+    run_logged_or_exit "python_mypy" "$MYPY_TIMEOUT" mypy .
   else
-    run_logged "python_mypy" "$MYPY_TIMEOUT" mypy . --ignore-missing-imports || warn "mypy reported issues"
+    if ! run_logged "python_mypy" "$MYPY_TIMEOUT" mypy . --ignore-missing-imports; then
+      emit_inner_excerpt "python_mypy"
+      warn "mypy reported issues"
+    fi
   fi
 else
   if [[ "$REQUIRE_MYPY" == "1" ]]; then

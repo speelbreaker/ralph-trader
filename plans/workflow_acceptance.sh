@@ -686,6 +686,7 @@ OVERLAY_FILES=(
   ".github/pull_request_template.md"
   "plans/ralph.sh"
   "plans/verify.sh"
+  "plans/test_parallel_smoke.sh"
   "plans/workflow_files_allowlist.txt"
   "plans/lib/verify_utils.sh"
   "plans/lib/change_detection.sh"
@@ -814,6 +815,7 @@ done
 scripts_to_chmod=(
   "ralph.sh"
   "verify.sh"
+  "test_parallel_smoke.sh"
   "lib/rust_gates.sh"
   "lib/python_gates.sh"
   "lib/node_gates.sh"

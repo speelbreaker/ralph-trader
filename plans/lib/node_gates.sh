@@ -11,6 +11,24 @@ source "$ROOT/plans/lib/verify_utils.sh"
 RUN_LOGGED_SUPPRESS_EXCERPT="${RUN_LOGGED_SUPPRESS_EXCERPT:-}"
 RUN_LOGGED_SKIP_FAILED_GATE="${RUN_LOGGED_SKIP_FAILED_GATE:-}"
 RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL="${RUN_LOGGED_SUPPRESS_TIMEOUT_FAIL:-}"
+
+emit_inner_excerpt() {
+  local name="$1"
+  if [[ -n "${RUN_LOGGED_SUPPRESS_EXCERPT:-}" ]]; then
+    emit_fail_excerpt "$name" "${VERIFY_ARTIFACTS_DIR}/${name}.log"
+  fi
+}
+
+run_logged_or_exit() {
+  local name="$1"
+  local timeout="$2"
+  shift 2
+  if ! run_logged "$name" "$timeout" "$@"; then
+    local rc=$?
+    emit_inner_excerpt "$name"
+    exit "$rc"
+  fi
+}
 if [[ -z "${NODE_PM:-}" ]]; then
   warn "No recognized lockfile; skipping node gates"
   exit 0
@@ -21,24 +39,24 @@ need "$NODE_PM"
 log "4) Node/TS gates"
 case "$NODE_PM" in
   pnpm)
-    run_logged "node_lint" "$NODE_LINT_TIMEOUT" pnpm -s run lint --if-present
-    run_logged "node_typecheck" "$NODE_TYPECHECK_TIMEOUT" pnpm -s run typecheck --if-present
-    run_logged "node_test" "$NODE_TEST_TIMEOUT" pnpm -s run test --if-present
+    run_logged_or_exit "node_lint" "$NODE_LINT_TIMEOUT" pnpm -s run lint --if-present
+    run_logged_or_exit "node_typecheck" "$NODE_TYPECHECK_TIMEOUT" pnpm -s run typecheck --if-present
+    run_logged_or_exit "node_test" "$NODE_TEST_TIMEOUT" pnpm -s run test --if-present
     ;;
   npm)
-    run_logged "node_lint" "$NODE_LINT_TIMEOUT" npm run -s lint --if-present
-    run_logged "node_typecheck" "$NODE_TYPECHECK_TIMEOUT" npm run -s typecheck --if-present
-    run_logged "node_test" "$NODE_TEST_TIMEOUT" npm run -s test --if-present
+    run_logged_or_exit "node_lint" "$NODE_LINT_TIMEOUT" npm run -s lint --if-present
+    run_logged_or_exit "node_typecheck" "$NODE_TYPECHECK_TIMEOUT" npm run -s typecheck --if-present
+    run_logged_or_exit "node_test" "$NODE_TEST_TIMEOUT" npm run -s test --if-present
     ;;
   yarn)
     if node_script_exists lint; then
-      run_logged "node_lint" "$NODE_LINT_TIMEOUT" yarn -s run lint
+      run_logged_or_exit "node_lint" "$NODE_LINT_TIMEOUT" yarn -s run lint
     fi
     if node_script_exists typecheck; then
-      run_logged "node_typecheck" "$NODE_TYPECHECK_TIMEOUT" yarn -s run typecheck
+      run_logged_or_exit "node_typecheck" "$NODE_TYPECHECK_TIMEOUT" yarn -s run typecheck
     fi
     if node_script_exists test; then
-      run_logged "node_test" "$NODE_TEST_TIMEOUT" yarn -s run test
+      run_logged_or_exit "node_test" "$NODE_TEST_TIMEOUT" yarn -s run test
     fi
     ;;
   *)
