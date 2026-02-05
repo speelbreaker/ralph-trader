@@ -18,6 +18,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
   - Rejects unit mismatches and sets `RiskState::Degraded` (increments `order_intent_reject_unit_mismatch_total`).
   - `DispatchRejectReason` currently only includes `UnitMismatch` and is always paired with `RiskState::Degraded`.
   - Uses `UNIT_MISMATCH_EPSILON = 1e-9` when comparing contracts * multiplier to canonical amount.
+  - Derives `contracts` from canonical amount when `contract_multiplier > 0` using `round()`.
   - For USD-sized instruments, derives `qty_coin = qty_usd / index_price` in the outbound mapping.
   - Rejects non-positive `index_price` for USD-sized instruments.
   - Treats missing canonical amount or missing contract multiplier as a unit mismatch and logs the reason string.
@@ -40,14 +41,16 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - If both `contracts` and canonical amount are provided and mismatch -> reject intent and set `RiskState::Degraded`.
 - Dispatcher rules require deriving `contracts` from canonical amount when contract size/multiplier is defined.
 - Dispatcher rules derive `qty_coin = qty_usd / index_price` for USD-sized instruments.
+- Contracts mismatch tolerance uses a relative threshold `contracts_amount_match_tolerance` (default 0.001) with `epsilon = 1e-9`.
+- Contracts mismatch rejection reason is `ContractsAmountMismatch` (AT-920).
 
 ## Gaps vs contract
 - `OrderSize::new` uses `expect(...)` for missing canonical fields (panic) instead of a reject path with `RiskState::Degraded`.
 - `OrderSize::new` drops non-canonical inputs (including passing both `qty_coin` and `qty_usd`) instead of rejecting the intent; only `dispatch_map` rejects when both fields are set on the `OrderSize`.
-- `contracts` is passed through but not derived from canonical amounts; no rounding or contract_size_usd handling.
+- `OrderSize::new` does not derive `contracts`; derivation occurs only in `dispatch_map`.
 - Contracts mismatch validation only occurs in `dispatch_map` when a multiplier is supplied; `OrderSize::new` does not enforce contract matching.
-- Mismatch tolerance is implicit: `dispatch_map` uses `UNIT_MISMATCH_EPSILON = 1e-9`, but the contract only says "within tolerance" (needs a defined threshold).
-- Contract rounding rules for derived `contracts` are not implemented; current code only checks approximate equality when `contracts` is provided.
+- Mismatch tolerance uses an absolute epsilon (`UNIT_MISMATCH_EPSILON = 1e-9`) instead of the contract's relative `contracts_amount_match_tolerance` formula.
+- Contracts mismatch rejection uses `DispatchRejectReason::UnitMismatch` rather than the contract-required `ContractsAmountMismatch`.
 - No validation for non-positive `index_price` when computing `notional_usd` for coin-sized instruments.
 - `OrderSize` is not wired into a production dispatch path yet (tests only).
 
@@ -58,11 +61,12 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - Derives `contracts` from canonical amount when multiplier/contract size is available.
 - Rejects when `contracts` is provided but multiplier/contract size is missing.
 - Handles invalid `index_price` for coin-sized instruments (if required by contract).
+- Enforces `contracts_amount_match_tolerance` (relative tolerance) and `ContractsAmountMismatch` reason on mismatch.
 
 ## Minimal diff to align with contract
 - Change `OrderSize::new` to return a `Result` with a deterministic error instead of panicking.
 - Validate exactly one canonical amount is provided and matches `InstrumentKind`.
 - Add optional multiplier/contract size inputs to derive `contracts` consistently.
 - Decide whether to enforce contract mismatch inside `OrderSize` or keep it in `dispatch_map`, but ensure it is always applied.
-- Define a shared mismatch tolerance (or rounding rule) aligned with the contract's "within tolerance" requirement.
+- Apply the contract's `contracts_amount_match_tolerance` formula and reason code for mismatch.
 - Wire creation into the execution path once build_order_intent exists (future story).
