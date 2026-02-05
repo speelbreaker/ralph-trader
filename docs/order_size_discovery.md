@@ -73,3 +73,4 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - Implement the relative tolerance check using `contracts_amount_match_tolerance` (default 0.001) with epsilon 1e-9.
 - Enforce `index_price > 0` when computing derived values (or document/centralize the guard if it belongs in preflight).
 - Ensure derived contracts use contract size/multiplier from instrument metadata and are applied consistently for both USD- and coin-sized instruments.
+- Defer wiring OrderSize into build_order_intent until sizing invariants are enforced; current call sites remain tests only.
