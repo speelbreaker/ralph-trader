@@ -4958,7 +4958,7 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
-if [[ -z "$iter_dir" || ! -f "$iter_dir/verify_pre.log" ]]; then
+if [[ -z "$iter_dir" ]] || ! run_in_worktree test -f "$iter_dir/verify_pre.log"; then
   echo "FAIL: expected verify_pre.log for bootstrap skip" >&2
   exit 1
 fi
@@ -5016,7 +5016,7 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
 iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
-if [[ -z "$iter_dir" || ! -f "$iter_dir/verify_pre.log" ]]; then
+if [[ -z "$iter_dir" ]] || ! run_in_worktree test -f "$iter_dir/verify_pre.log"; then
   echo "FAIL: expected verify_pre.log for bootstrap verify_pre run" >&2
   exit 1
 fi

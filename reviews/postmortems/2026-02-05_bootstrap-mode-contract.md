@@ -1,8 +1,8 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: Added a bootstrap-mode exception to verify_pre in the workflow contract, wired enforcement in Ralph, and added acceptance coverage for missing-workspace bootstrap behavior.
-- What value it has (what problem it solves, upgrade provides): Allows safe bootstrap work when the workspace is intentionally missing, without enabling pass flips or relaxing promotion verification.
+- Feature/behavior: Added a bootstrap-mode exception to verify_pre in the workflow contract, wired enforcement in Ralph, added acceptance coverage for missing-workspace bootstrap behavior, and aligned verify.sh with checkpoint counter support expected by workflow acceptance.
+- What value it has (what problem it solves, upgrade provides): Allows safe bootstrap work when the workspace is intentionally missing, without enabling pass flips or relaxing promotion verification, and keeps verify.sh compliant with acceptance expectations.
 - Governing contract: specs/WORKFLOW_CONTRACT.md
 
 ## 1) Constraint (ONE)
