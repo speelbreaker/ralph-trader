@@ -12,7 +12,7 @@
 - Next-agent default behavior (subordinate): Use RPH_BOOTSTRAP_MODE only when the workspace is missing; otherwise expect verify_pre to run normally.
 - Permanent fix proposal (elevate): Add a targeted fixture test that forces a missing workspace and asserts bootstrap preflight order + manifest content.
 - Smallest increment: Add a fixture in workflow acceptance that validates bootstrap_preflight cmd ordering.
-- Validation (proof it got better): workflow contract gate + workflow acceptance tests cover bootstrap skip and workspace-present behavior.
+- Validation (proof it got better): workflow contract gate + workflow acceptance tests cover bootstrap skip and workspace-present behavior; local `./plans/verify.sh full` timed out at 30m, relying on CI verify for proof.
 
 ## 2) Given what I built, what's the single best follow-up PR, and what 1-3 upgrades are worth considering next? Include smallest increment + how we validate.
 - Response: Add an explicit bootstrap section in `plans/ralph.sh` prompt and `docs/skills/ralph-loop-playbook.md` to document when to use it; validate via workflow acceptance text assertions.

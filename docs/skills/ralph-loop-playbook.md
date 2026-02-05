@@ -9,6 +9,17 @@ Quickstart
 - Baseline green: `./plans/verify.sh` (or `./plans/verify.sh full`).
 - Run: `./plans/ralph.sh 1` for a single iteration.
 
+Bootstrap Mode
+- Use only when the workspace is intentionally missing and `verify_pre` would fail (e.g., no `Cargo.toml` yet).
+- Enable with `RPH_BOOTSTRAP_MODE=1`.
+- Behavior: `verify_pre` is skipped, bootstrap preflight runs instead:
+- `./plans/preflight.sh --strict`
+- `./plans/prd_preflight.sh --strict "$PRD_FILE"`
+- `./plans/run_prd_auditor.sh`
+- `./plans/prd_audit_check.sh`
+- Safety: pass flips are forbidden in bootstrap mode; once the workspace exists, run normal `verify_pre` and a full verify before promotion.
+- Diagnostics: `.ralph/verify_pre.log` records `VERIFY_SH_SHA` and `bootstrap_skip_reason`.
+
 Failure Recovery
 - Stale lock: if no active run but `.ralph/lock/` exists, remove it and retry.
 - Interrupted run: state files are unlocked on exit; if they remain read-only, `chmod u+w .ralph/state.json plans/prd.json`.
