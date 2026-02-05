@@ -15,7 +15,7 @@
 - Validation (proof it got better): One full verify run passes without manual rework; acceptance logs show new 0k.16/0k.17 tests passing.
 
 ## 2) Given what I built, what's the single best follow-up PR, and what 1-3 upgrades are worth considering next? Include smallest increment + how we validate.
-- Response: Split Phase 1A (allowlist + change detection) from Phase 1B (parallel stacks) into two PRs; validate each with `./plans/verify.sh full` and ensure workflow acceptance 0k.16/0k.17 pass in CI.
+- Response: Re-enable parallel acceptance cache with isolated per-worker cache dirs; validate via `./plans/workflow_acceptance_parallel.sh --jobs 4` and `./plans/verify.sh full`.
 
 ## 3) Given what I built and the pain I hit (top sinks + failure modes), what 1-3 enforceable AGENTS.md rules should we add so the next agent doesn't repeat it?
 - Response:
