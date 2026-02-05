@@ -2032,6 +2032,19 @@ if test_start "0k.18" "verify.sh census flags" 1; then
   '
   test_pass "0k.18"
 fi
+
+if test_start "0k.19" "preflight census passthrough" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    out="$(./plans/preflight.sh --census)"
+    echo "$out" | grep -q "VERIFY CENSUS REPORT"
+
+    out_json="$(./plans/preflight.sh --census-json)"
+    printf "%s" "$out_json" | head -c1 | grep -q "{"
+    echo "$out_json" | grep -q "\"census\":true"
+  '
+  test_pass "0k.19"
+fi
 if test_start "0l" "--list prints test ids"; then
   list_output="$("$ROOT/plans/workflow_acceptance.sh" --list)"
   if [[ -z "$list_output" ]]; then

@@ -7,8 +7,10 @@
 #   issues early (postmortem, schema, shell syntax) without the full verify cost.
 #
 # Usage:
-#   ./plans/preflight.sh           # Run all checks (warn on minor issues)
-#   ./plans/preflight.sh --strict  # Fail on warnings (e.g., missing BASE_REF)
+#   ./plans/preflight.sh               # Run all checks (warn on minor issues)
+#   ./plans/preflight.sh --strict      # Fail on warnings (e.g., missing BASE_REF)
+#   ./plans/preflight.sh --census      # Emit verify census (non-mutating)
+#   ./plans/preflight.sh --census-json # Emit verify census JSON (non-mutating)
 #
 # Exit codes:
 #   0 = all checks passed
@@ -25,12 +27,35 @@ cd "$ROOT"
 
 # --- Parse arguments ---
 STRICT_MODE=0
+CENSUS_MODE=""
 for arg in "$@"; do
   case "$arg" in
     --strict) STRICT_MODE=1 ;;
+    --census)
+      if [[ -n "$CENSUS_MODE" ]]; then
+        echo "Unknown argument: $arg" >&2
+        exit 2
+      fi
+      CENSUS_MODE="human"
+      ;;
+    --census-json)
+      if [[ -n "$CENSUS_MODE" ]]; then
+        echo "Unknown argument: $arg" >&2
+        exit 2
+      fi
+      CENSUS_MODE="json"
+      ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
+
+if [[ -n "$CENSUS_MODE" ]]; then
+  if [[ "$CENSUS_MODE" == "json" ]]; then
+    exec ./plans/verify.sh --census-json
+  else
+    exec ./plans/verify.sh --census
+  fi
+fi
 
 # --- Counters ---
 PASS_COUNT=0
