@@ -1449,8 +1449,8 @@ run_bootstrap_preflight() {
   write_bootstrap_verify_pre_log "$log" "$missing_reason"
   bootstrap_preflight_cmd "$log" "$summary_file" "preflight" "./plans/preflight.sh" "--strict" || return $?
   bootstrap_preflight_cmd "$log" "$summary_file" "prd_preflight" "./plans/prd_preflight.sh" "--strict" "$PRD_FILE" || return $?
-  bootstrap_preflight_cmd "$log" "$summary_file" "prd_auditor" "./plans/run_prd_auditor.sh" || return $?
-  bootstrap_preflight_cmd "$log" "$summary_file" "prd_audit_check" "./plans/prd_audit_check.sh" || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_auditor" env AUDIT_PRD_FILE="$PRD_FILE" ./plans/run_prd_auditor.sh || return $?
+  bootstrap_preflight_cmd "$log" "$summary_file" "prd_audit_check" env PRD_FILE="$PRD_FILE" ./plans/prd_audit_check.sh || return $?
   echo "bootstrap_preflight=ok" >> "$log"
   echo "bootstrap_preflight=ok" > "$summary_file"
   return 0

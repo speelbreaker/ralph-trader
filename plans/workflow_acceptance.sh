@@ -4936,7 +4936,6 @@ run_ralph env \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
   RPH_SELF_HEAL=0 \
-  AUDIT_PRD_FILE="$valid_prd_14c" \
   AUDIT_OUTPUT_JSON="$WORKTREE/.ralph/bootstrap_audit_14c/prd_audit.json" \
   AUDIT_CACHE_FILE="$WORKTREE/.ralph/bootstrap_audit_14c/prd_audit_cache.json" \
   AUDIT_STDOUT_LOG="$WORKTREE/.ralph/bootstrap_audit_14c/prd_auditor_stdout.log" \
