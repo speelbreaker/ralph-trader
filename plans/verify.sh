@@ -7,7 +7,7 @@
 #   green state for the selected verification level?"
 #
 # Usage:
-#   ./plans/verify.sh [quick|full|promotion]
+#   ./plans/verify.sh [quick|full|promotion] [--census|--census-json]
 #   (no arg defaults to full when CI=1, quick otherwise)
 #
 # Philosophy:
@@ -38,9 +38,64 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   VERIFY_SH_SHA="$(shasum -a 256 "$VERIFY_SCRIPT_PATH" | awk '{print $1}')"
 fi
-echo "VERIFY_SH_SHA=$VERIFY_SH_SHA"
 
-MODE="${1:-}"                      # quick | full | promotion (default inferred)
+usage() {
+  cat <<'EOF'
+Usage: ./plans/verify.sh [quick|full|promotion] [--census|--census-json]
+
+Options:
+  --census        Output a non-mutating census (human-readable). No gates run.
+  --census-json   Output a non-mutating census (JSON). No gates run.
+  -h, --help      Show this help.
+EOF
+}
+
+MODE=""                             # quick | full | promotion (default inferred)
+CENSUS_FORMAT=""                    # human | json
+CENSUS=0
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      quick|full|promotion)
+        if [[ -n "$MODE" ]]; then
+          echo "FAIL: multiple modes provided (already set to '$MODE')" >&2
+          exit 2
+        fi
+        MODE="$1"
+        shift
+        ;;
+      --census)
+        if [[ -n "$CENSUS_FORMAT" ]]; then
+          echo "FAIL: --census and --census-json are mutually exclusive" >&2
+          exit 2
+        fi
+        CENSUS_FORMAT="human"
+        shift
+        ;;
+      --census-json)
+        if [[ -n "$CENSUS_FORMAT" ]]; then
+          echo "FAIL: --census and --census-json are mutually exclusive" >&2
+          exit 2
+        fi
+        CENSUS_FORMAT="json"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "FAIL: unknown option: $1" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+  done
+}
+
+parse_args "$@"
+
 if [[ -z "$MODE" ]]; then
   if [[ -n "${CI:-}" ]]; then
     MODE="full"
@@ -54,6 +109,12 @@ if [[ "$MODE" == "promotion" ]]; then
   export VERIFY_MODE="promotion"
 fi
 VERIFY_MODE="${VERIFY_MODE:-}"     # set to "promotion" for release-grade gates
+if [[ -n "$CENSUS_FORMAT" ]]; then
+  CENSUS=1
+fi
+if [[ "$CENSUS" != "1" ]]; then
+  echo "VERIFY_SH_SHA=$VERIFY_SH_SHA"
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -71,7 +132,9 @@ IMPL_PLAN_FILE="${IMPL_PLAN_FILE:-specs/IMPLEMENTATION_PLAN.md}"
 ARCH_FLOWS_FILE="${ARCH_FLOWS_FILE:-specs/flows/ARCH_FLOWS.yaml}"
 GLOBAL_INVARIANTS_FILE="${GLOBAL_INVARIANTS_FILE:-specs/invariants/GLOBAL_INVARIANTS.md}"
 
-mkdir -p "$VERIFY_ARTIFACTS_DIR"
+if [[ "$CENSUS" != "1" ]]; then
+  mkdir -p "$VERIFY_ARTIFACTS_DIR"
+fi
 if [[ "$CI_GATES_SOURCE" == "auto" ]]; then
   if [[ -d "$ROOT/.github/workflows" ]]; then
     CI_GATES_SOURCE="github"
@@ -92,6 +155,342 @@ fi
 # Logging & Utilities
 # -----------------------------------------------------------------------------
 source "$ROOT/plans/lib/verify_utils.sh"
+
+CENSUS_ENTRIES=()
+
+json_escape() {
+  local s="$1"
+  s=${s//\\/\\\\}
+  s=${s//"/\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  echo "$s"
+}
+
+census_add() {
+  local gate="$1"
+  local status="$2"
+  local reason="${3:-}"
+  local details="${4:-}"
+  CENSUS_ENTRIES+=("${gate}|${status}|${reason}|${details}")
+}
+
+census_emit_human() {
+  local started_at="$1"
+  local ended_at="$2"
+  local status
+  local gate entry_status reason details
+  local has_section
+
+  echo "=== VERIFY CENSUS REPORT ==="
+  echo "Mode: ${MODE}"
+  echo "Started: ${started_at}"
+  echo "Ended: ${ended_at}"
+  echo ""
+
+  for status in would_fail would_skip would_run; do
+    has_section=0
+    for entry in "${CENSUS_ENTRIES[@]}"; do
+      IFS='|' read -r gate entry_status reason details <<< "$entry"
+      if [[ "$entry_status" != "$status" ]]; then
+        continue
+      fi
+      if [[ "$has_section" == "0" ]]; then
+        case "$status" in
+          would_fail) echo "WOULD FAIL:" ;;
+          would_skip) echo "WOULD SKIP:" ;;
+          would_run) echo "WOULD RUN:" ;;
+        esac
+        has_section=1
+      fi
+      line="  - ${gate}"
+      if [[ -n "$reason" ]]; then
+        line+=" (${reason})"
+      fi
+      if [[ -n "$details" ]]; then
+        line+=": ${details}"
+      fi
+      echo "$line"
+    done
+    if [[ "$has_section" == "1" ]]; then
+      echo ""
+    fi
+  done
+
+  echo "Notes:"
+  echo "  - Census is diagnostic-only"
+  echo "  - Failures may cascade from a single root cause"
+}
+
+census_emit_json() {
+  local started_at="$1"
+  local ended_at="$2"
+  local entry gate status reason details
+  local fail_count=0 skip_count=0 run_count=0
+  local first=1
+
+  for entry in "${CENSUS_ENTRIES[@]}"; do
+    IFS='|' read -r gate status reason details <<< "$entry"
+    case "$status" in
+      would_fail) fail_count=$((fail_count + 1)) ;;
+      would_skip) skip_count=$((skip_count + 1)) ;;
+      would_run) run_count=$((run_count + 1)) ;;
+    esac
+  done
+
+  printf '{'
+  printf '"schema_version":1,'
+  printf '"tool":"verify.sh",'
+  printf '"mode":"%s",' "$(json_escape "$MODE")"
+  printf '"census":true,'
+  printf '"started_at":"%s",' "$(json_escape "$started_at")"
+  printf '"ended_at":"%s",' "$(json_escape "$ended_at")"
+  printf '"results":['
+  for entry in "${CENSUS_ENTRIES[@]}"; do
+    IFS='|' read -r gate status reason details <<< "$entry"
+    if [[ "$first" == "0" ]]; then
+      printf ','
+    fi
+    first=0
+    printf '{'
+    printf '"gate":"%s",' "$(json_escape "$gate")"
+    printf '"status":"%s"' "$(json_escape "$status")"
+    if [[ -n "$reason" ]]; then
+      printf ',"reason":"%s"' "$(json_escape "$reason")"
+    fi
+    if [[ -n "$details" ]]; then
+      printf ',"details":"%s"' "$(json_escape "$details")"
+    fi
+    printf '}'
+  done
+  printf '],'
+  printf '"summary":{'
+  printf '"would_fail":%d,' "$fail_count"
+  printf '"would_skip":%d,' "$skip_count"
+  printf '"would_run":%d' "$run_count"
+  printf '},'
+  printf '"notes":["Census results are non-authoritative","Fixing earlier failures may resolve later ones"]'
+  printf '}'
+  printf '\n'
+}
+
+run_verify_census() {
+  local started_at ended_at
+  local -a spec_missing
+  local -a status_missing
+  started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  init_change_detection >/dev/null 2>&1 || true
+
+  census_add "repo_sanity" "would_run"
+
+  if [[ -x "plans/preflight.sh" ]]; then
+    census_add "workflow_preflight" "would_run"
+  else
+    census_add "workflow_preflight" "would_fail" "missing_preflight" "plans/preflight.sh"
+  fi
+
+  if [[ -x "plans/test_parallel_smoke.sh" ]]; then
+    census_add "parallel_smoke" "would_run"
+  else
+    census_add "parallel_smoke" "would_fail" "missing_smoke" "plans/test_parallel_smoke.sh"
+  fi
+
+  if [[ ! -f "plans/contract_coverage_matrix.py" ]]; then
+    census_add "contract_coverage" "would_fail" "missing_script" "plans/contract_coverage_matrix.py"
+  elif should_run_contract_coverage; then
+    census_add "contract_coverage" "would_run"
+  else
+    census_add "contract_coverage" "would_skip" "no_relevant_changes"
+  fi
+
+  spec_missing=()
+  if ! command -v python >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
+    spec_missing+=("python")
+  fi
+  for f in "$CONTRACT_FILE" "$ARCH_FLOWS_FILE" "$GLOBAL_INVARIANTS_FILE" \
+    "scripts/check_contract_crossrefs.py" "scripts/check_arch_flows.py" \
+    "scripts/check_state_machines.py" "scripts/check_global_invariants.py" \
+    "scripts/check_time_freshness.py" "scripts/check_crash_matrix.py" \
+    "scripts/check_crash_replay_idempotency.py" "scripts/check_reconciliation_matrix.py" \
+    "scripts/check_csp_trace.py" "specs/flows/TIME_FRESHNESS.yaml" \
+    "specs/flows/CRASH_MATRIX.md" "specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml" \
+    "specs/flows/RECONCILIATION_MATRIX.md" "specs/TRACE.yaml"; do
+    if [[ ! -f "$f" ]]; then
+      spec_missing+=("$f")
+    fi
+  done
+  if [[ ! -d "specs/state_machines" ]]; then
+    spec_missing+=("specs/state_machines/")
+  fi
+  if (( ${#spec_missing[@]} > 0 )); then
+    census_add "spec_integrity" "would_fail" "missing_paths" "$(IFS=','; echo "${spec_missing[*]}")"
+  else
+    census_add "spec_integrity" "would_run"
+  fi
+
+  status_missing=()
+  for f in "tools/validate_status.py" \
+    "python/schemas/status_csp_min.schema.json" \
+    "python/schemas/status_csp_exact.schema.json" \
+    "specs/status/status_reason_registries_manifest.json"; do
+    if [[ ! -f "$f" ]]; then
+      status_missing+=("$f")
+    fi
+  done
+  if (( ${#status_missing[@]} > 0 )); then
+    census_add "status_validation" "would_fail" "missing_paths" "$(IFS=','; echo "${status_missing[*]}")"
+  elif [[ -d "tests/fixtures/status" ]]; then
+    census_add "status_validation" "would_run"
+  else
+    census_add "status_validation" "would_skip" "no_fixtures"
+  fi
+
+  ENDPOINT_GATE="${ENDPOINT_GATE:-1}"
+  if [[ "$ENDPOINT_GATE" == "0" && -z "${CI:-}" ]]; then
+    census_add "endpoint_gate" "would_skip" "disabled"
+  else
+    if [[ "${CHANGE_DETECTION_OK:-0}" != "1" && -n "${CI:-}" ]]; then
+      census_add "endpoint_gate" "would_fail" "change_detection_unavailable"
+    elif [[ -z "${CHANGED_FILES:-}" ]]; then
+      census_add "endpoint_gate" "would_skip" "no_changes"
+    else
+      ENDPOINT_PATTERNS="${ENDPOINT_PATTERNS:-'(^|/)(routes|router|api|endpoints|controllers|handlers)(/|$)|(^|/)(web|http)/|(^|/)(fastapi|django|flask)/'}"
+      TEST_PATTERNS="${TEST_PATTERNS:-'(^|/)(tests?|__tests__)/|(\\.spec\\.|\\.test\\.)|(^|/)integration_tests/'}"
+      endpoint_changed="$(echo "$CHANGED_FILES" | grep -E "$ENDPOINT_PATTERNS" || true)"
+      tests_changed="$(echo "$CHANGED_FILES" | grep -E "$TEST_PATTERNS" || true)"
+      if [[ -z "$endpoint_changed" ]]; then
+        census_add "endpoint_gate" "would_skip" "no_endpoint_changes"
+      elif [[ -z "$tests_changed" ]]; then
+        census_add "endpoint_gate" "would_fail" "missing_tests"
+      else
+        census_add "endpoint_gate" "would_run"
+      fi
+    fi
+  fi
+
+  POSTMORTEM_GATE="${POSTMORTEM_GATE:-1}"
+  if [[ "$POSTMORTEM_GATE" == "0" && -z "${CI:-}" ]]; then
+    census_add "postmortem_gate" "would_skip" "disabled"
+  elif [[ ! -x "plans/postmortem_check.sh" ]]; then
+    census_add "postmortem_gate" "would_fail" "missing_script" "plans/postmortem_check.sh"
+  else
+    census_add "postmortem_gate" "would_run"
+  fi
+
+  if [[ -f Cargo.toml ]]; then
+    if [[ ! -f "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml" ]]; then
+      census_add "vendor_docs_lint" "would_fail" "missing_vendor_docs" "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml"
+    else
+      census_add "vendor_docs_lint" "would_run"
+    fi
+  else
+    census_add "vendor_docs_lint" "would_skip" "no_rust"
+  fi
+
+  if [[ -f Cargo.toml ]]; then
+    if should_run_rust_gates; then
+      census_add "rust_gates" "would_run"
+    else
+      census_add "rust_gates" "would_skip" "no_relevant_changes"
+    fi
+  else
+    census_add "rust_gates" "would_skip" "no_rust"
+  fi
+
+  if [[ -f pyproject.toml || -f requirements.txt ]]; then
+    if should_run_python_gates; then
+      census_add "python_gates" "would_run"
+    else
+      census_add "python_gates" "would_skip" "no_relevant_changes"
+    fi
+  else
+    census_add "python_gates" "would_skip" "no_python"
+  fi
+
+  if [[ -f package.json ]]; then
+    if should_run_node_gates; then
+      if [[ -z "$NODE_PM" ]]; then
+        census_add "node_gates" "would_skip" "missing_lockfile"
+      else
+        census_add "node_gates" "would_run"
+      fi
+    else
+      census_add "node_gates" "would_skip" "no_relevant_changes"
+    fi
+  else
+    census_add "node_gates" "would_skip" "no_node"
+  fi
+
+  REQUIRE_VQ_EVIDENCE="${REQUIRE_VQ_EVIDENCE:-0}"
+  if [[ -f "scripts/check_vq_evidence.py" ]]; then
+    census_add "vq_evidence" "would_run"
+  else
+    if [[ "$REQUIRE_VQ_EVIDENCE" == "1" ]]; then
+      census_add "vq_evidence" "would_fail" "missing_script" "scripts/check_vq_evidence.py"
+    else
+      census_add "vq_evidence" "would_skip" "missing_script"
+    fi
+  fi
+
+  census_add "promotion_gates" "would_skip" "promotion_only"
+
+  INTEGRATION_SMOKE="${INTEGRATION_SMOKE:-0}"
+  if [[ "$MODE" == "full" && "$INTEGRATION_SMOKE" == "1" ]]; then
+    if command -v docker >/dev/null 2>&1 && ([[ -f docker-compose.yml || -f compose.yml ]]); then
+      census_add "integration_smoke" "would_run"
+    else
+      census_add "integration_smoke" "would_skip" "docker_unavailable"
+    fi
+  else
+    census_add "integration_smoke" "would_skip" "disabled"
+  fi
+
+  E2E="${E2E:-0}"
+  E2E_CMD="${E2E_CMD:-}"
+  if [[ "$E2E" == "1" ]]; then
+    if [[ -n "$E2E_CMD" ]]; then
+      census_add "e2e" "would_run"
+    elif [[ -f package.json ]]; then
+      if node_script_exists "e2e" || node_script_exists "test:e2e"; then
+        census_add "e2e" "would_run"
+      elif has_playwright_config || has_cypress_config; then
+        census_add "e2e" "would_run"
+      else
+        census_add "e2e" "would_fail" "no_harness"
+      fi
+    elif has_playwright_config || has_cypress_config; then
+      census_add "e2e" "would_run"
+    else
+      census_add "e2e" "would_fail" "no_harness"
+    fi
+  else
+    census_add "e2e" "would_skip" "disabled"
+  fi
+
+  if should_run_workflow_acceptance >/dev/null 2>&1; then
+    census_add "workflow_acceptance" "would_run" "mode:$(workflow_acceptance_mode)"
+  else
+    if is_ci; then
+      census_add "workflow_acceptance" "would_run" "ci_default"
+    elif [[ "${WORKFLOW_ACCEPTANCE_POLICY:-auto}" == "never" ]]; then
+      census_add "workflow_acceptance" "would_skip" "policy_never"
+    elif [[ "${CHANGE_DETECTION_OK:-0}" != "1" ]]; then
+      census_add "workflow_acceptance" "would_run" "change_detection_unavailable"
+    else
+      census_add "workflow_acceptance" "would_skip" "no_relevant_changes"
+    fi
+  fi
+
+  ended_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  if [[ "$CENSUS_FORMAT" == "json" ]]; then
+    census_emit_json "$started_at" "$ended_at"
+  else
+    census_emit_human "$started_at" "$ended_at"
+  fi
+}
 
 workflow_acceptance_jobs() {
   local jobs
@@ -279,7 +678,9 @@ init_change_detection() {
   if [[ -n "$CHANGED_FILES" ]]; then
     CHANGED_FILES_COUNT="$(echo "$CHANGED_FILES" | sed '/^$/d' | wc -l | tr -d ' ')"
   fi
-  echo "info: change_detection_ok=$CHANGE_DETECTION_OK files=$CHANGED_FILES_COUNT base_ref=$BASE_REF"
+  if [[ "${CENSUS:-0}" != "1" ]]; then
+    echo "info: change_detection_ok=$CHANGE_DETECTION_OK files=$CHANGED_FILES_COUNT base_ref=$BASE_REF"
+  fi
 }
 
 export_stack_env() {
@@ -548,6 +949,11 @@ NODE_PM=""
 if [[ -f pnpm-lock.yaml ]]; then NODE_PM="pnpm"; fi
 if [[ -z "$NODE_PM" && -f package-lock.json ]]; then NODE_PM="npm"; fi
 if [[ -z "$NODE_PM" && -f yarn.lock ]]; then NODE_PM="yarn"; fi
+
+if [[ "$CENSUS" == "1" ]]; then
+  run_verify_census
+  exit 0
+fi
 
 # -----------------------------------------------------------------------------
 # 0) Repo sanity + reproducibility basics
