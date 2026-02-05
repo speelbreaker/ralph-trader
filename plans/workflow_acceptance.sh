@@ -686,6 +686,8 @@ OVERLAY_FILES=(
   ".github/pull_request_template.md"
   "plans/ralph.sh"
   "plans/verify.sh"
+  "plans/workflow_files_allowlist.txt"
+  "plans/lib/change_detection.sh"
   "plans/workflow_verify.sh"
   "plans/update_task.sh"
   "plans/prd.json"
@@ -726,6 +728,8 @@ OVERLAY_FILES=(
   "plans/tests/test_prd_audit_check.sh"
   "plans/tests/test_contract_coverage_matrix.sh"
   "plans/tests/test_workflow_acceptance_fallback.sh"
+  "plans/tests/test_workflow_allowlist_coverage.sh"
+  "plans/tests/test_change_detection_routing.sh"
   "plans/tests/test_prd_cache.sh"
   "plans/fixtures/prd/deps_order_same_slice.json"
   "plans/fixtures/prd/deps_cycle_same_slice.json"
@@ -838,6 +842,8 @@ scripts_to_chmod=(
   "tests/test_prd_gate.sh"
   "tests/test_prd_audit_check.sh"
   "tests/test_workflow_acceptance_fallback.sh"
+  "tests/test_workflow_allowlist_coverage.sh"
+  "tests/test_change_detection_routing.sh"
   "tests/test_prd_cache.sh"
   "prd_audit_merge.sh"
 )
@@ -1397,27 +1403,27 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "should_run_rust_gates" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "should_run_rust_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware rust gate selection" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "should_run_python_gates" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "should_run_python_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware python gate selection" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "ruff.toml" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "ruff.toml" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must detect ruff config changes for python gates" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "should_run_node_gates" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q "should_run_node_gates" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must include change-aware node gate selection" >&2
     exit 1
   fi
 
-  if ! run_in_worktree grep -q ".node-version" "plans/verify.sh"; then
+  if ! run_in_worktree grep -q ".node-version" "plans/lib/change_detection.sh"; then
     echo "FAIL: verify must detect .node-version changes for node gates" >&2
     exit 1
   fi
@@ -1579,24 +1585,6 @@ if ! run_in_worktree grep -Fq "## Review Coverage (Required)" "reviews/REVIEW_CH
 fi
 if ! run_in_worktree grep -Fq "## Workflow / Harness Changes (If plans/* or specs/* touched)" "reviews/REVIEW_CHECKLIST.md"; then
   echo "FAIL: review checklist missing workflow harness review section" >&2
-  exit 1
-fi
-
-if ! run_in_worktree awk '
-  /is_workflow_file/ {in_block=1}
-  in_block && $0 ~ /^[[:space:]]*verify\.sh\)/ {has_root=1}
-  in_block && index($0, "plans/verify.sh") {has_verify=1}
-  in_block && index($0, "plans/workflow_acceptance.sh") {has_accept=1}
-  in_block && index($0, "plans/workflow_verify.sh") {has_workflow_verify=1}
-  in_block && index($0, "plans/story_verify_allowlist.txt") {has_story=1}
-  in_block && index($0, "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml") {has_vendor_docs=1}
-  in_block && index($0, "tools/vendor_docs_lint_rust.py") {has_vendor_lint=1}
-  in_block && index($0, "specs/WORKFLOW_CONTRACT.md") {has_contract=1}
-  in_block && index($0, "scripts/check_contract_kernel.py") {has_kernel=1}
-  in_block && index($0, "docs/validation_rules.md") {has_rules=1}
-  END { exit (has_root && has_verify && has_accept && has_workflow_verify && has_story && has_vendor_docs && has_vendor_lint && has_contract && has_kernel && has_rules) ? 0 : 1 }
-' "plans/verify.sh"; then
-  echo "FAIL: workflow allowlist must include core workflow files (including root verify.sh)" >&2
   exit 1
 fi
 
@@ -1970,6 +1958,39 @@ if test_start "0k.15" "workflow acceptance cache wiring"; then
     exit 1
   fi
   test_pass "0k.15"
+fi
+
+if test_start "0k.16" "workflow allowlist coverage" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    ./plans/tests/test_workflow_allowlist_coverage.sh
+
+    tmp_out="$(mktemp)"
+    mv plans/workflow_files_allowlist.txt plans/workflow_files_allowlist.txt.bak
+    if ./plans/tests/test_workflow_allowlist_coverage.sh >"$tmp_out" 2>&1; then
+      echo "FAIL: allowlist coverage should fail when allowlist is missing" >&2
+      mv plans/workflow_files_allowlist.txt.bak plans/workflow_files_allowlist.txt
+      rm -f "$tmp_out"
+      exit 1
+    fi
+    if ! grep -q "missing allowlist" "$tmp_out"; then
+      echo "FAIL: allowlist coverage did not report missing allowlist" >&2
+      mv plans/workflow_files_allowlist.txt.bak plans/workflow_files_allowlist.txt
+      rm -f "$tmp_out"
+      exit 1
+    fi
+    mv plans/workflow_files_allowlist.txt.bak plans/workflow_files_allowlist.txt
+    rm -f "$tmp_out"
+  '
+  test_pass "0k.16"
+fi
+
+if test_start "0k.17" "change detection routing" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    ./plans/tests/test_change_detection_routing.sh
+  '
+  test_pass "0k.17"
 fi
 
 if test_start "0l" "--list prints test ids"; then

@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+allowlist="$ROOT/plans/workflow_files_allowlist.txt"
+
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
+
+[[ -f "$allowlist" ]] || fail "missing allowlist"
+[[ -s "$allowlist" ]] || fail "allowlist empty"
+
+if grep -nE '^[[:space:]]*$|^[[:space:]]*#' "$allowlist"; then
+  fail "blank/comment line"
+fi
+if grep -nE '^[[:space:]]+|[[:space:]]+$' "$allowlist"; then
+  fail "leading/trailing whitespace"
+fi
+if grep -nE '^\./|/$|^/|\.\.' "$allowlist"; then
+  fail "invalid path"
+fi
+
+LC_ALL=C sort -c "$allowlist" || fail "allowlist not sorted"
+dupes="$(sort "$allowlist" | uniq -d || true)"
+[[ -z "$dupes" ]] || fail "duplicate entries: $dupes"
+
+required=(
+  AGENTS.md
+  IMPLEMENTATION_PLAN.md
+  POLICY.md
+  docs/contract_anchors.md
+  docs/contract_kernel.json
+  docs/validation_rules.md
+  plans/autofix.sh
+  plans/contract_check.sh
+  plans/contract_coverage_matrix.py
+  plans/contract_coverage_promote.sh
+  plans/contract_review_validate.sh
+  plans/init.sh
+  plans/prd_audit_check.sh
+  plans/prd_audit_merge.py
+  plans/prd_audit_merge.sh
+  plans/prd_cache_check.py
+  plans/prd_cache_update.py
+  plans/prd_gate.sh
+  plans/prd_preflight.sh
+  plans/preflight.sh
+  plans/ralph.sh
+  plans/ssot_lint.sh
+  plans/story_verify_allowlist.txt
+  plans/story_verify_allowlist_check.sh
+  plans/story_verify_allowlist_lint.sh
+  plans/story_verify_allowlist_suggest.sh
+  plans/test_parallel_smoke.sh
+  plans/tests/test_prd_cache.sh
+  plans/tests/test_workflow_acceptance_fallback.sh
+  plans/verify.sh
+  plans/workflow_acceptance.sh
+  plans/workflow_acceptance_parallel.sh
+  plans/workflow_contract_gate.sh
+  plans/workflow_contract_map.json
+  plans/workflow_verify.sh
+  scripts/build_contract_kernel.py
+  scripts/check_arch_flows.py
+  scripts/check_contract_crossrefs.py
+  scripts/check_contract_kernel.py
+  scripts/check_crash_matrix.py
+  scripts/check_crash_replay_idempotency.py
+  scripts/check_csp_trace.py
+  scripts/check_global_invariants.py
+  scripts/check_reconciliation_matrix.py
+  scripts/check_state_machines.py
+  scripts/check_time_freshness.py
+  scripts/check_vq_evidence.py
+  scripts/contract_kernel_lib.py
+  scripts/extract_contract_excerpts.py
+  scripts/generate_impact_report.py
+  scripts/test_contract_kernel.py
+  specs/CONTRACT.md
+  specs/IMPLEMENTATION_PLAN.md
+  specs/POLICY.md
+  specs/SOURCE_OF_TRUTH.md
+  specs/TRACE.yaml
+  specs/WORKFLOW_CONTRACT.md
+  specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml
+  tools/vendor_docs_lint_rust.py
+  verify.sh
+  plans/workflow_files_allowlist.txt
+  plans/tests/test_workflow_allowlist_coverage.sh
+  plans/tests/test_change_detection_routing.sh
+  plans/lib/change_detection.sh
+)
+
+for path in "${required[@]}"; do
+  grep -Fxq "$path" "$allowlist" || fail "missing $path"
+done
