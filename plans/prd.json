@@ -485,7 +485,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
@@ -564,7 +564,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
@@ -631,7 +631,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
@@ -703,7 +703,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md instrument_kind: one of `option | linear_future | inverse_future | perpetual` (derived from venue metadata).",
@@ -790,7 +790,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
@@ -892,7 +892,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
@@ -997,7 +997,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md OrderSize struct (MUST implement):",
@@ -1089,7 +1089,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md Dispatcher Rules (Deribit request mapping):",
@@ -1175,7 +1175,7 @@
       "est_size": "XS",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`",
@@ -1260,7 +1260,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
@@ -1326,7 +1326,7 @@
       "est_size": "XS",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": true,
+      "passes": false,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
