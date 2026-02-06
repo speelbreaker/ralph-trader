@@ -135,18 +135,26 @@ check_file "$CONTRACT_FILE" "Contract spec"
 SHELL_SYNTAX_OK=1
 SHELL_ERRORS=()
 if compgen -G "plans/*.sh" >/dev/null; then
-  for f in plans/*.sh; do
-    if ! bash -n "$f" 2>/dev/null; then
-      SHELL_SYNTAX_OK=0
-      SHELL_ERRORS+=("$f")
-    fi
-  done
+  if bash -n plans/*.sh 2>/dev/null; then
+    SHELL_SYNTAX_OK=1
+  else
+    SHELL_SYNTAX_OK=0
+    for f in plans/*.sh; do
+      if ! bash -n "$f" 2>/dev/null; then
+        SHELL_ERRORS+=("$f")
+      fi
+    done
+  fi
 fi
 
 if [[ "$SHELL_SYNTAX_OK" == "1" ]]; then
   pass "Shell syntax (plans/*.sh)"
 else
-  fail "Shell syntax errors in: ${SHELL_ERRORS[*]}"
+  if [[ "${#SHELL_ERRORS[@]}" -gt 0 ]]; then
+    fail "Shell syntax errors in: ${SHELL_ERRORS[*]}"
+  else
+    fail "Shell syntax errors in plans/*.sh"
+  fi
 fi
 
 # 5. PRD schema: plans/prd_schema_check.sh

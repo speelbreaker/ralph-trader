@@ -1340,8 +1340,8 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "bash -n" "plans/preflight.sh"; then
-    echo "FAIL: preflight must run bash -n for shell syntax checks" >&2
+  if ! run_in_worktree grep -Fq "bash -n plans/*.sh" "plans/preflight.sh"; then
+    echo "FAIL: preflight must run bash -n plans/*.sh for fast syntax checks" >&2
     exit 1
   fi
 
