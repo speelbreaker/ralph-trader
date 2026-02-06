@@ -282,6 +282,81 @@ checkpoint_now_epoch() {
   date +%s
 }
 
+checkpoint_now_millis() {
+  local now="${VERIFY_CHECKPOINT_NOW_EPOCH_MS:-}"
+  if [[ "$now" =~ ^[0-9]+$ ]]; then
+    echo "$now"
+    return 0
+  fi
+  local secs
+  secs="$(checkpoint_now_epoch)"
+  if [[ "$secs" =~ ^[0-9]+$ ]]; then
+    echo $((secs * 1000))
+    return 0
+  fi
+  echo 0
+}
+
+checkpoint_read_skip_cache_ts() {
+  local file="${VERIFY_CHECKPOINT_FILE:-}"
+  local pybin
+  if [[ -z "$file" || ! -f "$file" ]]; then
+    return 0
+  fi
+  pybin="$(checkpoint_python_bin || true)"
+  if [[ -z "$pybin" ]]; then
+    return 0
+  fi
+  "$pybin" - "$file" <<'PY' 2>/dev/null || true
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    ts = data.get("skip_cache", {}).get("ts")
+    if isinstance(ts, int) and ts >= 0:
+        print(ts)
+except Exception:
+    pass
+PY
+}
+
+checkpoint_age_within_limit() {
+  local max_age="${VERIFY_CHECKPOINT_MAX_AGE_SECS:-86400}"
+  if [[ ! "$max_age" =~ ^[0-9]+$ ]]; then
+    max_age=86400
+  fi
+  if (( max_age <= 0 )); then
+    return 0
+  fi
+  local ts
+  ts="$(checkpoint_read_skip_cache_ts)"
+  if [[ -z "$ts" ]]; then
+    return 0
+  fi
+  if [[ ! "$ts" =~ ^[0-9]+$ ]]; then
+    CHECKPOINT_INELIGIBLE_REASON="checkpoint_schema_invalid"
+    return 1
+  fi
+  local now
+  now="$(checkpoint_now_epoch)"
+  if [[ ! "$now" =~ ^[0-9]+$ ]]; then
+    CHECKPOINT_INELIGIBLE_REASON="checkpoint_now_invalid"
+    return 1
+  fi
+  if (( now < ts )); then
+    CHECKPOINT_INELIGIBLE_REASON="checkpoint_ts_in_future"
+    return 1
+  fi
+  if (( now - ts > max_age )); then
+    CHECKPOINT_INELIGIBLE_REASON="checkpoint_age_exceeded"
+    return 1
+  fi
+  return 0
+}
+
 checkpoint_lock_file() {
   if [[ -n "${VERIFY_CHECKPOINT_LOCK_FILE:-}" ]]; then
     echo "$VERIFY_CHECKPOINT_LOCK_FILE"
@@ -519,6 +594,10 @@ is_cache_eligible() {
     CHECKPOINT_INELIGIBLE_REASON="promotion_mode"
     return 1
   fi
+  if [[ "${CHECKPOINT_HASH_BUDGET_EXCEEDED:-0}" == "1" ]]; then
+    CHECKPOINT_INELIGIBLE_REASON="checkpoint_hash_budget_exceeded"
+    return 1
+  fi
   if ! checkpoint_is_trusted_path; then
     return 1
   fi
@@ -532,6 +611,9 @@ is_cache_eligible() {
     return 1
   fi
   if ! checkpoint_validate_current_file; then
+    return 1
+  fi
+  if ! checkpoint_age_within_limit; then
     return 1
   fi
   if ! checkpoint_enforce_kill_switch_policy; then

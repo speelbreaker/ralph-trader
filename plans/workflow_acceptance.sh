@@ -1840,6 +1840,14 @@ if ! grep -q "phase_timings_ms" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must record phase_timings_ms in metrics" >&2
   exit 1
 fi
+if ! grep -q "story_verify_ms" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must record story_verify_ms in phase timings" >&2
+  exit 1
+fi
+if ! grep -q "recovery_suggestions" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph blocked artifacts must include recovery_suggestions" >&2
+  exit 1
+fi
 if ! grep -q "RPH_TEST_COCHANGE_STRICT" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must define RPH_TEST_COCHANGE_STRICT default" >&2
   exit 1
@@ -4788,7 +4796,14 @@ tmp_cache=$(mktemp -d)
 cleanup_tmp_cache() {
   rm -rf "$tmp_cache"
 }
+set +e
 run_in_worktree env WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: workflow_contract_gate failed in Test 12 (rc=$rc)" >&2
+  cleanup_tmp_cache; exit 1
+fi
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .enforcement[] | select(test("smoke") and test("full"))' plans/workflow_contract_map.json >/dev/null; then
   echo "FAIL: WF-12.1 enforcement must document smoke+full modes" >&2
   cleanup_tmp_cache; exit 1
@@ -4833,6 +4848,10 @@ rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected workflow_contract_gate to fail on unknown test id" >&2
+  cleanup_tmp_cache; exit 1
+fi
+if ls "$tmp_cache"/.*.tmp.* >/dev/null 2>&1; then
+  echo "FAIL: leftover tmp cache file(s) in $tmp_cache" >&2
   cleanup_tmp_cache; exit 1
 fi
 cleanup_tmp_cache
@@ -6647,6 +6666,141 @@ JSON
   }
 '
   test_pass "30.8"
+fi
+
+if test_start "30.9" "reset_verify_checkpoint enforces lock policy and force override" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/reset_verify_checkpoint.sh || {
+    echo "FAIL: missing executable plans/reset_verify_checkpoint.sh" >&2
+    exit 1
+  }
+  rg -n "reset_verify_checkpoint.sh" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing reset_verify_checkpoint.sh" >&2
+    exit 1
+  }
+
+  tmpdir=".ralph/reset_checkpoint_test"
+  mkdir -p "$tmpdir"
+  ckpt="$tmpdir/verify_checkpoint.json"
+  lock="$tmpdir/verify_checkpoint.lock"
+  printf "{\"schema_version\":2}\n" > "$ckpt"
+  printf "pid=%s\nstart_epoch=%s\n" "$$" "$(date +%s)" > "$lock"
+
+  set +e
+  out="$(VERIFY_CHECKPOINT_FILE="$ckpt" VERIFY_CHECKPOINT_LOCK_FILE="$lock" ./plans/reset_verify_checkpoint.sh 2>&1)"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: reset should fail when active lock exists without --force" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  echo "$out" | grep -q "active lock detected" || {
+    echo "FAIL: expected active lock error message" >&2
+    echo "$out" >&2
+    exit 1
+  }
+
+  VERIFY_CHECKPOINT_FILE="$ckpt" VERIFY_CHECKPOINT_LOCK_FILE="$lock" ./plans/reset_verify_checkpoint.sh --force --quiet
+  if [[ -f "$ckpt" ]]; then
+    echo "FAIL: checkpoint file should be removed by reset script" >&2
+    exit 1
+  fi
+  if [[ -f "$lock" ]]; then
+    echo "FAIL: lock file should be removed by reset script" >&2
+    exit 1
+  fi
+  bak_count="$(ls "$tmpdir"/verify_checkpoint.json.bak.* 2>/dev/null | wc -l | tr -d " ")"
+  if [[ "$bak_count" -lt 1 ]]; then
+    echo "FAIL: reset script should create backup checkpoint file" >&2
+    exit 1
+  fi
+'
+  test_pass "30.9"
+fi
+
+if test_start "30.10" "checkpoint age and hash-budget guards fail closed" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_utils.sh
+  source plans/lib/verify_checkpoint.sh
+
+  mkdir -p .ralph
+  VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
+  cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":100,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":false,"writer_mode":"quick","gates":{}}}
+JSON
+
+  checkpoint_capture_snapshot 0 1 quick none 0
+  VERIFY_CHECKPOINT_ROLLOUT="off"
+  checkpoint_resolve_rollout
+  CHECKPOINT_LOCK_PROBE_DONE=1
+  CHECKPOINT_LOCK_PROBE_OK=1
+  VERIFY_CHECKPOINT_MAX_AGE_SECS=10
+  VERIFY_CHECKPOINT_NOW_EPOCH=1000
+  CHECKPOINT_HASH_BUDGET_EXCEEDED=0
+  if is_cache_eligible; then
+    echo "FAIL: stale checkpoint should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_age_exceeded" ]] || {
+    echo "FAIL: expected checkpoint_age_exceeded reason" >&2
+    exit 1
+  }
+
+  VERIFY_CHECKPOINT_NOW_EPOCH=100
+  CHECKPOINT_HASH_BUDGET_EXCEEDED=1
+  if is_cache_eligible; then
+    echo "FAIL: hash budget exceeded should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_hash_budget_exceeded" ]] || {
+    echo "FAIL: expected checkpoint_hash_budget_exceeded reason" >&2
+    exit 1
+  }
+'
+  test_pass "30.10"
+fi
+
+if test_start "30.11" "opportunity telemetry writes jsonl and prunes deterministically" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  telemetry_dir=".ralph/verify_telemetry"
+  mkdir -p "$telemetry_dir"
+  cat > "$telemetry_dir/skip_telemetry_old.jsonl" <<'"'"'JSON'"'"'
+{"ts":1,"rollout_mode":"dry_run","would_skip":{"contract_coverage":false,"spec_validators_group":false}}
+JSON
+
+  VERIFY_CHECKPOINT_TELEMETRY_SELFTEST=1 \
+  VERIFY_CHECKPOINT_ROLLOUT=dry_run \
+  VERIFY_CHECKPOINT_TELEMETRY_DIR="$telemetry_dir" \
+  VERIFY_CHECKPOINT_TELEMETRY_MAX_FILES=1 \
+  VERIFY_CHECKPOINT_TELEMETRY_MAX_BYTES=4096 \
+  VERIFY_CHECKPOINT_NOW_EPOCH=9999999999 \
+  ./plans/verify.sh --census >/dev/null
+
+  count="$(ls "$telemetry_dir"/skip_telemetry_*.jsonl 2>/dev/null | wc -l | tr -d " ")"
+  if [[ "$count" != "1" ]]; then
+    echo "FAIL: expected telemetry prune to keep exactly one jsonl file, got $count" >&2
+    ls -la "$telemetry_dir" >&2 || true
+    exit 1
+  fi
+
+  latest="$(ls -t "$telemetry_dir"/skip_telemetry_*.jsonl | head -n 1)"
+  grep -q "\"head_unchanged_since_last_run\"" "$latest" || {
+    echo "FAIL: telemetry record missing head_unchanged_since_last_run" >&2
+    cat "$latest" >&2
+    exit 1
+  }
+  grep -q "\"would_skip\"" "$latest" || {
+    echo "FAIL: telemetry record missing would_skip object" >&2
+    cat "$latest" >&2
+    exit 1
+  }
+'
+  test_pass "30.11"
 fi
 
 echo "Workflow acceptance tests passed"

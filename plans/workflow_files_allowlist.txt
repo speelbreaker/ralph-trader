@@ -33,6 +33,7 @@ plans/prd_preflight.sh
 plans/preflight.sh
 plans/ralph.sh
 plans/ralph_day.sh
+plans/reset_verify_checkpoint.sh
 plans/schemas/verify_checkpoint.schema.json
 plans/ssot_lint.sh
 plans/story_verify_allowlist.txt
