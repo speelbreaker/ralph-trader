@@ -4,6 +4,7 @@ IFS=$'\n\t'
 
 spec_file="${WORKFLOW_CONTRACT_FILE:-specs/WORKFLOW_CONTRACT.md}"
 map_file="${WORKFLOW_CONTRACT_MAP:-plans/workflow_contract_map.json}"
+CACHE_DIR="${WORKFLOW_CONTRACT_GATE_CACHE_DIR:-}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq required" >&2; exit 2; }
 
@@ -26,6 +27,34 @@ if ! jq -e . "$map_file" >/dev/null 2>&1; then
   echo "ERROR: invalid JSON in $map_file" >&2
   exit 1
 fi
+
+sha256_file() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+  else
+    shasum -a 256 "$file" | awk '{print $1}'
+  fi
+}
+
+cache_dir_ready() {
+  if [[ -z "$CACHE_DIR" ]]; then
+    return 1
+  fi
+  mkdir -p "$CACHE_DIR" 2>/dev/null || true
+  [[ -d "$CACHE_DIR" ]]
+}
+
+cache_path_for() {
+  local prefix="$1"
+  local file="$2"
+  local hash
+  hash="$(sha256_file "$file" 2>/dev/null || true)"
+  if [[ -z "$hash" ]]; then
+    return 1
+  fi
+  echo "${CACHE_DIR}/${prefix}_${hash}.txt"
+}
 
 extract_ids_all() {
   local file="$1"
@@ -51,7 +80,19 @@ extract_ids_all() {
 
 extract_ids() {
   local file="$1"
-  extract_ids_all "$file" | sed '/^$/d' | sort -u
+  local cache_path=""
+  if cache_dir_ready; then
+    cache_path="$(cache_path_for "spec_ids" "$file" || true)"
+    if [[ -n "$cache_path" && -s "$cache_path" ]]; then
+      cat "$cache_path"
+      return 0
+    fi
+  fi
+  if [[ -n "$cache_path" ]]; then
+    extract_ids_all "$file" | sed '/^$/d' | sort | tee "$cache_path"
+  else
+    extract_ids_all "$file" | sed '/^$/d' | sort
+  fi
 }
 
 # Skip markers that don't represent files
@@ -99,7 +140,14 @@ validate_enforcement() {
 
 get_acceptance_test_ids() {
   # Parse test_start lines directly (don't call --list, which has setup overhead)
-  local ids dup_check
+  local ids dup_check cache_path=""
+  if cache_dir_ready; then
+    cache_path="$(cache_path_for "acceptance_ids" "plans/workflow_acceptance.sh" || true)"
+    if [[ -n "$cache_path" && -s "$cache_path" ]]; then
+      cat "$cache_path"
+      return 0
+    fi
+  fi
   ids="$(sed -nE 's/^[[:space:]]*(if[[:space:]]+)?test_start[[:space:]]+"([^"]+)".*/\2/p' \
     plans/workflow_acceptance.sh)"
 
@@ -111,7 +159,11 @@ get_acceptance_test_ids() {
     return 1
   fi
 
-  echo "$ids" | sort -u
+  if [[ -n "$cache_path" ]]; then
+    echo "$ids" | sort -u | tee "$cache_path"
+  else
+    echo "$ids" | sort -u
+  fi
 }
 
 # Helper: extract Test tokens with grep (required)
@@ -211,7 +263,7 @@ validate_tests() {
   fi
 }
 
-spec_ids_all="$(extract_ids_all "$spec_file" | sed '/^$/d' | sort)"
+spec_ids_all="$(extract_ids "$spec_file")"
 spec_dup_ids="$(printf '%s\n' "$spec_ids_all" | uniq -d)"
 if [[ -n "$spec_dup_ids" ]]; then
   echo "ERROR: duplicate workflow rule ids in spec:" >&2

@@ -23,6 +23,13 @@
 - [ ] "Elevation plan" includes 1 Elevation + 2 subordinate wins, each with Owner + Effort + Expected gain + Proof.
 - [ ] The elevation plan directly reduces the Top 3 sinks listed.
 
+## Architectural Risk Lens (Required)
+- [ ] Architectural-level failure modes: at least 1 architecture-level failure mode is documented with trigger + blast radius + detection signal; if none, reviewer writes "none" with explicit rationale.
+- [ ] Systemic risks and emergent behaviors: at least 1 cross-component/system interaction risk is documented with trigger + propagation path + containment; if none, reviewer writes "none" with explicit rationale.
+- [ ] Compounding failure scenarios: at least 1 chained scenario (A -> B -> C) is documented with breakpoints that stop escalation; if none, reviewer writes "none" with explicit rationale.
+- [ ] Hidden assumptions that could be violated: assumptions (ordering/timing/env/data/contracts) are listed with how violation is detected and handled; if none, reviewer writes "none" with explicit rationale.
+- [ ] Long-term maintenance hazards: at least 1 maintainability hazard (complexity/ownership/test brittleness/operational toil) is documented with mitigation owner + smallest follow-up; if none, reviewer writes "none" with explicit rationale.
+
 ## Workflow / Harness Changes (If plans/* or specs/* touched)
 - [ ] Workflow file changes add acceptance coverage in `plans/workflow_acceptance.sh` or a gate invoked by it.
 - [ ] Smoke/acceptance checks validate real integration (not allowlist-only matches).

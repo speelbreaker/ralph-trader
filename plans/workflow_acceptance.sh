@@ -684,6 +684,7 @@ OVERLAY_FILES=(
   "verify.sh"
   "AGENTS.md"
   ".github/pull_request_template.md"
+  ".github/workflows/ci.yml"
   "plans/ralph.sh"
   "plans/verify.sh"
   "plans/test_parallel_smoke.sh"
@@ -729,6 +730,7 @@ OVERLAY_FILES=(
   "plans/workflow_acceptance_parallel.sh"
   "plans/workflow_contract_map.json"
   "specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml"
+  "tools/ci/lint_pr_template_sections.py"
   "tools/vendor_docs_lint_rust.py"
   "plans/tests/test_prd_gate.sh"
   "plans/tests/test_prd_audit_check.sh"
@@ -1608,6 +1610,42 @@ if ! run_in_worktree grep -Fq "## Workflow / Harness Changes (If plans/* or spec
   echo "FAIL: review checklist missing workflow harness review section" >&2
   exit 1
 fi
+if ! run_in_worktree test -f "tools/ci/lint_pr_template_sections.py"; then
+  echo "FAIL: expected tools/ci/lint_pr_template_sections.py to exist" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "## 4) Architectural Risk Lens (required)" ".github/pull_request_template.md"; then
+  echo "FAIL: PR template must include Architectural Risk Lens section" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "pr-template-lint" ".github/workflows/ci.yml"; then
+  echo "FAIL: CI must include pr-template-lint job" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "tools/ci/lint_pr_template_sections.py" ".github/workflows/ci.yml"; then
+  echo "FAIL: CI must invoke tools/ci/lint_pr_template_sections.py" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "github.event_name == 'pull_request'" ".github/workflows/ci.yml"; then
+  echo "FAIL: pr-template-lint must only run on pull_request events" >&2
+  exit 1
+fi
+set +e
+lint_strict_output="$(run_in_worktree python3 tools/ci/lint_pr_template_sections.py --body $'## 0) What shipped\n- Feature/behavior: TBD\n' --mode strict 2>&1)"
+lint_strict_rc=$?
+set -e
+if [[ "$lint_strict_rc" -eq 0 ]]; then
+  echo "FAIL: strict PR template lint must fail on placeholder-only body" >&2
+  exit 1
+fi
+if ! echo "$lint_strict_output" | grep -q "PLACEHOLDER_FIELD"; then
+  echo "FAIL: strict PR template lint must report placeholder failure" >&2
+  exit 1
+fi
+if ! run_in_worktree python3 tools/ci/lint_pr_template_sections.py --body $'## 0) What shipped\n- Feature/behavior: TBD\n' --mode warn >/dev/null 2>&1; then
+  echo "FAIL: warn PR template lint mode must not fail CI" >&2
+  exit 1
+fi
 
 if ! run_in_worktree test -x "plans/workflow_verify.sh"; then
   echo "FAIL: expected plans/workflow_verify.sh to exist and be executable" >&2
@@ -2166,7 +2204,7 @@ if test_start "0n.1" "selector flags work for --only-set"; then
   tmp_status="$WORKTREE/.ralph/accept_status_only_set"
   rm -f "$tmp_state" "$tmp_status"
   set +e
-  only_set_output="$("$ROOT/plans/workflow_acceptance.sh" --only-set "0h, 0i" --state-file "$tmp_state" --status-file "$tmp_status" 2>&1)"
+  only_set_output="$(WORKFLOW_ACCEPTANCE_SETUP_MODE=archive "$ROOT/plans/workflow_acceptance.sh" --only-set "0h, 0i" --state-file "$tmp_state" --status-file "$tmp_status" 2>&1)"
   rc=$?
   set -e
   if [[ "$rc" -ne 0 ]]; then
@@ -4617,54 +4655,59 @@ run_in_worktree ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2
 fi
 
 if test_start "12" "workflow contract traceability gate" 1; then
-run_in_worktree ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+tmp_cache=$(mktemp -d)
+cleanup_tmp_cache() {
+  rm -rf "$tmp_cache"
+}
+run_in_worktree env WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .enforcement[] | select(test("smoke") and test("full"))' plans/workflow_contract_map.json >/dev/null; then
   echo "FAIL: WF-12.1 enforcement must document smoke+full modes" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .tests[] | select(test("smoke suite"))' plans/workflow_contract_map.json >/dev/null; then
   echo "FAIL: WF-12.1 tests must reference smoke suite coverage" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.8") | .tests[] | select(test("Test 12"))' plans/workflow_contract_map.json >/dev/null; then
   echo "FAIL: WF-12.8 tests must point to workflow acceptance Test 12" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-1.17") | .artifacts[] | select(.=="plans/preflight.sh")' plans/workflow_contract_map.json >/dev/null; then
   echo "FAIL: WF-1.17 must reference plans/preflight.sh artifact" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
 bad_map="$WORKTREE/.ralph/workflow_contract_map.bad.json"
 run_in_worktree jq 'del(.rules[0])' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_map"
 set +e
-run_in_worktree env WORKFLOW_CONTRACT_MAP="$bad_map" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+run_in_worktree env WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" WORKFLOW_CONTRACT_MAP="$bad_map" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected workflow_contract_gate to fail with missing rule id" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
 bad_enforcement="$WORKTREE/.ralph/workflow_contract_map.bad_enforcement.json"
 run_in_worktree jq '(.rules[] | select(.id=="WF-1.5").enforcement[0])="scripts/__missing__.sh"' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_enforcement"
 set +e
-run_in_worktree env WORKFLOW_CONTRACT_MAP="$bad_enforcement" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+run_in_worktree env WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" WORKFLOW_CONTRACT_MAP="$bad_enforcement" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected workflow_contract_gate to fail on missing enforcement path" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
 bad_tests="$WORKTREE/.ralph/workflow_contract_map.bad_tests.json"
 run_in_worktree jq '(.rules[] | select(.id=="WF-1.5").tests[0])="plans/workflow_acceptance.sh (Test 9999)"' "$WORKTREE/plans/workflow_contract_map.json" > "$bad_tests"
 set +e
-run_in_worktree env WORKFLOW_CONTRACT_MAP="$bad_tests" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
+run_in_worktree env WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" WORKFLOW_CONTRACT_MAP="$bad_tests" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
 rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected workflow_contract_gate to fail on unknown test id" >&2
-  exit 1
+  cleanup_tmp_cache; exit 1
 fi
-  test_pass "12"
+cleanup_tmp_cache
+test_pass "12"
 fi
 
 check_required_workflow_artifacts() {
@@ -4714,6 +4757,39 @@ fi
 
 if test_start "12d" "workflow contract gate validates enforcement existence" 1; then
   tmp_map=$(mktemp)
+  tmp_cache=$(mktemp -d)
+  tmp_spec=""
+  gate_output=""
+  gate_rc=0
+  cleanup_tmp() {
+    if [[ -n "$tmp_spec" ]]; then
+      rm -f "$tmp_spec"
+    fi
+    rm -f "$tmp_map"
+    rm -rf "$tmp_cache"
+  }
+  run_gate() {
+    local label="$1"
+    local map_path="$2"
+    local spec_path="$3"
+    shift 3
+    local start end
+    start="$(now_secs)"
+    set +e
+    if [[ -n "$map_path" && -n "$spec_path" ]]; then
+      gate_output="$(WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" WORKFLOW_CONTRACT_MAP="$map_path" WORKFLOW_CONTRACT_FILE="$spec_path" "$@" 2>&1)"
+    elif [[ -n "$map_path" ]]; then
+      gate_output="$(WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" WORKFLOW_CONTRACT_MAP="$map_path" "$@" 2>&1)"
+    elif [[ -n "$spec_path" ]]; then
+      gate_output="$(WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" WORKFLOW_CONTRACT_FILE="$spec_path" "$@" 2>&1)"
+    else
+      gate_output="$(WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" "$@" 2>&1)"
+    fi
+    gate_rc=$?
+    set -e
+    end="$(now_secs)"
+    echo "12d timing: ${label} $((end - start))s"
+  }
   # NOTE: Do NOT use trap here - workflow_acceptance.sh has a global EXIT trap
   # that would be overwritten, risking leaked worktrees
 
@@ -4721,114 +4797,104 @@ if test_start "12d" "workflow contract gate validates enforcement existence" 1; 
   jq '.rules[0].enforcement = ["plans/ghost_script.sh"]' \
     plans/workflow_contract_map.json > "$tmp_map"
 
-  rc=0
-  output="$(WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1)" || rc=$?
-  if [[ $rc -eq 0 ]]; then
+  run_gate "missing_enforcement" "$tmp_map" "" plans/workflow_contract_gate.sh
+  if [[ $gate_rc -eq 0 ]]; then
     echo "FAIL: gate should have returned non-zero for missing enforcement"
-    rm -f "$tmp_map"; exit 1
+    cleanup_tmp; exit 1
   fi
-  if ! echo "$output" | grep -q "missing enforcement"; then
+  if ! echo "$gate_output" | grep -q "missing enforcement"; then
     echo "FAIL: gate should have rejected missing enforcement with specific error"
-    echo "Got: $output"
-    rm -f "$tmp_map"; exit 1
+    echo "Got: $gate_output"
+    cleanup_tmp; exit 1
   fi
 
   # Test 2: invalid test ID - must fail (non-zero) with specific message
   jq '.rules[0].tests = ["plans/workflow_acceptance.sh (Test 999)"]' \
     plans/workflow_contract_map.json > "$tmp_map"
 
-  rc=0
-  output="$(WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1)" || rc=$?
-  if [[ $rc -eq 0 ]]; then
+  run_gate "unknown_test_id" "$tmp_map" "" plans/workflow_contract_gate.sh
+  if [[ $gate_rc -eq 0 ]]; then
     echo "FAIL: gate should have returned non-zero for unknown test id"
-    rm -f "$tmp_map"; exit 1
+    cleanup_tmp; exit 1
   fi
-  if ! echo "$output" | grep -q "unknown test id"; then
+  if ! echo "$gate_output" | grep -q "unknown test id"; then
     echo "FAIL: gate should have rejected unknown test id with specific error"
-    echo "Got: $output"
-    rm -f "$tmp_map"; exit 1
+    echo "Got: $gate_output"
+    cleanup_tmp; exit 1
   fi
 
-  # Test 3: descriptive text should not cause false positive
-  # "postmortem gate check, Test 0g, Test 10d" should only validate 0g and 10d
-  jq '.rules[0].tests = ["plans/workflow_acceptance.sh (postmortem gate check, Test 0g, Test 10d)"]' \
+  # Test 3: valid test ref patterns should all pass in a single gate run
+  # - descriptive text with Test 0g/10d
+  # - numeric range Test 5-6
+  # - slash-separated Test 0h/0i/0j/12
+  jq '.rules[0].tests = [
+        "plans/workflow_acceptance.sh (postmortem gate check, Test 0g, Test 10d)",
+        "plans/workflow_acceptance.sh (Test 5-6)",
+        "plans/workflow_acceptance.sh (Test 0h/0i/0j/12)"
+      ]' \
     plans/workflow_contract_map.json > "$tmp_map"
 
-  if ! WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1; then
-    echo "FAIL: gate should accept valid test IDs with descriptive text"
-    rm -f "$tmp_map"; exit 1
+  run_gate "valid_test_refs" "$tmp_map" "" plans/workflow_contract_gate.sh
+  if [[ $gate_rc -ne 0 ]]; then
+    echo "FAIL: gate should accept valid test refs (descriptive/range/slash)"
+    cleanup_tmp; exit 1
+  fi
+  if ! ls "$tmp_cache"/spec_ids_* >/dev/null 2>&1; then
+    echo "FAIL: expected spec id cache in $tmp_cache" >&2
+    cleanup_tmp; exit 1
+  fi
+  if ! ls "$tmp_cache"/acceptance_ids_* >/dev/null 2>&1; then
+    echo "FAIL: expected acceptance id cache in $tmp_cache" >&2
+    cleanup_tmp; exit 1
   fi
 
   # Test 4: non-numeric range should be rejected with "invalid test range" error
   jq '.rules[0].tests = ["plans/workflow_acceptance.sh (Test 0k.1-0k.3)"]' \
     plans/workflow_contract_map.json > "$tmp_map"
 
-  rc=0
-  output="$(WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1)" || rc=$?
-  if [[ $rc -eq 0 ]]; then
+  run_gate "invalid_range" "$tmp_map" "" plans/workflow_contract_gate.sh
+  if [[ $gate_rc -eq 0 ]]; then
     echo "FAIL: gate should have returned non-zero for invalid test range"
-    rm -f "$tmp_map"; exit 1
+    cleanup_tmp; exit 1
   fi
-  if ! echo "$output" | grep -q "invalid test range"; then
+  if ! echo "$gate_output" | grep -q "invalid test range"; then
     echo "FAIL: gate should reject non-numeric range with 'invalid test range' error"
-    echo "Got: $output"
-    rm -f "$tmp_map"; exit 1
+    echo "Got: $gate_output"
+    cleanup_tmp; exit 1
   fi
 
-  # Test 5: numeric range should expand fully and validate all IDs
-  # Use 5-6 (small stable range, both IDs exist)
-  jq '.rules[0].tests = ["plans/workflow_acceptance.sh (Test 5-6)"]' \
-    plans/workflow_contract_map.json > "$tmp_map"
-
-  if ! WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1; then
-    echo "FAIL: gate should accept valid numeric range (full expansion)"
-    rm -f "$tmp_map"; exit 1
-  fi
-
-  # Test 6: slash-separated IDs should validate (existing map pattern)
-  jq '.rules[0].tests = ["plans/workflow_acceptance.sh (Test 0h/0i/0j/12)"]' \
-    plans/workflow_contract_map.json > "$tmp_map"
-
-  if ! WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1; then
-    echo "FAIL: gate should accept slash-separated test ids"
-    rm -f "$tmp_map"; exit 1
-  fi
-
-  # Test 7: duplicate workflow IDs in spec should fail closed with specific error
+  # Test 5: duplicate workflow IDs in spec should fail closed with specific error
   tmp_spec=$(mktemp)
   cat > "$tmp_spec" <<'SPEC'
 - [WF-9.9] Duplicate id one
 - [WF-9.9] Duplicate id two
 SPEC
-  rc=0
-  output="$(WORKFLOW_CONTRACT_FILE="$tmp_spec" plans/workflow_contract_gate.sh 2>&1)" || rc=$?
-  if [[ $rc -eq 0 ]]; then
+  run_gate "duplicate_spec_ids" "" "$tmp_spec" plans/workflow_contract_gate.sh
+  if [[ $gate_rc -eq 0 ]]; then
     echo "FAIL: gate should have returned non-zero for duplicate workflow IDs in spec"
-    rm -f "$tmp_spec" "$tmp_map"; exit 1
+    cleanup_tmp; exit 1
   fi
-  if ! echo "$output" | grep -q "duplicate workflow rule ids in spec"; then
+  if ! echo "$gate_output" | grep -q "duplicate workflow rule ids in spec"; then
     echo "FAIL: gate should reject duplicate workflow IDs in spec with a specific error"
-    echo "Got: $output"
-    rm -f "$tmp_spec" "$tmp_map"; exit 1
+    echo "Got: $gate_output"
+    cleanup_tmp; exit 1
   fi
 
-  # Test 8: duplicate workflow IDs in map should fail closed with specific error
+  # Test 6: duplicate workflow IDs in map should fail closed with specific error
   jq '.rules += [.rules[0]]' plans/workflow_contract_map.json > "$tmp_map"
-  rc=0
-  output="$(WORKFLOW_CONTRACT_MAP="$tmp_map" plans/workflow_contract_gate.sh 2>&1)" || rc=$?
-  if [[ $rc -eq 0 ]]; then
+  run_gate "duplicate_map_ids" "$tmp_map" "" plans/workflow_contract_gate.sh
+  if [[ $gate_rc -eq 0 ]]; then
     echo "FAIL: gate should have returned non-zero for duplicate rule ids in map"
-    rm -f "$tmp_spec" "$tmp_map"; exit 1
+    cleanup_tmp; exit 1
   fi
-  if ! echo "$output" | grep -q "duplicate rule ids in map"; then
+  if ! echo "$gate_output" | grep -q "duplicate rule ids in map"; then
     echo "FAIL: gate should reject duplicate rule ids in map with a specific error"
-    echo "Got: $output"
-    rm -f "$tmp_spec" "$tmp_map"; exit 1
+    echo "Got: $gate_output"
+    cleanup_tmp; exit 1
   fi
 
   # Explicit cleanup (no trap)
-  rm -f "$tmp_spec"
-  rm -f "$tmp_map"
+  cleanup_tmp
   test_pass "12d"
 fi
 

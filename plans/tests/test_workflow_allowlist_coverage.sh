@@ -27,6 +27,8 @@ dupes="$(sort "$allowlist" | uniq -d || true)"
 [[ -z "$dupes" ]] || fail "duplicate entries: $dupes"
 
 required=(
+  .github/pull_request_template.md
+  .github/workflows/ci.yml
   AGENTS.md
   IMPLEMENTATION_PLAN.md
   POLICY.md
@@ -85,6 +87,7 @@ required=(
   specs/TRACE.yaml
   specs/WORKFLOW_CONTRACT.md
   specs/vendor_docs/rust/CRATES_OF_INTEREST.yaml
+  tools/ci/lint_pr_template_sections.py
   tools/vendor_docs_lint_rust.py
   verify.sh
   plans/workflow_files_allowlist.txt

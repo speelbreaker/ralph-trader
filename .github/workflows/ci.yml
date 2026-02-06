@@ -6,6 +6,51 @@ on:
     branches: [ main ]
 
 jobs:
+  pr-template-lint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint PR template sections
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_TEMPLATE_LINT_DRAFT_MODE: warn
+        run: |
+          mode="strict"
+          if [[ "${PR_DRAFT}" == "true" && "${PR_TEMPLATE_LINT_DRAFT_MODE}" != "strict" ]]; then
+            mode="warn"
+          fi
+
+          printf '%s' "${PR_BODY:-}" > pr_body.md
+
+          set +e
+          python3 tools/ci/lint_pr_template_sections.py --body-file pr_body.md --mode "$mode" | tee pr_template_lint.log
+          rc=$?
+          set -e
+
+          if [[ -s pr_template_lint.log ]]; then
+            while IFS= read -r line; do
+              [[ -z "$line" ]] && continue
+              if [[ "$mode" == "warn" ]]; then
+                echo "::warning::$line"
+              elif [[ "$rc" -ne 0 ]]; then
+                echo "::error::$line"
+              fi
+            done < pr_template_lint.log
+          fi
+
+          if [[ "$mode" == "warn" ]]; then
+            echo "PR template lint ran in warn mode for draft PR."
+            exit 0
+          fi
+          exit "$rc"
+
   verify:
     runs-on: ubuntu-latest
     steps:

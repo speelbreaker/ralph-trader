@@ -7,5 +7,6 @@
 ## Entries
 
 - [YYYY-MM-DD] TBD
+- [2026-02-06] Drafted deferred proposal for CI lint of required PR template sections in `plans/proposals/2026-02-06_pr-template-ci-lint.md`.
 - [2026-02-05] Drafted proposal for a Ralph bootstrap mode (missing workspace baseline) in `plans/proposals/2026-02-05_bootstrap_ralph_baseline.md`.
 - [2026-01-13] Consider an unattended profile that sets approval_mode=never; requires explicit policy decision vs AGENTS.md "Never use skip-permissions" plus extra guardrails.
