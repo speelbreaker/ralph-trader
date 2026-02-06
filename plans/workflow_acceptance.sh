@@ -1634,6 +1634,10 @@ if ! run_in_worktree grep -Fq "github.event_name == 'pull_request'" ".github/wor
   echo "FAIL: pr-template-lint must only run on pull_request events" >&2
   exit 1
 fi
+if ! run_in_worktree grep -Fq "ready_for_review" ".github/workflows/ci.yml"; then
+  echo "FAIL: pr-template-lint must run on draft->ready transitions" >&2
+  exit 1
+fi
 set +e
 lint_strict_output="$(run_in_worktree python3 tools/ci/lint_pr_template_sections.py --body $'## 0) What shipped\n- Feature/behavior: TBD\n' --mode strict 2>&1)"
 lint_strict_rc=$?
@@ -1660,6 +1664,18 @@ if [[ "$lint_none_rc" -eq 0 ]]; then
 fi
 if ! echo "$lint_none_output" | grep -q "NONE_NOT_ALLOWED"; then
   echo "FAIL: strict PR template lint must report none-not-allowed failure" >&2
+  exit 1
+fi
+set +e
+lint_guidance_output="$(run_in_worktree python3 tools/ci/lint_pr_template_sections.py --body $'## 1) Constraint (ONE)\n- Validation (proof it got better): (metric, fewer reruns, faster command, fewer flakes, etc.)\n' --mode strict 2>&1)"
+lint_guidance_rc=$?
+set -e
+if [[ "$lint_guidance_rc" -eq 0 ]]; then
+  echo "FAIL: strict PR template lint must fail on template guidance text" >&2
+  exit 1
+fi
+if ! echo "$lint_guidance_output" | grep -q "PLACEHOLDER_FIELD"; then
+  echo "FAIL: strict PR template lint must treat guidance text as placeholder" >&2
   exit 1
 fi
 
@@ -1848,7 +1864,13 @@ if ! grep -q "pid_dead" "$WORKTREE/plans/ralph.sh"; then
   exit 1
 fi
 
-bad_scope_patterns="$(run_in_worktree jq -r '.items[].scope.touch[]?, .items[].scope.create[]? | select(endswith("/")) | select(contains("*") | not)' "$WORKTREE/plans/prd.json")"
+bad_scope_filter='
+  .items[].scope.touch[]?,
+  .items[].scope.create[]?
+  | select(endswith("/"))
+  | select(contains("*") | not)
+'
+bad_scope_patterns="$(run_in_worktree jq -r "$bad_scope_filter" "$WORKTREE/plans/prd.json")"
   if [[ -n "$bad_scope_patterns" ]]; then
     echo "FAIL: scope patterns ending in / must include a glob (e.g., **):" >&2
     echo "$bad_scope_patterns" >&2
@@ -2610,6 +2632,13 @@ echo "mode=${log_mode} verify_mode=${verify_mode} root=/tmp"
 exit 1
 EOF
 chmod +x "$STUB_DIR/verify_fail.sh"
+
+cat > "$STUB_DIR/prd_preflight_pass.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exit 0
+EOF
+chmod +x "$STUB_DIR/prd_preflight_pass.sh"
 
 cat > "$STUB_DIR/verify_fail_noisy.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -4072,11 +4101,12 @@ run_in_worktree git add "$valid_prd_5d" >/dev/null 2>&1
 run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: iter artifacts prd" >/dev/null 2>&1
 write_contract_check_stub_require_iter_artifacts
 set +e
-test5b_log="$WORKTREE/.ralph/test5b.log"
-run_ralph env \
-  PRD_FILE="$valid_prd_5d" \
-  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
-  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  test5b_log="$WORKTREE/.ralph/test5b.log"
+  run_ralph env \
+    PRD_FILE="$valid_prd_5d" \
+    PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+    PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
+    VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-004" \
   RPH_PROMPT_FLAG="" \
@@ -4360,11 +4390,12 @@ valid_prd_10b="$WORKTREE/.ralph/valid_prd_10b.json"
 write_valid_prd "$valid_prd_10b" "S1-020"
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
 set +e
-test10b_log="$WORKTREE/.ralph/test10b.log"
-run_ralph env \
-  PRD_FILE="$valid_prd_10b" \
-  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
-  VERIFY_SH="$STUB_DIR/verify_pass_mode.sh" \
+  test10b_log="$WORKTREE/.ralph/test10b.log"
+  run_ralph env \
+    PRD_FILE="$valid_prd_10b" \
+    PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+    PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
+    VERIFY_SH="$STUB_DIR/verify_pass_mode.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-020" \
   RPH_PROMPT_FLAG="" \
@@ -4580,11 +4611,12 @@ valid_prd_10d="$WORKTREE/.ralph/valid_prd_10d.json"
 write_valid_prd "$valid_prd_10d" "S1-022"
 write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
 set +e
-test10d_log="$WORKTREE/.ralph/test10d.log"
-run_ralph env \
-  PRD_FILE="$valid_prd_10d" \
-  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
-  VERIFY_SH="$STUB_DIR/verify_fail_on_mode.sh" \
+  test10d_log="$WORKTREE/.ralph/test10d.log"
+  run_ralph env \
+    PRD_FILE="$valid_prd_10d" \
+    PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+    PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
+    VERIFY_SH="$STUB_DIR/verify_fail_on_mode.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-022" \
   RPH_PROMPT_FLAG="" \

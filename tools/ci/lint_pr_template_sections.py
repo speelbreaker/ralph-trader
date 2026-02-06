@@ -60,6 +60,10 @@ NONE_BARE = re.compile(r"^none(?:\s*[\.\-:]?)$", re.IGNORECASE)
 FIELD_RE = re.compile(r"^\s*-\s*([^:]+)\s*:\s*(.*)$")
 HEADER_RE = re.compile(r"^\s*##\s+(.+?)\s*$")
 
+TEMPLATE_GUIDANCE_VALUES = {
+    "metric, fewer reruns, faster command, fewer flakes, etc",
+}
+
 MIN_NON_WS_CHARS = 12
 
 
@@ -95,6 +99,12 @@ def is_placeholder(value: str) -> bool:
     if PLACEHOLDER_PREFIX.match(normalized):
         return True
     return False
+
+
+def is_template_guidance(value: str) -> bool:
+    normalized = normalize_space(value).strip().lower()
+    normalized = normalized.strip("`*_~.!,;()")
+    return normalized in TEMPLATE_GUIDANCE_VALUES
 
 
 def parse_none_rationale(value: str) -> Tuple[bool, Optional[str]]:
@@ -157,6 +167,8 @@ def find_field_value(
 
 
 def classify_value(value: str, allow_none: bool) -> Tuple[str, Optional[str]]:
+    if is_template_guidance(value):
+        return "placeholder", None
     if is_placeholder(value):
         return "placeholder", None
     is_none, rationale = parse_none_rationale(value)

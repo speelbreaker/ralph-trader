@@ -55,6 +55,18 @@
 - [ ] Fail-closed audit: any `|| true`, suppressed errors, or ignored exits are reviewed for silent-success risk.
 - [ ] New workflow paths include at least one integration/smoke test (or an explicit rationale for omission).
 
+## Operational & Org Lens
+- [ ] Operational impact: day-to-day workflows, incident response, and debugging paths are reviewed for regressions or new toil.
+- [ ] Tooling integration: interactions with editors/IDEs, git hooks, and pre-commit are assessed (including expected failures).
+- [ ] Org/process fit: ownership, handoffs, and bus-factor risks are identified with a mitigation note.
+- [ ] Data/privacy: telemetry or artifacts containing developer/workstation identity are reviewed for handling, retention, and exposure.
+- [ ] Failure recovery: explicit “when things go wrong” paths are documented beyond the happy path.
+- [ ] Mental model risks: likely developer misunderstandings are called out with clarifying guidance.
+- [ ] Performance beyond hashing: I/O patterns, parallel execution, and contention are assessed.
+- [ ] Documentation discoverability: where developers learn this behavior is identified (docs, README, workflow guide).
+- [ ] Ralph interaction: effects on Ralph runs, even when designed for manual runs, are checked for edge cases.
+- [ ] Maintenance burden: long-term costs of manifests/lints/guards are assessed with an owner or follow-up.
+
 ## Block Conditions
 Mark the PR BLOCKED if any are true:
 - Evidence section is empty, vague, or missing artifacts.
