@@ -1361,14 +1361,14 @@
         "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.12 — F1 cert tooling (moved from PL-10; Slice 1 exception)"
       ],
   "scope": {
-    "touch": [],
-    "create": [
+    "touch": [
       "python/tools/f1_certify.py",
       "scripts/f1_certify.py",
       "python/tests/test_f1_certify.py",
       "artifacts/F1_CERT.json",
       "artifacts/F1_CERT.md"
     ],
+    "create": [],
     "avoid": []
   },
       "acceptance": [

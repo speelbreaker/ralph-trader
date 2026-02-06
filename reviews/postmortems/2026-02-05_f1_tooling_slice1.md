@@ -3,6 +3,7 @@
 ## 0) What shipped
 - Feature/behavior: Moved PL-10 F1 tooling into Slice 1 as S1-012 and added PRD story to implement f1_certify tooling.
 - Follow-up: Fixed S1-012 PRD scope/observability to pass PRD gate and added placeholder python/tools + python/tests directories.
+- Follow-up: Updated S1-012 scope to touch now-existing f1_certify + F1_CERT artifacts after the initial implementation commit landed.
 - What value it has (what problem it solves, upgrade provides): Unblocks promotion verification for early slices by making F1_CERT tooling available in Slice 1.
 - Governing contract: specs/WORKFLOW_CONTRACT.md (workflow), specs/CONTRACT.md (F1_CERT requirements)
 
