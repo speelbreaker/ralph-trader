@@ -23,6 +23,52 @@ Prerequisite: Run `/failure-mode-review` first. This skill assumes implementatio
 
 ---
 
+## Before You Start (MANDATORY)
+
+### Read the source code, not just the plan/PR description
+
+**Do not reason abstractly about architecture.** Before applying any checklist:
+1. **Read the key source files** — at minimum the files the change modifies or depends on
+2. **Understand the current architecture** — how does the existing system work today? What's the execution flow?
+3. **Map the change onto the existing flow** — where does it insert? What does it bypass? What does it add?
+
+Without this grounding, architectural analysis becomes theoretical and misses the concrete interactions that cause real failures.
+
+### Triage: which sections apply?
+
+| If the change involves... | Apply sections... |
+|--------------------------|-------------------|
+| New subsystem or parallel mechanism | §1 Architectural Purity, §4c Dual-Mechanism |
+| Many tickets, env vars, new files | §2 Complexity-to-Benefit, §6a Config Explosion |
+| Caching, skipping, fingerprinting | §3 Hidden Assumptions, §5 Compounding Failures |
+| Multi-phase rollout | §4b Point-in-Time Correctness, §6d Zombie Features |
+| Manifests, allowlists, lints | §6b Manifest Staleness, §15 Maintenance Burden |
+| Operator-facing behavior change | §7 Operations, §12 Mental Models, §14 Docs |
+| Telemetry or data collection | §10 Data & Privacy |
+| >5 implementation tickets | §9 Organizational, §17 Acceptance Quality |
+| Tooling/harness integration | §8 Tooling Integration, §16 Harness Interaction |
+| Any plan with acceptance tests/commands | §17 Acceptance Quality |
+| Multi-ticket implementation | §18 Ticket Dependencies |
+
+**Always apply**: §2 (Complexity-to-Benefit), §12 (Mental Model Mismatches), and §20 (Simpler Alternative) — these are the most commonly missed and highest-signal.
+
+### Verify acceptance commands against reality
+
+For each ticket's acceptance command:
+- [ ] **Run it mentally BEFORE the change**: would it pass today? If yes, the test is vacuous.
+- [ ] **Check what it proves**: does it test behavior (gate actually skips/runs) or presence (string appears in file)?
+- [ ] **Check for false positives**: could a comment, log message, or unrelated code satisfy the check?
+
+Example vacuous test:
+```bash
+# Acceptance for "add schema validation":
+rg -n "schema_version|skip_cache|validate" plans/verify.sh
+# PROBLEM: "schema_version" already exists at line 337
+# This command passes TODAY with zero implementation work
+```
+
+---
+
 ## Architectural Failure Modes
 
 ### 1. Architectural Purity Check
@@ -312,6 +358,57 @@ Even for changes scoped to manual runs, check harness edge cases:
 - [ ] **Special modes**: Does the harness have modes (verify-only, dry-run, promotion) that interact unexpectedly with the change?
 - [ ] **Phase asymmetry**: If the harness calls the tool twice per iteration (e.g., verify_pre + verify_post), does the change behave correctly in both contexts?
 
+### 17. Acceptance & Test Quality
+
+For each acceptance test or verification command in the plan:
+
+- [ ] **Vacuous test detection**: Can the test pass without any implementation? Run the command against the current codebase mentally — if it passes, the test proves nothing.
+- [ ] **Presence vs behavior**: Does the test check that code exists (`rg -n "pattern"`) or that it works (`run scenario, check output`)? Presence checks are weak — a comment or log message can satisfy them.
+- [ ] **False positive surface**: Could unrelated code, existing strings, or dead code paths satisfy the check?
+- [ ] **Failure test**: If you deliberately break the feature, does the acceptance test fail? If not, it's not testing the right thing.
+
+### 18. Ticket Dependency Discovery
+
+For multi-ticket plans, explicitly build the dependency graph:
+
+Method:
+1. For each ticket, list the **artifacts it creates** (new files, new functions, new allowlist entries)
+2. For each ticket, list the **artifacts its acceptance command requires** (scripts it runs, files it greps, functions it calls)
+3. Draw edges: if ticket B's acceptance requires an artifact that ticket A creates, B depends on A
+4. Check for undeclared dependencies: are all edges reflected in the plan's ordering/due dates?
+
+- [ ] **Hard dependencies found**: Ticket B will fail if Ticket A isn't done first
+- [ ] **Shared file conflicts**: Two tickets edit the same file without coordination — merge conflict risk
+- [ ] **Integration gate placement**: Is there a final integration ticket that depends on ALL others? Does it run last?
+- [ ] **Parallel safety**: Can any tickets safely run in parallel, or do shared file edits prevent it?
+
+### 19. Rollback & Degradation Testing
+
+- [ ] **Rollback path tested?** If the plan says "instant rollback: set env var to off" — has anyone verified that setting the env var to off actually restores pre-change behavior?
+- [ ] **Partial rollback**: Can individual features be rolled back independently, or is it all-or-nothing?
+- [ ] **State cleanup on rollback**: Does rolling back leave stale state files (checkpoint data, telemetry) that confuse future runs?
+- [ ] **Re-enable after rollback**: After rolling back and re-enabling, does the system resume correctly, or does stale state cause drift?
+
+### 20. Simpler Alternative Check (MANDATORY)
+
+Before accepting complexity, explicitly ask:
+
+- [ ] **80/20 alternative**: Is there a simpler approach that delivers 80% of the benefit at 10% of the complexity? Describe it in one sentence.
+- [ ] **Inline alternative**: Could the core logic be a 20-50 line function added directly to the existing script, avoiding new files/manifests/lints entirely?
+- [ ] **"Make it fast" alternative**: Instead of skipping gates, could the gates themselves be made faster? (e.g., caching within the gate, parallel execution, faster tools)
+- [ ] **"Do nothing" baseline**: What happens if we don't implement this at all? Is the current pain level actually high enough to justify the machinery?
+
+---
+
+## Reviewer Anti-Patterns (Mistakes to Avoid)
+
+1. **Architecture astronautics**: Analyzing systemic risks without reading the actual source code. Open the files. Trace the execution. Then reason about architecture.
+2. **Accepting complexity because it's well-designed**: A well-designed complex system is still complex. Always ask "is the simpler version good enough?"
+3. **Reviewing tickets independently**: Check cross-ticket interactions. Ticket A's artifact may be ticket B's input. If A breaks, B is silently wrong.
+4. **Trusting the plan's self-assessment**: If the plan says "fail-closed by design," verify it. Read the code path where the default fires. Is the default actually safe?
+5. **Stopping at "the math checks out"**: Theoretical correctness doesn't survive contact with NFS, Docker, SIGKILL, disk-full, or a developer who sets `VERIFY_CHECKPOINT_ROLLOUT=enforec` (typo). Trace operational scenarios.
+6. **Skipping the "do nothing" option**: Every complex system was once a simple system that worked. Justify the transition, don't assume it.
+
 ---
 
 ## Output Format
@@ -362,6 +459,14 @@ Even for changes scoped to manual runs, check harness edge cases:
 - [ ] Git hooks: <safe/unsafe/untested>
 - [ ] Concurrent terminals: <safe with last-writer-wins / needs locking>
 
+### Acceptance & Ticket Quality
+- [ ] Vacuous tests found: <list>
+- [ ] Undeclared ticket dependencies: <list>
+- [ ] Rollback tested: <yes/no/untested>
+
+### Simpler Alternative
+- [ ] 80/20 alternative considered: <description or "none viable">
+
 ### Open Questions
 - <question needing clarification>
 ```
@@ -392,6 +497,13 @@ Even for changes scoped to manual runs, check harness edge cases:
 | Diagnostic discoverability | No `--help` or `--status` for new behavior | Developer must read source to understand system |
 | Bus factor / ticket concentration | >50% tickets on one owner | Stalls if owner is unavailable |
 | Cross-plan file ownership | Two plans modify same state file | No detection mechanism for conflicts |
+| Vacuous acceptance test | Test passes before change is implemented | Run test against current code first |
+| Presence-only check | `rg "pattern"` satisfied by comments/logs | Test behavior, not string existence |
+| Undeclared ticket dependency | Ticket B needs artifact from Ticket A | Map artifacts created vs artifacts consumed |
+| Untested rollback | "Set env var to off" never verified | Test rollback path explicitly |
+| Stale state after rollback | Cache/telemetry persists after disable | Check if rollback cleans or ignores old state |
+| Unnecessary complexity | 10x machinery for 2x benefit | Always check simpler 80/20 alternative |
+| Env var typo acceptance | Invalid value silently treated as default | Validate values and warn on unknown input |
 
 ## Integration with Other Skills
 
