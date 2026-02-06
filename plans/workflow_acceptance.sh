@@ -6803,4 +6803,74 @@ JSON
   test_pass "30.11"
 fi
 
+if test_start "30.12" "verify_skip_status helper reports effective policy and checkpoint fields" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/verify_skip_status.sh || {
+    echo "FAIL: missing executable plans/verify_skip_status.sh" >&2
+    exit 1
+  }
+  rg -n "verify_skip_status.sh" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing verify_skip_status.sh" >&2
+    exit 1
+  }
+
+  mkdir -p .ralph
+  cat > .ralph/verify_checkpoint.json <<'"'"'JSON'"'"'
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{"ineligible_reason":"none"},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"dry_run","kill_switch_token":"","written_by_verify_sh_sha":"abc","writer_ci":false,"writer_mode":"quick","gates":{}}}
+JSON
+
+  out="$(VERIFY_CHECKPOINT_ROLLOUT=dry_run VERIFY_CHECKPOINT_SKIP=1 ./plans/verify_skip_status.sh)"
+  echo "$out" | grep -q "^rollout_effective=dry_run$" || {
+    echo "FAIL: expected rollout_effective in verify_skip_status output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  echo "$out" | grep -q "^checkpoint_exists=1$" || {
+    echo "FAIL: expected checkpoint_exists=1 in verify_skip_status output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  echo "$out" | grep -q "^skip_cache_rollout=dry_run$" || {
+    echo "FAIL: expected skip_cache_rollout in verify_skip_status output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+'
+  test_pass "30.12"
+fi
+
+if test_start "30.13" "check_sample_mix helper parses telemetry diagnostics" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/check_sample_mix.sh || {
+    echo "FAIL: missing executable plans/check_sample_mix.sh" >&2
+    exit 1
+  }
+  rg -n "check_sample_mix.sh" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing check_sample_mix.sh" >&2
+    exit 1
+  }
+
+  tdir=".ralph/verify_telemetry"
+  mkdir -p "$tdir"
+  cat > "$tdir/skip_telemetry_test.jsonl" <<'"'"'JSON'"'"'
+{"ts":1700000000,"run_id":"r1","mode":"quick","verify_mode":"none","rollout_mode":"dry_run","writer_ci":false,"head_sha":"a","head_tree":"b","changed_files_hash":"c","head_unchanged_since_last_run":true,"would_skip":{"contract_coverage":true,"spec_validators_group":false},"skipped_gate_count":0,"scheduled_gate_count":2,"skipped_gates":[]}
+JSON
+
+  out="$(./plans/check_sample_mix.sh --dir "$tdir" --min-runs 1 --min-days 1)"
+  echo "$out" | grep -q "^status=ok$" || {
+    echo "FAIL: expected status=ok from check_sample_mix" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  echo "$out" | grep -q "^would_skip_contract_coverage=1$" || {
+    echo "FAIL: expected would_skip_contract_coverage metric" >&2
+    echo "$out" >&2
+    exit 1
+  }
+'
+  test_pass "30.13"
+fi
+
 echo "Workflow acceptance tests passed"

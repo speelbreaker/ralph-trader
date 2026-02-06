@@ -9,6 +9,7 @@ docs/contract_kernel.json
 docs/validation_rules.md
 plans/autofix.sh
 plans/check_checkpoint_fingerprint_manifest.sh
+plans/check_sample_mix.sh
 plans/check_skip_entrypoint.sh
 plans/checkpoint_dependency_manifest.json
 plans/checkpoint_fingerprint_env_manifest.txt
@@ -47,6 +48,7 @@ plans/tests/test_workflow_acceptance_fallback.sh
 plans/tests/test_workflow_allowlist_coverage.sh
 plans/verify.sh
 plans/verify_day.sh
+plans/verify_skip_status.sh
 plans/workflow_acceptance.sh
 plans/workflow_acceptance_parallel.sh
 plans/workflow_contract_gate.sh
