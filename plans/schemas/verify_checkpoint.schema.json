@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plans/schemas/verify_checkpoint.schema.json",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "success_runs",
+    "eligible_success_runs",
+    "would_hit_success_runs",
+    "would_miss_success_runs",
+    "ineligible_success_runs",
+    "last_success",
+    "skip_cache"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "success_runs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "eligible_success_runs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "would_hit_success_runs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "would_miss_success_runs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ineligible_success_runs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_success": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "skip_cache": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schema_version",
+        "ts",
+        "rollout",
+        "kill_switch_token",
+        "written_by_verify_sh_sha",
+        "gates"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rollout": {
+          "type": "string",
+          "enum": ["off", "dry_run", "enforce"]
+        },
+        "kill_switch_token": {
+          "type": "string"
+        },
+        "written_by_verify_sh_sha": {
+          "type": "string"
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

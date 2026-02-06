@@ -123,6 +123,8 @@ VERIFY_RUN_ID="${VERIFY_RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 VERIFY_ARTIFACTS_DIR="${VERIFY_ARTIFACTS_DIR:-$ROOT/artifacts/verify/$VERIFY_RUN_ID}"
 VERIFY_CHECKPOINT_COUNTER="${VERIFY_CHECKPOINT_COUNTER:-auto}" # auto|1|0
 VERIFY_CHECKPOINT_FILE="${VERIFY_CHECKPOINT_FILE:-$ROOT/.ralph/verify_checkpoint.json}"
+VERIFY_CHECKPOINT_ROLLOUT="${VERIFY_CHECKPOINT_ROLLOUT:-off}" # off|dry_run|enforce
+VERIFY_CHECKPOINT_KILL_SWITCH="${VERIFY_CHECKPOINT_KILL_SWITCH:-}"
 VERIFY_LOG_CAPTURE="${VERIFY_LOG_CAPTURE:-1}" # 0 disables per-step log capture in verbose mode
 WORKFLOW_ACCEPTANCE_POLICY="${WORKFLOW_ACCEPTANCE_POLICY:-auto}"
 BASE_REF="${BASE_REF:-origin/main}"
@@ -157,6 +159,7 @@ fi
 # Logging & Utilities
 # -----------------------------------------------------------------------------
 source "$ROOT/plans/lib/verify_utils.sh"
+source "$ROOT/plans/lib/verify_checkpoint.sh"
 
 CHECKPOINT_COUNTER_ENABLED=0
 CHECKPOINT_ELIGIBLE=0
@@ -168,6 +171,8 @@ CHECKPOINT_HEAD_TREE=""
 CHECKPOINT_CHANGED_FILES_HASH=""
 CHECKPOINT_INELIGIBLE_REASON=""
 CHECKPOINT_DIRTY="0"
+CHECKPOINT_ROLLOUT="off"
+CHECKPOINT_ROLLOUT_REASON=""
 
 sha256_string() {
   local payload="$1"
@@ -176,6 +181,11 @@ sha256_string() {
   else
     printf '%s' "$payload" | shasum -a 256 | awk '{print $1}'
   fi
+}
+
+# Single checkpoint skip-decision entrypoint.
+decide_skip_gate() {
+  checkpoint_decide_skip_gate "$@"
 }
 
 checkpoint_counter_enabled() {
@@ -244,13 +254,14 @@ checkpoint_counter_init() {
   fi
   CHECKPOINT_COUNTER_ENABLED=1
 
-  if [[ -n "${dirty_status:-}" ]]; then
-    CHECKPOINT_DIRTY="1"
-    CHECKPOINT_INELIGIBLE_REASON="dirty_worktree"
-  elif ! command -v git >/dev/null 2>&1; then
+  CHECKPOINT_DIRTY="${CHECKPOINT_SNAPSHOT_DIRTY:-0}"
+
+  if ! command -v git >/dev/null 2>&1; then
     CHECKPOINT_INELIGIBLE_REASON="missing_git"
-  elif [[ "${CHANGE_DETECTION_OK:-0}" != "1" ]]; then
-    CHECKPOINT_INELIGIBLE_REASON="change_detection_unavailable"
+  elif ! checkpoint_is_cache_eligible; then
+    if [[ -z "$CHECKPOINT_INELIGIBLE_REASON" ]]; then
+      CHECKPOINT_INELIGIBLE_REASON="cache_ineligible"
+    fi
   else
     CHECKPOINT_ELIGIBLE=1
   fi
@@ -269,6 +280,7 @@ checkpoint_counter_init() {
 mode=$MODE
 verify_mode=$verify_mode
 base_ref=$BASE_REF
+rollout=${CHECKPOINT_ROLLOUT:-off}
 head_sha=$CHECKPOINT_HEAD_SHA
 head_tree=$CHECKPOINT_HEAD_TREE
 change_detection_ok=${CHANGE_DETECTION_OK:-0}
@@ -300,6 +312,11 @@ checkpoint_counter_record_success() {
   local eligible="$CHECKPOINT_ELIGIBLE"
   local ineligible_reason="$CHECKPOINT_INELIGIBLE_REASON"
 
+  if ! checkpoint_no_downgrade_ok 2 "$VERIFY_CHECKPOINT_FILE"; then
+    warn "checkpoint write skipped: $CHECKPOINT_INELIGIBLE_REASON"
+    return 0
+  fi
+
   set +e
   VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" \
     CHECKPOINT_WOULD_HIT="$would_hit" \
@@ -313,6 +330,9 @@ checkpoint_counter_record_success() {
     CHECKPOINT_VERIFY_MODE="$verify_mode" \
     CHECKPOINT_BASE_REF="$BASE_REF" \
     CHECKPOINT_DIRTY="$CHECKPOINT_DIRTY" \
+    CHECKPOINT_VERIFY_SH_SHA="$VERIFY_SH_SHA" \
+    CHECKPOINT_ROLLOUT="${CHECKPOINT_ROLLOUT:-off}" \
+    CHECKPOINT_KILL_SWITCH="${VERIFY_CHECKPOINT_KILL_SWITCH:-}" \
     "$pybin" - <<'PY'
 import json
 import os
@@ -332,21 +352,40 @@ def _int_env(name, default=0):
         return default
 
 data = {
-    "schema_version": 1,
+    "schema_version": 2,
     "success_runs": 0,
     "eligible_success_runs": 0,
     "would_hit_success_runs": 0,
     "would_miss_success_runs": 0,
     "ineligible_success_runs": 0,
     "last_success": {},
+    "skip_cache": {
+        "schema_version": 1,
+        "ts": 0,
+        "rollout": "off",
+        "kill_switch_token": "",
+        "written_by_verify_sh_sha": "",
+        "gates": {},
+    },
 }
+loaded = {}
 try:
     with open(path, "r", encoding="utf-8") as fh:
         loaded = json.load(fh)
         if isinstance(loaded, dict):
             data.update(loaded)
 except Exception:
-    pass
+    loaded = {}
+
+existing_schema = 0
+try:
+    existing_schema = int(loaded.get("schema_version", 0))
+except Exception:
+    existing_schema = 0
+if existing_schema > 2:
+    raise SystemExit(3)
+
+data["schema_version"] = 2
 
 data["success_runs"] = int(data.get("success_runs", 0)) + 1
 eligible = _int_env("CHECKPOINT_ELIGIBLE", 0)
@@ -375,6 +414,18 @@ if eligible == 1:
         "ineligible_reason": os.environ.get("CHECKPOINT_INELIGIBLE_REASON", ""),
     }
     data["last_success"] = last
+
+skip_cache = data.get("skip_cache")
+if not isinstance(skip_cache, dict):
+    skip_cache = {}
+skip_cache["schema_version"] = 1
+skip_cache["ts"] = int(time.time())
+skip_cache["rollout"] = os.environ.get("CHECKPOINT_ROLLOUT", "off")
+skip_cache["kill_switch_token"] = os.environ.get("CHECKPOINT_KILL_SWITCH", "")
+skip_cache["written_by_verify_sh_sha"] = os.environ.get("CHECKPOINT_VERIFY_SH_SHA", "")
+if not isinstance(skip_cache.get("gates"), dict):
+    skip_cache["gates"] = {}
+data["skip_cache"] = skip_cache
 
 tmp = path + ".tmp"
 with open(tmp, "w", encoding="utf-8") as fh:
@@ -1193,9 +1244,11 @@ echo "verify_run_id=$VERIFY_RUN_ID artifacts_dir=$VERIFY_ARTIFACTS_DIR"
 if is_ci; then echo "CI=1"; fi
 
 # Dirty tree enforcement (fail closed in CI; local override with VERIFY_ALLOW_DIRTY=1)
+dirty_tree_flag="0"
 if command -v git >/dev/null 2>&1; then
   dirty_status="$(git status --porcelain 2>/dev/null || true)"
   if [[ -n "$dirty_status" ]]; then
+    dirty_tree_flag="1"
     if is_ci; then
       fail "Working tree is dirty in CI"
     fi
@@ -1238,6 +1291,8 @@ export CONTRACT_COVERAGE_STRICT
 
 # Change detection for stack gating (fail-closed if unavailable)
 init_change_detection
+checkpoint_resolve_rollout
+checkpoint_capture_snapshot "$dirty_tree_flag" "${CHANGE_DETECTION_OK:-0}" "$MODE" "${VERIFY_MODE:-none}" "$([[ -n "${CI:-}" ]] && echo 1 || echo 0)"
 checkpoint_counter_init
 
 # -----------------------------------------------------------------------------
@@ -1271,6 +1326,7 @@ if [[ ! -f "plans/contract_coverage_matrix.py" ]]; then
   fail "Missing contract coverage script: plans/contract_coverage_matrix.py"
 fi
 if should_run_contract_coverage; then
+  decide_skip_gate "contract_coverage" || true
   ensure_python
   run_logged "contract_coverage" "$CONTRACT_COVERAGE_TIMEOUT" "$PYTHON_BIN" "plans/contract_coverage_matrix.py"
   if [[ -z "${CI:-}" && "$CONTRACT_COVERAGE_STRICT" == "1" && ! -f "$CONTRACT_COVERAGE_CI_SENTINEL" ]]; then
@@ -1325,6 +1381,7 @@ SPEC_LINT_JOBS=$(detect_cpus)
 [[ $SPEC_LINT_JOBS -gt 4 ]] && SPEC_LINT_JOBS=4
 
 # Run validators in parallel
+decide_skip_gate "spec_validators_group" || true
 run_parallel_group SPEC_VALIDATOR_SPECS "$SPEC_LINT_JOBS"
 
 # -----------------------------------------------------------------------------

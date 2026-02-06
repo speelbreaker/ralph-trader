@@ -36,6 +36,7 @@ required=(
   docs/contract_kernel.json
   docs/validation_rules.md
   plans/autofix.sh
+  plans/check_skip_entrypoint.sh
   plans/contract_check.sh
   plans/contract_coverage_matrix.py
   plans/contract_coverage_promote.sh
@@ -97,7 +98,9 @@ required=(
   plans/lib/node_gates.sh
   plans/lib/python_gates.sh
   plans/lib/rust_gates.sh
+  plans/lib/verify_checkpoint.sh
   plans/lib/verify_utils.sh
+  plans/schemas/verify_checkpoint.schema.json
 )
 
 for path in "${required[@]}"; do

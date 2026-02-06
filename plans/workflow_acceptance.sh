@@ -6263,4 +6263,102 @@ JSON
   test_pass "29"
 fi
 
+if test_start "30" "checkpoint skip entrypoint guard scaffold" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/check_skip_entrypoint.sh || {
+    echo "FAIL: missing executable plans/check_skip_entrypoint.sh" >&2
+    exit 1
+  }
+  ./plans/check_skip_entrypoint.sh >/dev/null 2>&1 || {
+    echo "FAIL: check_skip_entrypoint.sh must pass" >&2
+    exit 1
+  }
+  grep -q "decide_skip_gate()" plans/verify.sh || {
+    echo "FAIL: verify.sh missing decide_skip_gate() entrypoint" >&2
+    exit 1
+  }
+'
+  test_pass "30"
+fi
+
+if test_start "30.1" "rollout invalid value fails closed to off" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_utils.sh
+  source plans/lib/verify_checkpoint.sh
+  VERIFY_CHECKPOINT_ROLLOUT="enforcee"
+  checkpoint_resolve_rollout
+  [[ "$CHECKPOINT_ROLLOUT" == "off" ]] || {
+    echo "FAIL: invalid rollout should force off" >&2
+    exit 1
+  }
+  [[ "$CHECKPOINT_ROLLOUT_REASON" == "rollout_invalid_value" ]] || {
+    echo "FAIL: expected rollout_invalid_value reason" >&2
+    exit 1
+  }
+'
+  test_pass "30.1"
+fi
+
+if test_start "30.2" "schema fail-closed for missing/malformed schema artifact" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_utils.sh
+  source plans/lib/verify_checkpoint.sh
+
+  checkpoint_capture_snapshot 0 1 quick none 0
+  VERIFY_CHECKPOINT_ROLLOUT="off"
+  checkpoint_resolve_rollout
+
+  CHECKPOINT_SCHEMA_FILE=".ralph/missing_verify_checkpoint.schema.json"
+  if is_cache_eligible; then
+    echo "FAIL: missing schema should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_schema_unavailable" ]] || {
+    echo "FAIL: expected checkpoint_schema_unavailable for missing schema" >&2
+    exit 1
+  }
+
+  mkdir -p .ralph
+  CHECKPOINT_SCHEMA_FILE=".ralph/bad_verify_checkpoint.schema.json"
+  printf "{bad json\n" > "$CHECKPOINT_SCHEMA_FILE"
+  if is_cache_eligible; then
+    echo "FAIL: malformed schema should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_schema_unavailable" ]] || {
+    echo "FAIL: expected checkpoint_schema_unavailable for malformed schema" >&2
+    exit 1
+  }
+'
+  test_pass "30.2"
+fi
+
+if test_start "30.3" "checkpoint no-downgrade guard rejects lower target version" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_utils.sh
+  source plans/lib/verify_checkpoint.sh
+
+  mkdir -p .ralph
+  cat > .ralph/verify_checkpoint.json <<'"'"'JSON'"'"'
+{"schema_version":3}
+JSON
+  if checkpoint_no_downgrade_ok 2 ".ralph/verify_checkpoint.json"; then
+    echo "FAIL: downgrade check should reject target schema 2 when file is schema 3" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_schema_downgrade" ]] || {
+    echo "FAIL: expected checkpoint_schema_downgrade reason" >&2
+    exit 1
+  }
+'
+  test_pass "30.3"
+fi
+
 echo "Workflow acceptance tests passed"
