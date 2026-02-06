@@ -638,7 +638,12 @@ snapshot_worktree_if_dirty() {
 
 run_ralph() {
   snapshot_worktree_if_dirty
-  run_in_worktree "$@"
+  run_in_worktree env \
+    -u RPH_VERIFY_MODE \
+    -u RPH_PROMOTION_VERIFY_MODE \
+    -u RPH_FINAL_VERIFY_MODE \
+    -u RPH_PROFILE \
+    "$@"
 }
 
 require_file() {
@@ -3802,6 +3807,52 @@ if [[ -z "$latest_block" ]]; then
   exit 1
 fi
   test_pass "2f"
+fi
+
+if test_start "2g" "run_ralph ignores inherited RPH_VERIFY_MODE"; then
+reset_state
+valid_prd_2g="$WORKTREE/.ralph/valid_prd_2g.json"
+write_valid_prd "$valid_prd_2g" "S1-022"
+set +e
+test2g_log="$WORKTREE/.ralph/test2g.log"
+RPH_VERIFY_MODE=quick run_ralph env \
+  PRD_FILE="$valid_prd_2g" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_record_mode.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
+  SELECTED_ID="S1-022" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >"$test2g_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for inherited verify mode isolation" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test2g_log" >&2 || true
+  exit 1
+fi
+iter_dir="$(run_in_worktree jq -r '.last_iter_dir // empty' "$WORKTREE/.ralph/state.json" 2>/dev/null || true)"
+if [[ -z "$iter_dir" ]]; then
+  echo "FAIL: expected last_iter_dir recorded in state.json" >&2
+  tail -n 120 "$test2g_log" >&2 || true
+  exit 1
+fi
+verify_pre_log="$WORKTREE/$iter_dir/verify_pre.log"
+if [[ ! -f "$verify_pre_log" ]]; then
+  echo "FAIL: expected verify_pre.log for inherited verify mode isolation" >&2
+  ls -la "$WORKTREE/$iter_dir" >&2 || true
+  exit 1
+fi
+if ! grep -q "VERIFY_MODE_ARG=full" "$verify_pre_log"; then
+  echo "FAIL: expected verify_pre to run in full mode when RPH_VERIFY_MODE inherited" >&2
+  tail -n 40 "$verify_pre_log" >&2 || true
+  exit 1
+fi
+  test_pass "2g"
 fi
 
 if test_start "3" "COMPLETE printed early blocks with blocked_incomplete artifact"; then
