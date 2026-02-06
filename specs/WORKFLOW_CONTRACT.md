@@ -115,8 +115,8 @@ Observable gate requirement:
 - [WF-2.7] Promotion-grade verify is required to flip passes=true.
   - Ralph MUST capture verify_post mode + verify_mode in state from verify_post.log.
   - update_task.sh MUST reject passes=true unless verify_post shows mode=full and verify_mode=promotion.
-- [WF-2.8] Ralph MUST write `.ralph/artifacts.json` for every run (pass, fail, or blocked), and the manifest MUST be overwritten per run (no stale manifests). The schema is defined in `docs/schemas/artifacts.schema.json`.
-- [WF-2.9] **Contract kernel use is fail-closed.**
+- [WF-2.10] Ralph MUST write `.ralph/artifacts.json` for every run (pass, fail, or blocked), and the manifest MUST be overwritten per run (no stale manifests). The schema is defined in `docs/schemas/artifacts.schema.json`.
+- [WF-2.11] **Contract kernel use is fail-closed.**
   - If the kernel is used, `scripts/check_contract_kernel.py` MUST pass (source hashes match current files).
   - If validation fails or kernel is missing, agents MUST read full `specs/CONTRACT.md` or stop.
   - Contract review always compares diffs to `specs/CONTRACT.md`, not the kernel.
@@ -399,6 +399,7 @@ optional: self-heal behavior (see §5.8)
 
 Baseline integrity (fail closed):
 - If verify_pre fails, Ralph MUST NOT run implementation steps.
+- If bootstrap preflight fails (see WF-5.5.2), Ralph MUST NOT run implementation steps.
 - If RPH_SELF_HEAL=1, Ralph MAY attempt a reset and rerun verify_pre once, but MUST stop if verify_pre remains red.
 
 Output discipline (token-safe):
@@ -410,6 +411,19 @@ Mode separation:
 - verify_pre/verify_post use RPH_VERIFY_MODE by default.
 - When a pass is requested, verify_post uses RPH_PROMOTION_VERIFY_MODE (default full).
 - Final verification uses RPH_FINAL_VERIFY_MODE (default full), independent of iteration mode.
+
+Bootstrap exception (missing workspace) [WF-5.5.2]
+- If RPH_BOOTSTRAP_MODE=1 AND the workspace is missing (Cargo.toml missing OR missing crates/soldier_core OR missing crates/soldier_infra), Ralph MAY skip verify_pre and proceed to implementation.
+- In this case, Ralph MUST run bootstrap preflight before implementation:
+  - ./plans/preflight.sh --strict
+  - ./plans/prd_preflight.sh --strict
+  - ./plans/run_prd_auditor.sh
+  - ./plans/prd_audit_check.sh
+  Any failure MUST stop the iteration (fail closed).
+- Ralph MUST write .ralph/iter_*/verify_pre.log containing VERIFY_SH_SHA=... and a line bootstrap_skip_reason=missing_workspace.
+- Ralph MUST record skipped verify_pre in the artifacts manifest (skipped_checks contains {name:"verify_pre", reason:"bootstrap_missing_workspace"}).
+- Ralph MUST forbid mark_pass in bootstrap mode (equivalent to RPH_FORBID_MARK_PASS=1).
+- If the workspace is present, verify_pre MUST run normally even when RPH_BOOTSTRAP_MODE=1 (skip is forbidden).
 
 [WF-5.5.1] verify.sh MUST enforce the endpoint-level test gate: if endpoint-ish files change, corresponding tests must change, unless ENDPOINT_GATE=0 in a non-CI run.
 
@@ -648,7 +662,7 @@ Workflow Contract Acceptance Tests (checklist) [WF-12.1]
 
 The workflow acceptance harness supports two execution modes. Smoke mode is for local iteration and must cover early invariants, the traceability gate, and a minimal Ralph dry-run. Full mode is merge-grade and runs the entire acceptance checklist. Smoke is acceptable for iteration, but full remains required for CI and merge readiness.
 
-Preflight / PRD validation [WF-12.1]
+Preflight / PRD validation
 
 [ ] Running ./plans/ralph.sh with missing plans/prd.json exits non-zero and writes a .ralph/* stop artifact.
 [ ] Running ./plans/ralph.sh with invalid JSON in plans/prd.json exits non-zero before any implementation work.
@@ -657,6 +671,8 @@ Preflight / PRD validation [WF-12.1]
 Baseline integrity [WF-12.2]
 
 [ ] If ./plans/verify.sh fails during verify_pre, Ralph performs no implementation steps and stops (observable via .ralph/iter_*/verify_pre.log + no code diff beyond reset).
+[ ] In bootstrap mode with missing workspace, verify_pre is skipped, bootstrap preflight runs, verify_pre.log records bootstrap_skip_reason=missing_workspace, and mark_pass is forbidden.
+[ ] In bootstrap mode with workspace present, verify_pre still runs normally and failures block before implementation.
 [ ] If RPH_SELF_HEAL=1 and verify_pre remains red after one reset attempt, Ralph stops non-zero.
 
 Pass flipping integrity [WF-12.3]

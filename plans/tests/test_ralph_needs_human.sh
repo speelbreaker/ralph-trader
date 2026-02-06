@@ -2,16 +2,29 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$ROOT"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing required command: $1" >&2; exit 2; }; }
 need jq
+need git
 
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+TEST_ROOT="$TMP_DIR/repo"
+git clone --quiet "$ROOT" "$TEST_ROOT" || fail "failed to clone repo to test workspace"
+# Overlay the local ralph script so this test exercises working-tree changes.
+cp "$ROOT/plans/ralph.sh" "$TEST_ROOT/plans/ralph.sh" || fail "failed to overlay plans/ralph.sh"
+chmod +x "$TEST_ROOT/plans/ralph.sh" || true
+git -C "$TEST_ROOT" config user.email "workflow-test@example.com"
+git -C "$TEST_ROOT" config user.name "Workflow Test"
+if ! git -C "$TEST_ROOT" diff --quiet -- plans/ralph.sh; then
+  git -C "$TEST_ROOT" add plans/ralph.sh
+  git -C "$TEST_ROOT" commit -q -m "test: overlay local ralph.sh"
+fi
+cd "$TEST_ROOT"
 
 CONTRACT_PATH="$TMP_DIR/CONTRACT.md"
 PLAN_PATH="$TMP_DIR/IMPLEMENTATION_PLAN.md"
@@ -23,6 +36,16 @@ cat <<'EOF' > "$PLAN_PATH"
 # Plan
 Plan Section 1
 EOF
+
+VERIFY_STUB="$TMP_DIR/verify_stub.sh"
+cat <<'EOF' > "$VERIFY_STUB"
+#!/usr/bin/env bash
+set -euo pipefail
+echo "VERIFY_SH_SHA=test-stub-sha"
+echo "mode=${1:-full} verify_mode=none root=$(pwd)"
+exit 0
+EOF
+chmod +x "$VERIFY_STUB"
 
 find_recent_blocked() {
   local start_ts="$1"
@@ -85,7 +108,7 @@ cat > "$TMP_DIR/prd1.json" <<EOF
       "scope":{"touch":["plans/verify.sh"],"avoid":["crates/**"]},
       "acceptance":["a","b","c"],
       "steps":["1","2","3","4","5"],
-      "verify":["./plans/verify.sh"],
+      "verify":["./plans/verify.sh","bash -n plans/verify.sh"],
       "evidence":["e1"],
       "contract_must_evidence":[],
       "enforcing_contract_ats":[],
@@ -121,7 +144,7 @@ cat > "$TMP_DIR/prd1.json" <<EOF
       "scope":{"touch":["plans/verify.sh"],"avoid":["crates/**"]},
       "acceptance":["a","b","c"],
       "steps":["1","2","3","4","5"],
-      "verify":["./plans/verify.sh"],
+      "verify":["./plans/verify.sh","bash -n plans/verify.sh"],
       "evidence":["e1"],
       "contract_must_evidence":[],
       "enforcing_contract_ats":[],
@@ -149,6 +172,8 @@ out1="$TMP_DIR/out1.txt"
 start_ts="$(date +%s)"
 set +e
 RPH_SELECTION_MODE=agent RPH_AGENT_CMD="$TMP_DIR/select_agent.sh" RPH_AGENT_ARGS= RPH_PROMPT_FLAG= \
+  PRD_REF_CHECK_ENABLED=0 PRD_GATE_ALLOW_REF_SKIP=1 \
+  VERIFY_SH="$VERIFY_STUB" \
   PRD_FILE="$TMP_DIR/prd1.json" PROGRESS_FILE="$TMP_DIR/progress1.txt" VERIFY_ARTIFACTS_DIR="$TMP_DIR/verify_artifacts_1" \
   ./plans/ralph.sh 1 >"$out1" 2>&1
 rc=$?
@@ -219,6 +244,8 @@ EOF
 start_ts="$(date +%s)"
 out2="$TMP_DIR/out2.txt"
 set +e
+PRD_REF_CHECK_ENABLED=0 PRD_GATE_ALLOW_REF_SKIP=1 \
+VERIFY_SH="$VERIFY_STUB" \
 PRD_FILE="$TMP_DIR/prd2.json" PROGRESS_FILE="$TMP_DIR/progress2.txt" VERIFY_ARTIFACTS_DIR="$TMP_DIR/verify_artifacts_2" \
   ./plans/ralph.sh 1 >"$out2" 2>&1
 rc=$?
@@ -283,6 +310,8 @@ EOF
 start_ts="$(date +%s)"
 out3="$TMP_DIR/out3.txt"
 set +e
+PRD_REF_CHECK_ENABLED=0 PRD_GATE_ALLOW_REF_SKIP=1 \
+VERIFY_SH="$VERIFY_STUB" \
 PRD_FILE="$TMP_DIR/prd3.json" PROGRESS_FILE="$TMP_DIR/progress3.txt" VERIFY_ARTIFACTS_DIR="$TMP_DIR/verify_artifacts_3" \
   ./plans/ralph.sh 1 >"$out3" 2>&1
 rc=$?
@@ -293,6 +322,6 @@ fi
 blocked_dir="$(find_recent_blocked "$start_ts")"
 [[ -n "$blocked_dir" ]] || fail "test3 missing blocked dir"
 [[ -f "$blocked_dir/blocked_item.json" ]] || fail "test3 missing blocked_item.json"
-jq -e '.reason=="invalid_prd_schema"' "$blocked_dir/blocked_item.json" >/dev/null || fail "test3 reason mismatch"
+jq -e '.reason=="prd_preflight_failed"' "$blocked_dir/blocked_item.json" >/dev/null || fail "test3 reason mismatch"
 
 echo "OK"

@@ -27,13 +27,31 @@ if ! jq -e . "$map_file" >/dev/null 2>&1; then
   exit 1
 fi
 
+extract_ids_all() {
+  local file="$1"
+  awk '
+    {
+      is_def = 0
+      if ($0 ~ /^[[:space:]]*-[[:space:]]+\[WF-[0-9]+(\.[0-9]+)*\]/) is_def = 1
+      else if ($0 ~ /^[[:space:]]*[0-9]+\)[[:space:]]+\[WF-[0-9]+(\.[0-9]+)*\]/) is_def = 1
+      else if ($0 ~ /^[[:space:]]*\[WF-[0-9]+(\.[0-9]+)*\]/) is_def = 1
+      else if ($0 ~ /^[[:space:]]*#+[[:space:]].*\[WF-[0-9]+(\.[0-9]+)*\][[:space:]]*$/) is_def = 1
+      else if ($0 ~ /^[[:space:]]*[^[:space:]].*\[WF-[0-9]+(\.[0-9]+)*\][[:space:]]*$/ && $0 !~ /:[[:space:]]*$/) is_def = 1
+
+      if (is_def == 1) {
+        line = $0
+        while (match(line, /\[WF-[0-9]+(\.[0-9]+)*\]/)) {
+          print substr(line, RSTART + 1, RLENGTH - 2)
+          line = substr(line, RSTART + RLENGTH)
+        }
+      }
+    }
+  ' "$file" || true
+}
+
 extract_ids() {
   local file="$1"
-  if command -v rg >/dev/null 2>&1; then
-    rg -o 'WF-[0-9]+(\.[0-9]+)*' "$file" | sort -u
-  else
-    grep -oE 'WF-[0-9]+(\.[0-9]+)*' "$file" | sort -u
-  fi
+  extract_ids_all "$file" | sed '/^$/d' | sort -u
 }
 
 # Skip markers that don't represent files
@@ -193,8 +211,24 @@ validate_tests() {
   fi
 }
 
-spec_ids="$(extract_ids "$spec_file")"
-map_ids="$(jq -r '.rules[].id' "$map_file" | sort -u)"
+spec_ids_all="$(extract_ids_all "$spec_file" | sed '/^$/d' | sort)"
+spec_dup_ids="$(printf '%s\n' "$spec_ids_all" | uniq -d)"
+if [[ -n "$spec_dup_ids" ]]; then
+  echo "ERROR: duplicate workflow rule ids in spec:" >&2
+  printf '%s\n' "$spec_dup_ids" | sed 's/^/- /' >&2
+  exit 1
+fi
+
+map_ids_all="$(jq -r '.rules[].id' "$map_file" | sed '/^$/d' | sort)"
+map_dup_ids="$(printf '%s\n' "$map_ids_all" | uniq -d)"
+if [[ -n "$map_dup_ids" ]]; then
+  echo "ERROR: duplicate rule ids in map:" >&2
+  printf '%s\n' "$map_dup_ids" | sed 's/^/- /' >&2
+  exit 1
+fi
+
+spec_ids="$(printf '%s\n' "$spec_ids_all" | sort -u)"
+map_ids="$(printf '%s\n' "$map_ids_all" | sort -u)"
 
 missing_ids="$(comm -23 <(printf '%s\n' "$spec_ids") <(printf '%s\n' "$map_ids"))"
 extra_ids="$(comm -13 <(printf '%s\n' "$spec_ids") <(printf '%s\n' "$map_ids"))"
@@ -225,13 +259,6 @@ bad_ids="$(jq -r '
 if [[ -n "$bad_ids" ]]; then
   echo "ERROR: mapping entries missing enforcement/artifacts/tests:" >&2
   printf '%s\n' "$bad_ids" | sed 's/^/- /' >&2
-  exit 1
-fi
-
-dup_ids="$(jq -r '.rules[].id' "$map_file" | sort | uniq -d)"
-if [[ -n "$dup_ids" ]]; then
-  echo "ERROR: duplicate rule ids in map:" >&2
-  printf '%s\n' "$dup_ids" | sed 's/^/- /' >&2
   exit 1
 fi
 

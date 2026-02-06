@@ -340,33 +340,56 @@
     },
     {
       "id": "WF-2.8",
-      "title": "6) PR postmortem is mandatory (no postmortem, no merge). Ralph MUST write .ralph/artifacts.json for every run and overwrite it per run (no stale manifests).",
+      "title": "6) PR postmortem is mandatory (no postmortem, no merge).",
       "enforcement": [
         "plans/postmortem_check.sh",
-        "plans/verify.sh",
-        "plans/ralph.sh (artifact manifest)",
-        "plans/artifacts_validate.sh"
+        "plans/verify.sh"
       ],
       "artifacts": [
         "reviews/postmortems/",
-        "plans/postmortem_check.sh",
-        ".ralph/artifacts.json",
-        "docs/schemas/artifacts.schema.json"
+        "plans/postmortem_check.sh"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (postmortem gate check, Test 0g, Test 10d)"
+        "plans/workflow_acceptance.sh (postmortem gate check)"
       ]
     },
     {
       "id": "WF-2.9",
-      "title": "7) Recurring friction should be elevated to enforcement. Contract kernel use is fail-closed.",
+      "title": "7) Recurring friction should be elevated to enforcement.",
+      "enforcement": [
+        "manual"
+      ],
+      "artifacts": [
+        "WORKFLOW_FRICTION.md"
+      ],
+      "tests": [
+        "manual"
+      ]
+    },
+    {
+      "id": "WF-2.10",
+      "title": "Ralph MUST write .ralph/artifacts.json for every run and overwrite it per run (no stale manifests).",
+      "enforcement": [
+        "plans/ralph.sh (artifact manifest)",
+        "plans/artifacts_validate.sh"
+      ],
+      "artifacts": [
+        ".ralph/artifacts.json",
+        "docs/schemas/artifacts.schema.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 0g, Test 10d)"
+      ]
+    },
+    {
+      "id": "WF-2.11",
+      "title": "Contract kernel use is fail-closed.",
       "enforcement": [
         "manual",
         "scripts/check_contract_kernel.py",
         "plans/workflow_acceptance.sh"
       ],
       "artifacts": [
-        "WORKFLOW_FRICTION.md",
         "docs/contract_kernel.json"
       ],
       "tests": [
@@ -719,6 +742,20 @@
       ],
       "tests": [
         "manual"
+      ]
+    },
+    {
+      "id": "WF-5.5.2",
+      "title": "Bootstrap verify_pre exception (missing workspace)",
+      "enforcement": [
+        "plans/ralph.sh (bootstrap verify_pre skip + bootstrap preflight)"
+      ],
+      "artifacts": [
+        ".ralph/iter_*/verify_pre.log",
+        ".ralph/artifacts.json"
+      ],
+      "tests": [
+        "plans/workflow_acceptance.sh (Test 14c, Test 14d)"
       ]
     },
     {

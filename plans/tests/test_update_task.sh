@@ -72,7 +72,12 @@ git commit -m "init" -q
 
 head="$(git rev-parse HEAD)"
 log_path="$TMP_DIR/verify_post.log"
-echo "verify ok" > "$log_path"
+verify_sh_sha="test-verify-sha"
+cat <<EOF > "$log_path"
+VERIFY_SH_SHA=$verify_sh_sha
+mode=full verify_mode=promotion root=$TMP_DIR
+VERIFY OK (mode=full)
+EOF
 log_sha="$(shasum -a 256 "$log_path" | awk '{print $1}')"
 
 write_state() {
@@ -85,7 +90,11 @@ write_state() {
   "last_verify_post_rc": 0,
   "last_verify_post_head": "$verify_head",
   "last_verify_post_log": "$log_path",
-  "last_verify_post_log_sha256": "$sha"
+  "last_verify_post_log_sha256": "$sha",
+  "last_verify_post_mode": "full",
+  "last_verify_post_verify_mode": "promotion",
+  "last_verify_post_cmd": "./plans/verify.sh promotion",
+  "last_verify_post_verify_sh_sha": "$verify_sh_sha"
 }
 JSON
 }
