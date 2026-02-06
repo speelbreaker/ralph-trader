@@ -1352,9 +1352,10 @@
       "category": "tooling",
       "description": "Implement f1_certify tooling and F1_CERT artifacts required for promotion verify.",
   "contract_refs": [
-    "CONTRACT.md Runtime F1 Gate in PolicyGuard (HARD, runtime enforcement)",
-    "CONTRACT.md `f1_cert` (from `artifacts/F1_CERT.json`: `{status, generated_ts_ms, build_id, runtime_config_hash, contract_version}`)",
-    "CONTRACT.md outputs `artifacts/F1_CERT.json` and `artifacts/F1_CERT.md`"
+      "CONTRACT.md f1_cert (from artifacts/F1_CERT.json: {status, generated_ts_ms, build_id, runtime_config_hash, contract_version})",
+      "CONTRACT.md python/tools/f1_certify.py",
+      "CONTRACT.md outputs artifacts/F1_CERT.json and artifacts/F1_CERT.md",
+      "CONTRACT.md artifacts/F1_CERT.json MUST include (minimum): { status, generated_ts_ms, build_id, runtime_config_hash, contract_version }"
   ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md PL-10 — f1_certify CLI + F1_CERT schema completeness (contract)",
