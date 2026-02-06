@@ -6467,4 +6467,135 @@ SH
   test_pass "30.6"
 fi
 
+if test_start "30.7" "fingerprint-manifest lint detects undeclared env keys" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/check_checkpoint_fingerprint_manifest.sh || {
+    echo "FAIL: missing executable plans/check_checkpoint_fingerprint_manifest.sh" >&2
+    exit 1
+  }
+  rg -n "check_checkpoint_fingerprint_manifest.sh|checkpoint_fingerprint_env_manifest.txt|checkpoint_dependency_manifest.json" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing checkpoint fingerprint files" >&2
+    exit 1
+  }
+
+  mkdir -p .ralph
+  cat > .ralph/fp_scan.sh <<'"'"'SH'"'"'
+#!/usr/bin/env bash
+echo "${VERIFY_MANIFEST_TEST:-0}"
+SH
+  chmod +x .ralph/fp_scan.sh
+  cat > .ralph/fp_manifest.txt <<'"'"'TXT'"'"'
+VERIFY_EXISTING_ONLY
+TXT
+
+  set +e
+  out="$(./plans/check_checkpoint_fingerprint_manifest.sh \
+    --scan-prefix VERIFY_ \
+    --scan-file .ralph/fp_scan.sh \
+    --manifest .ralph/fp_manifest.txt \
+    --deps-manifest plans/checkpoint_dependency_manifest.json 2>&1)"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: expected manifest lint to fail for undeclared VERIFY_MANIFEST_TEST" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  echo "$out" | grep -q "VERIFY_MANIFEST_TEST" || {
+    echo "FAIL: missing undeclared key in lint output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+
+  echo "VERIFY_MANIFEST_TEST" >> .ralph/fp_manifest.txt
+  ./plans/check_checkpoint_fingerprint_manifest.sh \
+    --scan-prefix VERIFY_ \
+    --scan-file .ralph/fp_scan.sh \
+    --manifest .ralph/fp_manifest.txt \
+    --deps-manifest plans/checkpoint_dependency_manifest.json >/dev/null
+'
+  test_pass "30.7"
+fi
+
+if test_start "30.8" "lock_and_policy fail-closed checks" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_utils.sh
+  source plans/lib/verify_checkpoint.sh
+
+  checkpoint_capture_snapshot 0 1 quick none 0
+  VERIFY_CHECKPOINT_ROLLOUT="off"
+  checkpoint_resolve_rollout
+
+  VERIFY_CHECKPOINT_FILE="/tmp/untrusted-verify-checkpoint.json"
+  if is_cache_eligible; then
+    echo "FAIL: untrusted checkpoint path should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_untrusted_path" ]] || {
+    echo "FAIL: expected checkpoint_untrusted_path reason" >&2
+    exit 1
+  }
+
+  mkdir -p .ralph
+  VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
+  cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":true,"writer_mode":"quick","gates":{}}}
+JSON
+  CHECKPOINT_LOCK_PROBE_DONE=0
+  CHECKPOINT_LOCK_PROBE_OK=0
+  if is_cache_eligible; then
+    echo "FAIL: writer_ci=true checkpoint should fail closed for local skip" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "writer_ci" ]] || {
+    echo "FAIL: expected writer_ci reason" >&2
+    exit 1
+  }
+
+  cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":false,"writer_mode":"quick","gates":{}}}
+JSON
+  VERIFY_CHECKPOINT_LOCK_FILE="$ROOT/.ralph/verify_checkpoint.lock"
+  printf "pid=%s\nstart_epoch=%s\n" "$$" "$(date +%s)" > "$VERIFY_CHECKPOINT_LOCK_FILE"
+  VERIFY_CHECKPOINT_LOCK_TIMEOUT_SECS=1
+  VERIFY_CHECKPOINT_LOCK_STALE_SECS=600
+  CHECKPOINT_LOCK_PROBE_DONE=0
+  CHECKPOINT_LOCK_PROBE_OK=0
+  if is_cache_eligible; then
+    echo "FAIL: active lock should fail closed as checkpoint_lock_unavailable" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_lock_unavailable" ]] || {
+    echo "FAIL: expected checkpoint_lock_unavailable reason" >&2
+    exit 1
+  }
+
+  printf "pid=999999\nstart_epoch=1\n" > "$VERIFY_CHECKPOINT_LOCK_FILE"
+  VERIFY_CHECKPOINT_NOW_EPOCH=9999999999
+  CHECKPOINT_LOCK_PROBE_DONE=0
+  CHECKPOINT_LOCK_PROBE_OK=0
+  if ! checkpoint_lock_probe_available; then
+    echo "FAIL: stale lock should be recoverable" >&2
+    exit 1
+  fi
+  [[ ! -f "$VERIFY_CHECKPOINT_LOCK_FILE" ]] || {
+    echo "FAIL: lock file should be released after stale recovery probe" >&2
+    exit 1
+  }
+'
+  run_in_worktree bash -c '
+  set -euo pipefail
+  out="$(VERIFY_CHECKPOINT_ROLLOUT= ./plans/verify.sh --census 2>&1 || true)"
+  echo "$out" | grep -q "non_tty_default_off" || {
+    echo "FAIL: expected non_tty_default_off warning in non-TTY census run" >&2
+    echo "$out" >&2
+    exit 1
+  }
+'
+  test_pass "30.8"
+fi
+
 echo "Workflow acceptance tests passed"

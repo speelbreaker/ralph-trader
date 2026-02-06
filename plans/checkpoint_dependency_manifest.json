@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "shared": [
+    "plans/verify.sh",
+    "plans/lib/verify_checkpoint.sh",
+    "plans/schemas/verify_checkpoint.schema.json"
+  ],
+  "gates": {
+    "contract_coverage": [
+      "plans/contract_coverage_matrix.py",
+      "docs/contract_kernel.json",
+      "docs/architecture/contract_anchors.md",
+      "docs/architecture/validation_rules.md",
+      "plans/prd.json"
+    ],
+    "spec_validators_group": [
+      "plans/lib/spec_validators_group.sh",
+      "scripts/check_contract_crossrefs.py",
+      "scripts/check_arch_flows.py",
+      "scripts/check_state_machines.py",
+      "scripts/check_global_invariants.py",
+      "scripts/check_time_freshness.py",
+      "scripts/check_crash_matrix.py",
+      "scripts/check_crash_replay_idempotency.py",
+      "scripts/check_reconciliation_matrix.py",
+      "scripts/check_csp_trace.py",
+      "specs/TRACE.yaml",
+      "specs/flows/TIME_FRESHNESS.yaml",
+      "specs/flows/CRASH_MATRIX.md",
+      "specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml",
+      "specs/flows/RECONCILIATION_MATRIX.md",
+      "specs/state_machines"
+    ]
+  }
+}

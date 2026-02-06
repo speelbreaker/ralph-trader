@@ -8,7 +8,10 @@ docs/contract_anchors.md
 docs/contract_kernel.json
 docs/validation_rules.md
 plans/autofix.sh
+plans/check_checkpoint_fingerprint_manifest.sh
 plans/check_skip_entrypoint.sh
+plans/checkpoint_dependency_manifest.json
+plans/checkpoint_fingerprint_env_manifest.txt
 plans/contract_check.sh
 plans/contract_coverage_matrix.py
 plans/contract_coverage_promote.sh
