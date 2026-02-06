@@ -3515,6 +3515,7 @@ write_valid_prd "$valid_prd_2" "S1-001"
   run_ralph env \
   PRD_FILE="$valid_prd_2" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
   VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test2" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
@@ -3599,6 +3600,7 @@ set +e
 run_in_worktree env \
   PRD_FILE="$valid_prd_2b" \
   PROGRESS_FILE="$WORKTREE/plans/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_meta_only.sh" \
   SELECTED_ID="S1-001" \
@@ -3636,6 +3638,7 @@ test2c_log="$WORKTREE/.ralph/test2c.log"
 run_in_worktree env \
   PRD_FILE="$valid_prd_2c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_record_mode.sh" \
   RPH_VERIFY_MODE=quick \
   RPH_PROMOTION_VERIFY_MODE=promotion \
@@ -3724,6 +3727,7 @@ test2e_log="$WORKTREE/.ralph/test2e.log"
 run_ralph env \
   PRD_FILE="$valid_prd_2e" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_progress.sh" \
   SELECTED_ID="S1-020" \
@@ -3766,6 +3770,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_2f" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_PROFILE="promote" \
   RPH_PROMOTION_VERIFY_MODE="full" \
   RPH_DRY_RUN=1 \
@@ -3802,6 +3807,7 @@ test3_log="$WORKTREE/.ralph/test3.log"
 run_ralph env \
   PRD_FILE="$valid_prd_3" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_complete.sh" \
   RPH_PROMPT_FLAG="" \
@@ -3850,6 +3856,7 @@ test3b_log="$WORKTREE/.ralph/test3b.log"
 run_ralph env \
   PRD_FILE="$valid_prd_3b" \
   PROGRESS_FILE="$WORKTREE/plans/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mentions_complete.sh" \
   SELECTED_ID="S1-002" \
@@ -3901,6 +3908,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_4" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_invalid_selection.sh" \
   RPH_PROMPT_FLAG="" \
@@ -3946,6 +3954,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_5" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=0 \
   ./plans/ralph.sh 1 >/dev/null 2>&1
@@ -3986,6 +3995,7 @@ set +e
 run_in_worktree env \
   PRD_FILE="$valid_prd_5a" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_LOCK_TTL_SECS=1 \
@@ -4013,6 +4023,7 @@ set +e
 run_in_worktree env \
   PRD_FILE="$valid_prd_5b" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
@@ -4162,6 +4173,7 @@ test6_log="$WORKTREE/.ralph/test6.log"
 run_ralph env \
   PRD_FILE="$valid_prd_6" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-005" \
@@ -4224,6 +4236,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_7" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-006" \
@@ -4258,6 +4271,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_8" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-007" \
@@ -4292,6 +4306,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_9" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-008" \
@@ -4340,6 +4355,7 @@ test10_log="$WORKTREE/.ralph/test10.log"
 run_ralph env \
   PRD_FILE="$valid_prd_10" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-009" \
@@ -4509,6 +4525,7 @@ test10c_log="$WORKTREE/.ralph/test10c.log"
 run_ralph env \
   PRD_FILE="$valid_prd_10c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass_mode.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-021" \
@@ -4567,6 +4584,7 @@ before_blocked="$(count_blocked)"
 run_ralph env \
   PRD_FILE="$valid_prd_10c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_full_no_promotion.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
   SELECTED_ID="S1-010" \
@@ -4958,6 +4976,7 @@ set +e
 run_ralph env \
   PRD_FILE="$missing_prd" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=0 \
   ./plans/ralph.sh 1 >/dev/null 2>&1
@@ -4988,6 +5007,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_13" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_fail.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
   SELECTED_ID="S1-010" \
@@ -5050,6 +5070,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_14b" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_fail_noisy.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
   SELECTED_ID="S1-010" \
@@ -5133,6 +5154,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_14c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_fail.sh" \
   RPH_BOOTSTRAP_MODE=1 \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
@@ -5235,6 +5257,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_14d" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_fail.sh" \
   RPH_BOOTSTRAP_MODE=1 \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass.sh" \
@@ -5302,6 +5325,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_14" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_commit_progress_no_mark_pass.sh" \
   RPH_SELECTION_MODE=harness \
@@ -5340,6 +5364,7 @@ set +e
 run_in_worktree env \
   PRD_FILE="$WORKTREE/plans/fixtures/prd/deps_order_same_slice.json" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_SELECTION_MODE=harness \
   RPH_RATE_LIMIT_ENABLED=0 \
@@ -5372,6 +5397,7 @@ set +e
 run_in_worktree env \
   PRD_FILE="$WORKTREE/plans/fixtures/prd/deps_cycle_same_slice.json" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_SELECTION_MODE=harness \
   RPH_RATE_LIMIT_ENABLED=0 \
@@ -5419,6 +5445,7 @@ test16_log="$WORKTREE/.ralph/test16.log"
 run_ralph env \
   PRD_FILE="$valid_prd_15" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   DELETE_TEST_FILE="$dummy_test_file" \
   RPH_AGENT_CMD="$STUB_DIR/agent_delete_test_file_and_commit.sh" \
@@ -5477,6 +5504,7 @@ test16b_log="$WORKTREE/.ralph/test16b.log"
 run_in_worktree env \
   PRD_FILE="$valid_prd_16b" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_modify_harness.sh" \
   RPH_PROMPT_FLAG="" \
@@ -5518,6 +5546,7 @@ test16c_log="$WORKTREE/.ralph/test16c.log"
 run_in_worktree env \
   PRD_FILE="$valid_prd_16c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_modify_ralph_state.sh" \
   RPH_PROMPT_FLAG="" \
@@ -5629,6 +5658,7 @@ snapshot_worktree_if_dirty
 run_ralph env \
   PRD_FILE="$valid_prd_16" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=0 \
   RPH_SELECTION_MODE=harness \
@@ -5671,6 +5701,7 @@ test18_log="$WORKTREE/.ralph/test18.log"
 run_ralph env \
   PRD_FILE="$rate_prd" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=1 \
   RPH_RATE_LIMIT_PER_HOUR=2 \
@@ -5716,6 +5747,7 @@ test18b_log="$WORKTREE/.ralph/test18b.log"
 run_ralph env \
   PRD_FILE="$rate_prd" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   RPH_DRY_RUN=1 \
   RPH_RATE_LIMIT_ENABLED=1 \
   RPH_RATE_LIMIT_PER_HOUR=2 \
@@ -5750,6 +5782,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_19" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
   VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test19" \
   RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_commit.sh" \
@@ -5794,6 +5827,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_20" \
   PROGRESS_FILE="plans/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
   RPH_AGENT_CMD="$STUB_DIR/agent_commit_progress_no_mark_pass.sh" \
   SELECTED_ID="S1-012" \
@@ -5846,6 +5880,7 @@ set +e
 run_ralph env \
   PRD_FILE="$valid_prd_21" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_once_then_fail.sh" \
   VERIFY_COUNT_FILE="$WORKTREE/.ralph/verify_count_test21" \
   RPH_AGENT_CMD="$STUB_DIR/agent_break.sh" \
