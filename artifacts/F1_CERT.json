@@ -1,0 +1,13 @@
+{
+  "build_id": "seed-build",
+  "contract_version": "5.2",
+  "expires_at_ts_ms": 1770434464409,
+  "generated_ts_ms": 1770348064409,
+  "release_gate_metrics": {
+    "atomic_naked_events_24h": 0,
+    "fee_drag_ratio": 0.1,
+    "replay_coverage_pct": 99.0
+  },
+  "runtime_config_hash": "9c2fd64f65b932f8d8924fa952b50569e76ebd9ce6d6d04b9884cb486e0f395b",
+  "status": "PASS"
+}
