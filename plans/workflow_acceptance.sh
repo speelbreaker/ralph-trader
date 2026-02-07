@@ -5312,8 +5312,10 @@ if run_in_worktree test -f Cargo.toml; then
   run_in_worktree mv Cargo.toml Cargo.toml.bootstrap.bak
   cargo_backup="Cargo.toml.bootstrap.bak"
 fi
+base_ref_14c="$(run_in_worktree git rev-parse HEAD)"
 set +e
 run_ralph env \
+  BASE_REF="$base_ref_14c" \
   PRD_FILE="$valid_prd_14c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
