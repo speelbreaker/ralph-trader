@@ -564,9 +564,16 @@ def _update_gate(skip_cache, gate, scheduled, input_hash, artifacts_dir, now_ts)
     prev = gates.get(gate, {}) if isinstance(gates.get(gate, {}), dict) else {}
 
     if not scheduled:
+        entry = dict(prev) if isinstance(prev, dict) else {}
         if input_hash:
-            prev["input_hash"] = input_hash
-            gates[gate] = prev
+            entry["input_hash"] = input_hash
+        if "input_hash" not in entry:
+            entry["input_hash"] = ""
+        entry["last_real_run_ts"] = _to_int(entry.get("last_real_run_ts", 0), 0)
+        entry["consecutive_skips"] = _to_int(entry.get("consecutive_skips", 0), 0)
+        entry["elapsed_s"] = _to_float(entry.get("elapsed_s", 0.0), 0.0)
+        entry["last_decision_reason"] = entry.get("last_decision_reason") or "unscheduled"
+        gates[gate] = entry
         skip_cache["gates"] = gates
         return
 
@@ -574,6 +581,8 @@ def _update_gate(skip_cache, gate, scheduled, input_hash, artifacts_dir, now_ts)
     entry = dict(prev) if isinstance(prev, dict) else {}
     if input_hash:
         entry["input_hash"] = input_hash
+    if "input_hash" not in entry:
+        entry["input_hash"] = ""
     entry["elapsed_s"] = 0.0 if skipped else _to_float(elapsed, 0.0)
     if skipped:
         entry["consecutive_skips"] = _to_int(prev.get("consecutive_skips", 0), 0) + 1

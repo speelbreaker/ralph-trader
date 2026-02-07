@@ -6623,11 +6623,19 @@ PY
   VERIFY_CHECKPOINT_MAX_AGE_SECS=999999
   VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS=10
   VERIFY_CHECKPOINT_FORCE_AFTER_SECS=21600
+  VERIFY_CHECKPOINT_HASH_BUDGET_MS=10000
   VERIFY_CHECKPOINT_KILL_SWITCH="ks-test"
 
   VERIFY_CHECKPOINT_ROLLOUT="enforce"
   checkpoint_resolve_rollout
+  set +e
   checkpoint_decide_skip_gate "contract_coverage"
+  rc="$?"
+  set -e
+  [[ "$rc" -eq 0 ]] || {
+    echo "FAIL: enforce mode should skip on checkpoint cache hit (rc=$rc, reason=${CHECKPOINT_DECISION_REASON:-<unset>})" >&2
+    exit 1
+  }
   [[ "${CHECKPOINT_DECISION_REASON:-}" == "checkpoint_cache_hit" ]] || {
     echo "FAIL: expected checkpoint_cache_hit in enforce mode, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
     exit 1
@@ -6655,7 +6663,7 @@ if test_start "30.5" "local full verify requires approval" 1; then
   run_in_worktree bash -c '
   set -euo pipefail
   set +e
-  out="$(./plans/verify.sh full 2>&1)"
+  out="$(env -u VERIFY_ALLOW_LOCAL_FULL ./plans/verify.sh full 2>&1)"
   rc=$?
   set -e
   if [[ "$rc" -eq 0 ]]; then
@@ -6689,7 +6697,7 @@ SH
   main_line="refs/heads/local $(git rev-parse HEAD) refs/heads/main 0000000000000000000000000000000000000000"
 
   : > "$calls"
-  printf "%s\n" "$main_line" | CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
+  printf "%s\n" "$main_line" | env -u VERIFY_ALLOW_LOCAL_FULL CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
   if ! grep -Fxq "quick" "$calls"; then
     echo "FAIL: expected pre-push to run quick without local full approval" >&2
     echo "Calls: $(cat "$calls" 2>/dev/null || true)" >&2

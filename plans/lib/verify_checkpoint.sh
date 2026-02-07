@@ -796,6 +796,10 @@ checkpoint_gate_input_hash() {
   fi
 
   local out rc
+  local had_errexit=0
+  case "$-" in
+    *e*) had_errexit=1 ;;
+  esac
   set +e
   out="$("$pybin" - "$manifest" "$ROOT" "$gate" <<'PY' 2>&1
 import hashlib
@@ -869,7 +873,9 @@ print(hashlib.sha256(payload).hexdigest())
 PY
 )"
   rc=$?
-  set -e
+  if [[ "$had_errexit" == "1" ]]; then
+    set -e
+  fi
   if [[ "$rc" -ne 0 || ! "$out" =~ ^[0-9a-f]{64}$ ]]; then
     case "$out" in
       *dependency_outside_repo*) CHECKPOINT_INELIGIBLE_REASON="dependency_outside_repo" ;;
@@ -906,6 +912,10 @@ checkpoint_evaluate_gate_skip() {
   [[ "$now_epoch" =~ ^[0-9]+$ ]] || now_epoch="$(date +%s)"
 
   local eval_out eval_rc
+  local had_errexit=0
+  case "$-" in
+    *e*) had_errexit=1 ;;
+  esac
   set +e
   eval_out="$(
     CURRENT_GATE="$gate" \
@@ -1026,7 +1036,9 @@ emit("checkpoint_cache_hit", 0)
 PY
   )"
   eval_rc=$?
-  set -e
+  if [[ "$had_errexit" == "1" ]]; then
+    set -e
+  fi
 
   CHECKPOINT_DECISION_REASON="${eval_out:-checkpoint_schema_invalid}"
   if [[ "$eval_rc" -eq 0 ]]; then
