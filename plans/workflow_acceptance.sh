@@ -6562,6 +6562,12 @@ if test_start "30.4" "enforce mode uses cache-hit skip and dry_run reports would
   tool_versions_json="$(checkpoint_tool_versions_json)"
   now_epoch="$(checkpoint_now_epoch)"
 
+  VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" \
+  VERIFY_SH_SHA="$VERIFY_SH_SHA" \
+  BASE_REF="$BASE_REF" \
+  CHECKPOINT_HEAD_SHA="$CHECKPOINT_HEAD_SHA" \
+  CHECKPOINT_HEAD_TREE="$CHECKPOINT_HEAD_TREE" \
+  CHECKPOINT_CHANGED_FILES_HASH="$CHECKPOINT_CHANGED_FILES_HASH" \
   TOOL_VERSIONS_JSON="$tool_versions_json" \
   INPUT_HASH="$input_hash" \
   OVERRIDE_FP="$override_fp" \
