@@ -6760,6 +6760,58 @@ PY
   test_pass "30.4d"
 fi
 
+if test_start "30.4e" "checkpoint tool versions use PYTHON_BIN" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  tmpdir=".ralph/checkpoint_tool_versions"
+  rm -rf "$tmpdir"
+  mkdir -p "$tmpdir"
+  stub="$tmpdir/python-stub"
+  cat > "$stub" <<'"'"'SH'"'"'
+#!/usr/bin/env bash
+echo "Python 9.9.9"
+SH
+  chmod +x "$stub"
+
+  export PYTHON_BIN="$ROOT/$stub"
+  unset CHECKPOINT_TOOL_VERSIONS_JSON
+  out="$(checkpoint_tool_versions_json)"
+  echo "$out" | grep -q '"python":"9.9.9"' || {
+    echo "FAIL: expected PYTHON_BIN version in tool versions" >&2
+    echo "$out" >&2
+    exit 1
+  }
+
+  unset PYTHON_BIN CHECKPOINT_TOOL_VERSIONS_JSON
+  rm -rf "$tmpdir"
+  '
+  test_pass "30.4e"
+fi
+
+if test_start "30.4f" "override fingerprint tracks GLOBAL_INVARIANTS_FILE" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  source plans/lib/verify_checkpoint.sh
+
+  export GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.md"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  first="$(checkpoint_override_fingerprint)"
+  export GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.override"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  second="$(checkpoint_override_fingerprint)"
+  if [[ "$first" == "$second" ]]; then
+    echo "FAIL: expected GLOBAL_INVARIANTS_FILE to affect override fingerprint" >&2
+    exit 1
+  fi
+
+  unset GLOBAL_INVARIANTS_FILE CHECKPOINT_OVERRIDE_FINGERPRINT
+  '
+  test_pass "30.4f"
+fi
+
 if test_start "30.5" "local full verify requires approval" 1; then
   run_in_worktree bash -c '
   set -euo pipefail

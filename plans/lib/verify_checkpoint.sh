@@ -694,14 +694,23 @@ checkpoint_tool_versions_json() {
     echo "$CHECKPOINT_TOOL_VERSIONS_JSON"
     return 0
   fi
-  local py jqv rgv
-  py="$(checkpoint_probe_tool_version python3 --version || true)"
-  if [[ -z "$py" || "$py" == "missing" ]]; then
-    py="$(checkpoint_probe_tool_version python --version || true)"
+  local py jqv rgv py_cmd
+  py_cmd=""
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    py_cmd="$PYTHON_BIN"
+  elif command -v python >/dev/null 2>&1; then
+    py_cmd="python"
+  elif command -v python3 >/dev/null 2>&1; then
+    py_cmd="python3"
   fi
+  if [[ -z "$py_cmd" ]]; then
+    CHECKPOINT_INELIGIBLE_REASON="toolchain_probe_failed"
+    return 1
+  fi
+  py="$(checkpoint_probe_tool_version "$py_cmd" --version || true)"
   jqv="$(checkpoint_probe_tool_version jq --version || true)"
   rgv="$(checkpoint_probe_tool_version rg --version || true)"
-  if [[ -z "$py" || -z "$jqv" || -z "$rgv" ]]; then
+  if [[ -z "$py" || "$py" == "missing" || -z "$jqv" || -z "$rgv" ]]; then
     CHECKPOINT_INELIGIBLE_REASON="toolchain_probe_failed"
     return 1
   fi
