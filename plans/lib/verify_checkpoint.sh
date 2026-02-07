@@ -431,6 +431,11 @@ checkpoint_lock_try_recover_stale() {
   if [[ ! -f "$lock_file" ]]; then
     return 1
   fi
+  # A zero-byte file may be a just-created lock before metadata is written.
+  # Do not treat it as stale; bounded lock timeout will fail closed if needed.
+  if [[ ! -s "$lock_file" ]]; then
+    return 1
+  fi
 
   local pid=""
   local started=""
@@ -892,7 +897,7 @@ PY
     return 1
   fi
 
-  eval "$cache_var='$out'"
+  printf -v "$cache_var" '%s' "$out"
   if [[ -n "$out_var" ]]; then
     printf -v "$out_var" '%s' "$out"
     return 0

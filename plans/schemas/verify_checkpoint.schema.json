@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "plans/schemas/verify_checkpoint.schema.json",
+  "$comment": "Top-level schema_version tracks checkpoint envelope compatibility. Nested skip_cache.schema_version tracks skip-cache payload compatibility.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -67,6 +68,7 @@
       "properties": {
         "schema_version": {
           "type": "integer",
+          "$comment": "Nested skip-cache schema version. This intentionally differs from top-level schema_version.",
           "const": 1
         },
         "ts": {
