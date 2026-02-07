@@ -1179,8 +1179,10 @@ hash_ralph_json_files() {
   local tmp
   tmp="$(mktemp)"
   find .ralph -type f -name '*.json' \
-    ! -path '.ralph/verify/*' \
-    ! -path '.ralph/workflow_acceptance_*/*' \
+    ! -path '.ralph/verify*' \
+    ! -path '.ralph/verify*/*' \
+    ! -path '.ralph/workflow_acceptance*' \
+    ! -path '.ralph/workflow_acceptance*/*' \
     2>/dev/null | LC_ALL=C sort | while IFS= read -r file; do
       printf '%s %s\n' "$(sha256_file "$file")" "$file"
     done > "$tmp"

@@ -1960,7 +1960,7 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
     # 2. Arrays are defined and used (whitespace tolerant for runner call)
     for array in SPEC_VALIDATOR_SPECS STATUS_FIXTURE_SPECS; do
       if [[ "$array" == "SPEC_VALIDATOR_SPECS" ]]; then
-        if ! grep -q "${array}=(" "$verify" && ! grep -q "${array}=(" "$ROOT/plans/lib/spec_validators_group.sh"; then
+        if ! grep -q "${array}=(" "$verify" && ! grep -q "${array}=(" "plans/lib/spec_validators_group.sh"; then
           echo "FAIL: ${array} array not found" >&2
           exit 1
         fi
@@ -6537,28 +6537,108 @@ JSON
   test_pass "30.3"
 fi
 
-if test_start "30.4" "enforce mode currently returns not-implemented reason" 1; then
+if test_start "30.4" "enforce mode uses cache-hit skip and dry_run reports would-skip" 1; then
   run_in_worktree bash -c '
   set -euo pipefail
   ROOT="$(pwd)"
   source plans/lib/verify_utils.sh
   source plans/lib/verify_checkpoint.sh
 
-  checkpoint_capture_snapshot 0 1 quick none 0
-  VERIFY_CHECKPOINT_ROLLOUT="enforce"
-  VERIFY_CHECKPOINT_KILL_SWITCH="ks-test"
-  checkpoint_resolve_rollout
+  mkdir -p .ralph
+  VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
+  VERIFY_SH_SHA="test-verify-sha"
+  BASE_REF="origin/main"
+  CHECKPOINT_HEAD_SHA="head-sha"
+  CHECKPOINT_HEAD_TREE="head-tree"
+  CHECKPOINT_CHANGED_FILES_HASH="changed-hash"
+  CHECKPOINT_SNAPSHOT_MODE="quick"
+  CHECKPOINT_SNAPSHOT_VERIFY_MODE="none"
+  CHECKPOINT_LOCK_PROBE_DONE=1
+  CHECKPOINT_LOCK_PROBE_OK=1
 
+  checkpoint_capture_snapshot 0 1 quick none 0
+  input_hash="$(checkpoint_gate_input_hash contract_coverage)"
+  override_fp="$(checkpoint_override_fingerprint)"
+  tool_versions_json="$(checkpoint_tool_versions_json)"
+  now_epoch="$(checkpoint_now_epoch)"
+
+  TOOL_VERSIONS_JSON="$tool_versions_json" \
+  INPUT_HASH="$input_hash" \
+  OVERRIDE_FP="$override_fp" \
+  NOW_EPOCH="$now_epoch" \
+  python3 - <<'"'"'PY'"'"'
+import json
+import os
+
+path = os.environ["VERIFY_CHECKPOINT_FILE"]
+data = {
+    "schema_version": 2,
+    "success_runs": 1,
+    "full_success_runs": 1,
+    "partial_success_runs": 0,
+    "eligible_success_runs": 1,
+    "would_hit_success_runs": 0,
+    "would_miss_success_runs": 1,
+    "ineligible_success_runs": 0,
+    "last_success": {},
+    "skip_cache": {
+        "schema_version": 1,
+        "ts": int(os.environ["NOW_EPOCH"]),
+        "rollout": "enforce",
+        "kill_switch_token": "ks-test",
+        "written_by_verify_sh_sha": os.environ["VERIFY_SH_SHA"],
+        "verify_sh_sha": os.environ["VERIFY_SH_SHA"],
+        "base_ref": os.environ["BASE_REF"],
+        "head_sha": os.environ["CHECKPOINT_HEAD_SHA"],
+        "head_tree": os.environ["CHECKPOINT_HEAD_TREE"],
+        "mode": "quick",
+        "verify_mode": "none",
+        "changed_files_hash": os.environ["CHECKPOINT_CHANGED_FILES_HASH"],
+        "override_fingerprint": os.environ["OVERRIDE_FP"],
+        "tool_versions": json.loads(os.environ["TOOL_VERSIONS_JSON"]),
+        "writer_ci": False,
+        "writer_mode": "quick",
+        "gates": {
+            "contract_coverage": {
+                "input_hash": os.environ["INPUT_HASH"],
+                "last_real_run_ts": int(os.environ["NOW_EPOCH"]),
+                "consecutive_skips": 0,
+                "elapsed_s": 1.23,
+                "last_decision_reason": "ran"
+            }
+        }
+    }
+}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, separators=(",", ":"))
+PY
+
+  VERIFY_CHECKPOINT_SKIP=1
+  VERIFY_CHECKPOINT_MAX_AGE_SECS=999999
+  VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS=10
+  VERIFY_CHECKPOINT_FORCE_AFTER_SECS=21600
+  VERIFY_CHECKPOINT_KILL_SWITCH="ks-test"
+
+  VERIFY_CHECKPOINT_ROLLOUT="enforce"
+  checkpoint_resolve_rollout
+  checkpoint_decide_skip_gate "contract_coverage"
+  [[ "${CHECKPOINT_DECISION_REASON:-}" == "checkpoint_cache_hit" ]] || {
+    echo "FAIL: expected checkpoint_cache_hit in enforce mode, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
+    exit 1
+  }
+
+  VERIFY_CHECKPOINT_ROLLOUT="dry_run"
+  checkpoint_resolve_rollout
   set +e
   checkpoint_decide_skip_gate "contract_coverage"
-  rc=$?
+  rc="$?"
   set -e
-  if [[ "$rc" -eq 0 ]]; then
-    echo "FAIL: enforce scaffold should not allow skip yet" >&2
+  [[ "$rc" -ne 0 ]] || {
+    echo "FAIL: dry_run must not skip gate execution" >&2
     exit 1
-  fi
-  [[ "${CHECKPOINT_DECISION_REASON:-}" == "enforce_skip_not_implemented" ]] || {
-    echo "FAIL: expected enforce_skip_not_implemented reason, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
+  }
+  [[ "${CHECKPOINT_DECISION_REASON:-}" == "dry_run_would_skip" ]] || {
+    echo "FAIL: expected dry_run_would_skip reason, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
     exit 1
   }
 '
@@ -6696,7 +6776,7 @@ if test_start "30.8" "lock_and_policy fail-closed checks" 1; then
   mkdir -p .ralph
   VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
   cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
-{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":true,"writer_mode":"quick","gates":{}}}
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","verify_sh_sha":"","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":true,"writer_mode":"quick","gates":{}}}
 JSON
   CHECKPOINT_LOCK_PROBE_DONE=0
   CHECKPOINT_LOCK_PROBE_OK=0
@@ -6710,7 +6790,7 @@ JSON
   }
 
   cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
-{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":false,"writer_mode":"quick","gates":{}}}
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","verify_sh_sha":"","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":false,"writer_mode":"quick","gates":{}}}
 JSON
   VERIFY_CHECKPOINT_LOCK_FILE="$ROOT/.ralph/verify_checkpoint.lock"
   printf "pid=%s\nstart_epoch=%s\n" "$$" "$(date +%s)" > "$VERIFY_CHECKPOINT_LOCK_FILE"
@@ -6814,7 +6894,7 @@ if test_start "30.10" "checkpoint age and hash-budget guards fail closed" 1; the
   mkdir -p .ralph
   VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
   cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
-{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":100,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":false,"writer_mode":"quick","gates":{}}}
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":100,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","verify_sh_sha":"","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":false,"writer_mode":"quick","gates":{}}}
 JSON
 
   checkpoint_capture_snapshot 0 1 quick none 0
@@ -6901,7 +6981,7 @@ if test_start "30.12" "verify_skip_status helper reports effective policy and ch
 
   mkdir -p .ralph
   cat > .ralph/verify_checkpoint.json <<'"'"'JSON'"'"'
-{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{"ineligible_reason":"none"},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"dry_run","kill_switch_token":"","written_by_verify_sh_sha":"abc","writer_ci":false,"writer_mode":"quick","gates":{}}}
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{"ineligible_reason":"none"},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"dry_run","kill_switch_token":"","written_by_verify_sh_sha":"abc","verify_sh_sha":"abc","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":false,"writer_mode":"quick","gates":{}}}
 JSON
 
   out="$(VERIFY_CHECKPOINT_ROLLOUT=dry_run VERIFY_CHECKPOINT_SKIP=1 ./plans/verify_skip_status.sh)"
