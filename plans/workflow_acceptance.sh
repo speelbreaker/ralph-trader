@@ -2915,6 +2915,39 @@ JSON
 EOF
 chmod +x "$STUB_DIR/agent_modify_ralph_state.sh"
 
+cat > "$STUB_DIR/agent_touch_ralph_verify_json.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance touch plus ralph verify artifacts to exercise ralph_dir_modified ignore list
+Commands: write .ralph/verify/test.json and .ralph/workflow_acceptance_dummy/test.json; touch ${touch_file}; git add; git commit
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+EOT
+mkdir -p .ralph/verify .ralph/workflow_acceptance_dummy
+cat > .ralph/verify/test.json <<'JSON'
+{"stub":"verify","ts":0}
+JSON
+cat > .ralph/workflow_acceptance_dummy/test.json <<'JSON'
+{"stub":"acceptance","ts":0}
+JSON
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file"
+else
+  git add "$touch_file" "$progress"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: touch" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_touch_ralph_verify_json.sh"
+
 write_contract_check_stub() {
   local decision="${1:-PASS}"
   local pass_flip="${2:-DENY}"
@@ -3875,6 +3908,45 @@ if ! grep -q "VERIFY_MODE_ARG=full" "$verify_pre_log"; then
   exit 1
 fi
   test_pass "2g"
+fi
+
+if test_start "2h" "ralph verify artifacts ignored by ralph_dir_modified guard"; then
+reset_state
+valid_prd_2h="$WORKTREE/.ralph/valid_prd_2h.json"
+write_valid_prd "$valid_prd_2h" "S1-023"
+before_blocked="$(count_blocked)"
+set +e
+test2h_log="$WORKTREE/.ralph/test2h.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_2h" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_touch_ralph_verify_json.sh" \
+  SELECTED_ID="S1-023" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >"$test2h_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit when verify artifacts are ignored" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test2h_log" >&2 || true
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -gt "$before_blocked" ]]; then
+  latest_block="$(latest_blocked_with_reason "ralph_dir_modified")"
+  if [[ -n "$latest_block" ]]; then
+    echo "FAIL: expected ralph_dir_modified to ignore verify artifacts" >&2
+    tail -n 120 "$test2h_log" >&2 || true
+    exit 1
+  fi
+fi
+  test_pass "2h"
 fi
 
 if test_start "3" "COMPLETE printed early blocks with blocked_incomplete artifact"; then
