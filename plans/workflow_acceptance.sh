@@ -6772,14 +6772,14 @@ if test_start "30.4e" "checkpoint tool versions use PYTHON_BIN" 1; then
   stub="$tmpdir/python-stub"
   cat > "$stub" <<'"'"'SH'"'"'
 #!/usr/bin/env bash
-echo "Python 9.9.9"
+echo "Python 88.99"
 SH
   chmod +x "$stub"
 
   export PYTHON_BIN="$ROOT/$stub"
   unset CHECKPOINT_TOOL_VERSIONS_JSON
   out="$(checkpoint_tool_versions_json)"
-  echo "$out" | grep -q '"python":"9.9.9"' || {
+  echo "$out" | grep -q '"python":"88.99"' || {
     echo "FAIL: expected PYTHON_BIN version in tool versions" >&2
     echo "$out" >&2
     exit 1
