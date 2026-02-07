@@ -6764,7 +6764,7 @@ if test_start "30.5" "local full verify requires approval" 1; then
   run_in_worktree bash -c '
   set -euo pipefail
   set +e
-  out="$(env -u VERIFY_ALLOW_LOCAL_FULL ./plans/verify.sh full 2>&1)"
+  out="$(env -u VERIFY_ALLOW_LOCAL_FULL -u CI ./plans/verify.sh full 2>&1)"
   rc=$?
   set -e
   if [[ "$rc" -eq 0 ]]; then
