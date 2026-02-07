@@ -1959,9 +1959,16 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
 
     # 2. Arrays are defined and used (whitespace tolerant for runner call)
     for array in SPEC_VALIDATOR_SPECS STATUS_FIXTURE_SPECS; do
-      if ! grep -q "${array}=(" "$verify"; then
-        echo "FAIL: ${array} array not found" >&2
-        exit 1
+      if [[ "$array" == "SPEC_VALIDATOR_SPECS" ]]; then
+        if ! grep -q "${array}=(" "$verify" && ! grep -q "${array}=(" "$ROOT/plans/lib/spec_validators_group.sh"; then
+          echo "FAIL: ${array} array not found" >&2
+          exit 1
+        fi
+      else
+        if ! grep -q "${array}=(" "$verify"; then
+          echo "FAIL: ${array} array not found" >&2
+          exit 1
+        fi
       fi
 
       if ! grep -Eq "run_parallel_group[[:space:]]+${array}" "$verify"; then
@@ -1969,6 +1976,11 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
         exit 1
       fi
     done
+
+    if ! grep -q "spec_validators_group_build_specs" "$verify"; then
+      echo "FAIL: verify must call spec_validators_group_build_specs" >&2
+      exit 1
+    fi
 
     # 3. Timing artifacts (E-RE, ordering tolerant)
     if ! grep -Eq '\''\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time'\'' "$verify" && \
@@ -6943,6 +6955,42 @@ JSON
   }
 '
   test_pass "30.13"
+fi
+
+if test_start "30.14" "spec validators group fails closed on malformed or too-short list" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/spec_validators_group.sh
+
+  MIN_SPEC_VALIDATORS=7
+  SPEC_LINT_TIMEOUT="2m"
+  PYTHON_BIN="python3"
+  CONTRACT_FILE="specs/CONTRACT.md"
+  ARCH_FLOWS_FILE="specs/flows/ARCH_FLOWS.yaml"
+  GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.md"
+
+  spec_validators_group_specs_raw() {
+    cat <<'"'"'EOF'"'"'
+bad_line_without_separators
+EOF
+  }
+  if spec_validators_group_build_specs; then
+    echo "FAIL: malformed validator spec line should fail closed" >&2
+    exit 1
+  fi
+
+  spec_validators_group_specs_raw() {
+    cat <<'"'"'EOF'"'"'
+contract_crossrefs|2m|python3 scripts/check_contract_crossrefs.py --contract specs/CONTRACT.md --strict --check-at --include-bare-section-refs
+EOF
+  }
+  if spec_validators_group_build_specs; then
+    echo "FAIL: too-short validator list should fail closed" >&2
+    exit 1
+  fi
+'
+  test_pass "30.14"
 fi
 
 echo "Workflow acceptance tests passed"

@@ -134,6 +134,7 @@ VERIFY_CHECKPOINT_ROLLOUT_RAW="${VERIFY_CHECKPOINT_ROLLOUT:-}"
 VERIFY_CHECKPOINT_ROLLOUT="${VERIFY_CHECKPOINT_ROLLOUT_RAW:-off}" # off|dry_run|enforce
 VERIFY_CHECKPOINT_KILL_SWITCH="${VERIFY_CHECKPOINT_KILL_SWITCH:-}"
 VERIFY_CHECKPOINT_SKIP="${VERIFY_CHECKPOINT_SKIP:-0}"
+MIN_SPEC_VALIDATORS="${MIN_SPEC_VALIDATORS:-7}"
 VERIFY_CHECKPOINT_MAX_AGE_SECS="${VERIFY_CHECKPOINT_MAX_AGE_SECS:-86400}"
 VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS="${VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS:-10}"
 VERIFY_CHECKPOINT_FORCE_AFTER_SECS="${VERIFY_CHECKPOINT_FORCE_AFTER_SECS:-21600}"
@@ -187,6 +188,7 @@ fi
 # -----------------------------------------------------------------------------
 source "$ROOT/plans/lib/verify_utils.sh"
 source "$ROOT/plans/lib/verify_checkpoint.sh"
+source "$ROOT/plans/lib/spec_validators_group.sh"
 
 if [[ "$CHECKPOINT_NON_TTY_DEFAULT_OFF" == "1" ]]; then
   warn "non_tty_default_off: VERIFY_CHECKPOINT_ROLLOUT unset in non-TTY context; forcing rollout=off"
@@ -244,6 +246,15 @@ emit_skip_artifacts() {
     printf '[SKIP_DECISION] gate=%s action=skipped reason=%s\n' "$gate" "$reason"
     printf 'mode=%s verify_mode=%s rollout=%s\n' "$MODE" "${VERIFY_MODE:-none}" "${CHECKPOINT_ROLLOUT:-off}"
   } > "$logf"
+}
+
+emit_skip_artifacts_many() {
+  local reason="${1:-checkpoint}"
+  shift || true
+  local gate
+  for gate in "$@"; do
+    emit_skip_artifacts "$gate" "$reason"
+  done
 }
 
 checkpoint_counter_enabled() {
@@ -1724,18 +1735,9 @@ ensure_python
 [[ -f "specs/flows/RECONCILIATION_MATRIX.md" ]] || fail "Missing specs/flows/RECONCILIATION_MATRIX.md"
 [[ -f "specs/TRACE.yaml" ]] || fail "Missing specs/TRACE.yaml"
 
-# Build spec validator array (format: "name|timeout|command args")
-SPEC_VALIDATOR_SPECS=(
-  "contract_crossrefs|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_contract_crossrefs.py --contract $CONTRACT_FILE --strict --check-at --include-bare-section-refs"
-  "arch_flows|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_arch_flows.py --contract $CONTRACT_FILE --flows $ARCH_FLOWS_FILE --strict"
-  "state_machines|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_state_machines.py --dir specs/state_machines --strict --contract $CONTRACT_FILE --flows $ARCH_FLOWS_FILE --invariants $GLOBAL_INVARIANTS_FILE"
-  "global_invariants|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_global_invariants.py --file $GLOBAL_INVARIANTS_FILE --contract $CONTRACT_FILE"
-  "time_freshness|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_time_freshness.py --contract $CONTRACT_FILE --spec specs/flows/TIME_FRESHNESS.yaml --strict"
-  "crash_matrix|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_crash_matrix.py --contract $CONTRACT_FILE --matrix specs/flows/CRASH_MATRIX.md"
-  "crash_replay_idempotency|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_crash_replay_idempotency.py --contract $CONTRACT_FILE --spec specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml --strict"
-  "reconciliation_matrix|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_reconciliation_matrix.py --matrix specs/flows/RECONCILIATION_MATRIX.md --contract $CONTRACT_FILE --strict"
-  "csp_trace|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_csp_trace.py --contract $CONTRACT_FILE --trace specs/TRACE.yaml"
-)
+if ! spec_validators_group_build_specs; then
+  fail "spec_validators_group_build_specs failed (validator list invalid)"
+fi
 
 # Auto-detect CPU cores, cap at 4 to avoid CI thrashing
 SPEC_LINT_JOBS=$(detect_cpus)
@@ -1744,6 +1746,7 @@ SPEC_LINT_JOBS=$(detect_cpus)
 # Run validators in parallel
 if decide_skip_gate "spec_validators_group"; then
   emit_skip_artifacts "spec_validators_group" "${CHECKPOINT_DECISION_REASON:-checkpoint_skip}"
+  emit_skip_artifacts_many "${CHECKPOINT_DECISION_REASON:-checkpoint_skip}" "${SPEC_VALIDATOR_NAMES[@]}"
   echo "info: spec_validators_group skipped (${CHECKPOINT_DECISION_REASON:-checkpoint_skip})"
 else
   run_parallel_group SPEC_VALIDATOR_SPECS "$SPEC_LINT_JOBS"
