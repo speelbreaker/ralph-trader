@@ -6693,6 +6693,68 @@ if test_start "30.4b" "gate input hash cache persists within shell" 1; then
   test_pass "30.4b"
 fi
 
+if test_start "30.4c" "override fingerprint ignores run-id artifacts" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  export VERIFY_RUN_ID="run-a"
+  export VERIFY_ARTIFACTS_DIR="$ROOT/artifacts/verify/run-a"
+  export VERIFY_CHECKPOINT_TELEMETRY_FILE="$ROOT/.ralph/verify_telemetry/skip_telemetry_run-a.jsonl"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  first="$(checkpoint_override_fingerprint)"
+  if [[ -z "$first" ]]; then
+    echo "FAIL: expected override fingerprint" >&2
+    exit 1
+  fi
+
+  export VERIFY_RUN_ID="run-b"
+  export VERIFY_ARTIFACTS_DIR="$ROOT/artifacts/verify/run-b"
+  export VERIFY_CHECKPOINT_TELEMETRY_FILE="$ROOT/.ralph/verify_telemetry/skip_telemetry_run-b.jsonl"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  second="$(checkpoint_override_fingerprint)"
+  if [[ "$second" != "$first" ]]; then
+    echo "FAIL: override fingerprint changed with run-id artifacts" >&2
+    exit 1
+  fi
+
+  unset VERIFY_RUN_ID VERIFY_ARTIFACTS_DIR VERIFY_CHECKPOINT_TELEMETRY_FILE CHECKPOINT_OVERRIDE_FINGERPRINT
+  '
+  test_pass "30.4c"
+fi
+
+if test_start "30.4d" "spec validator hash covers core inputs" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  python3 - <<'"'"'PY'"'"'
+import json
+import sys
+
+required = [
+    "specs/CONTRACT.md",
+    "specs/flows/ARCH_FLOWS.yaml",
+    "specs/invariants/GLOBAL_INVARIANTS.md",
+]
+with open("plans/checkpoint_dependency_manifest.json", "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+gates = data.get("gates")
+if not isinstance(gates, dict):
+    print("FAIL: invalid gates manifest", file=sys.stderr)
+    raise SystemExit(1)
+spec = gates.get("spec_validators_group")
+if not isinstance(spec, list):
+    print("FAIL: missing spec_validators_group list", file=sys.stderr)
+    raise SystemExit(1)
+missing = [item for item in required if item not in spec]
+if missing:
+    print(f"FAIL: spec_validators_group missing {missing}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  '
+  test_pass "30.4d"
+fi
+
 if test_start "30.5" "local full verify requires approval" 1; then
   run_in_worktree bash -c '
   set -euo pipefail

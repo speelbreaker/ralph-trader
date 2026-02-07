@@ -32,6 +32,10 @@
 
 set -euo pipefail
 
+# checkpoint-fingerprint-ignore: VERIFY_RUN_ID
+# checkpoint-fingerprint-ignore: VERIFY_ARTIFACTS_DIR
+# checkpoint-fingerprint-ignore: VERIFY_CHECKPOINT_TELEMETRY_FILE
+
 VERIFY_SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify.sh"
 if command -v sha256sum >/dev/null 2>&1; then
   VERIFY_SH_SHA="$(sha256sum "$VERIFY_SCRIPT_PATH" | awk '{print $1}')"
