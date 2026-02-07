@@ -5315,7 +5315,7 @@ fi
 set +e
 run_ralph env \
   BASE_REF="$start_sha" \
-  POSTMORTEM_GATE=0 \
+  POSTMORTEM_GATE=1 \
   PRD_FILE="$valid_prd_14c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
@@ -5421,7 +5421,7 @@ base_ref_14d="$(run_in_worktree git rev-parse HEAD)"
 set +e
 run_ralph env \
   BASE_REF="$base_ref_14d" \
-  POSTMORTEM_GATE=0 \
+  POSTMORTEM_GATE=1 \
   PRD_FILE="$valid_prd_14d" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
@@ -6779,7 +6779,7 @@ SH
   export PYTHON_BIN="$ROOT/$stub"
   unset CHECKPOINT_TOOL_VERSIONS_JSON
   out="$(checkpoint_tool_versions_json)"
-  echo "$out" | grep -q '"python":"7.77"' || {
+  echo "$out" | grep -q "\"python\":\"7.77\"" || {
     echo "FAIL: expected PYTHON_BIN version in tool versions" >&2
     echo "$out" >&2
     exit 1
