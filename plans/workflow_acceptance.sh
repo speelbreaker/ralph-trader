@@ -6794,6 +6794,7 @@ fi
 if test_start "30.4f" "override fingerprint tracks GLOBAL_INVARIANTS_FILE" 1; then
   run_in_worktree bash -c '
   set -euo pipefail
+  ROOT="$(pwd)"
   source plans/lib/verify_checkpoint.sh
 
   export GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.md"
