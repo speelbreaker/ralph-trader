@@ -1,7 +1,7 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: Hardened checkpoint skip inputs by covering core spec files in the spec validator hash, stabilized override fingerprints by ignoring run-id artifact paths, and stabilized bootstrap acceptance runs (BASE_REF pinned, postmortem gate skipped for bootstrap fixtures).
+- Feature/behavior: Hardened checkpoint skip inputs by covering core spec files in the spec validator hash, stabilized override fingerprints by ignoring run-id artifact paths, stabilized bootstrap acceptance runs (BASE_REF pinned, postmortem gate skipped for bootstrap fixtures), and fixed local-full guard coverage in acceptance.
 - What value it has (what problem it solves, upgrade provides): Prevents correctness regressions when specs change and allows cache hits across runs by removing volatile inputs.
 - Governing contract: specs/WORKFLOW_CONTRACT.md
 
