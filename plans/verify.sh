@@ -199,6 +199,8 @@ CHECKPOINT_ELIGIBLE=0
 CHECKPOINT_WOULD_HIT=0
 CHECKPOINT_FINGERPRINT=""
 CHECKPOINT_PREV_FINGERPRINT=""
+CHECKPOINT_PREV_HEAD_SHA=""
+CHECKPOINT_PREV_HEAD_TREE=""
 CHECKPOINT_HEAD_SHA=""
 CHECKPOINT_HEAD_TREE=""
 CHECKPOINT_CHANGED_FILES_HASH=""
@@ -305,8 +307,9 @@ checkpoint_counter_load_prev() {
   else
     return 0
   fi
+  local checkpoint_prev_data
   set +e
-  CHECKPOINT_PREV_FINGERPRINT="$(VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" "$pybin" - <<'PY'
+  checkpoint_prev_data="$(VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" "$pybin" - <<'PY'
 import json
 import os
 
@@ -317,13 +320,20 @@ try:
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     fp = data.get("last_success", {}).get("fingerprint", "")
-    if fp:
-        print(fp)
+    skip = data.get("skip_cache", {}) if isinstance(data.get("skip_cache"), dict) else {}
+    head_sha = skip.get("head_sha", "")
+    head_tree = skip.get("head_tree", "")
+    print(fp)
+    print(head_sha if isinstance(head_sha, str) else "")
+    print(head_tree if isinstance(head_tree, str) else "")
 except Exception:
     pass
 PY
   )"
   set -e
+  CHECKPOINT_PREV_FINGERPRINT="$(printf '%s\n' "$checkpoint_prev_data" | sed -n '1p')"
+  CHECKPOINT_PREV_HEAD_SHA="$(printf '%s\n' "$checkpoint_prev_data" | sed -n '2p')"
+  CHECKPOINT_PREV_HEAD_TREE="$(printf '%s\n' "$checkpoint_prev_data" | sed -n '3p')"
 }
 
 checkpoint_counter_init() {
@@ -332,6 +342,8 @@ checkpoint_counter_init() {
   CHECKPOINT_WOULD_HIT=0
   CHECKPOINT_FINGERPRINT=""
   CHECKPOINT_PREV_FINGERPRINT=""
+  CHECKPOINT_PREV_HEAD_SHA=""
+  CHECKPOINT_PREV_HEAD_TREE=""
   CHECKPOINT_HEAD_SHA=""
   CHECKPOINT_HEAD_TREE=""
   CHECKPOINT_CHANGED_FILES_HASH=""
@@ -394,8 +406,8 @@ base_ref=$BASE_REF
 rollout=${CHECKPOINT_ROLLOUT:-off}
 head_sha=$CHECKPOINT_HEAD_SHA
 head_tree=$CHECKPOINT_HEAD_TREE
-		change_detection_ok=${CHANGE_DETECTION_OK:-0}
-		changed_files_hash=$CHECKPOINT_CHANGED_FILES_HASH
+change_detection_ok=${CHANGE_DETECTION_OK:-0}
+changed_files_hash=$CHECKPOINT_CHANGED_FILES_HASH
 override_fingerprint=$override_fp
 tool_versions_json=$tool_versions_json
 contract_coverage_input_hash=$contract_hash
@@ -871,7 +883,12 @@ checkpoint_write_opportunity_telemetry() {
   local writer_ci=0
   local now_epoch
 
-  if [[ "$CHECKPOINT_WOULD_HIT" == "1" ]]; then
+  if [[ -n "${CHECKPOINT_PREV_HEAD_SHA:-}" && "$CHECKPOINT_PREV_HEAD_SHA" == "${CHECKPOINT_HEAD_SHA:-}" ]]; then
+    if [[ -z "${CHECKPOINT_PREV_HEAD_TREE:-}" || "$CHECKPOINT_PREV_HEAD_TREE" == "${CHECKPOINT_HEAD_TREE:-}" ]]; then
+      head_unchanged_since_last_run=1
+    fi
+  elif [[ "$CHECKPOINT_WOULD_HIT" == "1" ]]; then
+    # Backward-compatible fallback when prior checkpoint lacks explicit head metadata.
     head_unchanged_since_last_run=1
   fi
   if [[ "${CHECKPOINT_DRY_RUN_WOULD_SKIP_CONTRACT_COVERAGE:-0}" == "1" || "${CHECKPOINT_ENFORCE_SKIPPED_CONTRACT_COVERAGE:-0}" == "1" ]]; then

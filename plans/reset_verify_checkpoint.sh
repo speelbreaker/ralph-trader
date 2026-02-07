@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECKPOINT_FILE="${VERIFY_CHECKPOINT_FILE:-$ROOT/.ralph/verify_checkpoint.json}"
 LOCK_FILE="${VERIFY_CHECKPOINT_LOCK_FILE:-$(dirname "$CHECKPOINT_FILE")/verify_checkpoint.lock}"
 LOCK_STALE_SECS="${VERIFY_CHECKPOINT_LOCK_STALE_SECS:-600}"
+LOCK_FILE_EXPLICIT=0
 FORCE=0
 QUIET=0
 
@@ -29,6 +30,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --lock-file)
       LOCK_FILE="${2:-}"
+      LOCK_FILE_EXPLICIT=1
       shift 2
       ;;
     --force)
@@ -50,6 +52,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$LOCK_FILE_EXPLICIT" != "1" ]]; then
+  LOCK_FILE="$(dirname "$CHECKPOINT_FILE")/verify_checkpoint.lock"
+fi
 
 if [[ -z "$CHECKPOINT_FILE" ]]; then
   echo "FAIL: checkpoint path is empty" >&2

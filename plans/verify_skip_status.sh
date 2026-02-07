@@ -16,6 +16,19 @@ elif [[ -n "$ROLL_RAW" ]]; then
   ROLL_SOURCE="env"
 fi
 
+case "$ROLL_EFFECTIVE" in
+  off|dry_run|enforce)
+    ;;
+  *)
+    if [[ "$ROLL_SOURCE" == "env" ]]; then
+      ROLL_SOURCE="env_invalid_forced_off"
+    else
+      ROLL_SOURCE="invalid_forced_off"
+    fi
+    ROLL_EFFECTIVE="off"
+    ;;
+esac
+
 show_help() {
   cat <<'EOF'
 Usage: ./plans/verify_skip_status.sh [--help]
