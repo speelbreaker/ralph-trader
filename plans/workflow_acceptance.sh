@@ -6798,7 +6798,7 @@ SH
   main_line="refs/heads/local $(git rev-parse HEAD) refs/heads/main 0000000000000000000000000000000000000000"
 
   : > "$calls"
-  printf "%s\n" "$main_line" | env -u VERIFY_ALLOW_LOCAL_FULL CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
+  printf "%s\n" "$main_line" | env -u CI -u VERIFY_ALLOW_LOCAL_FULL CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
   if ! grep -Fxq "quick" "$calls"; then
     echo "FAIL: expected pre-push to run quick without local full approval" >&2
     echo "Calls: $(cat "$calls" 2>/dev/null || true)" >&2
@@ -6806,7 +6806,7 @@ SH
   fi
 
   : > "$calls"
-  printf "%s\n" "$main_line" | CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_ALLOW_LOCAL_FULL=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
+  printf "%s\n" "$main_line" | env -u CI CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_ALLOW_LOCAL_FULL=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
   if ! grep -Fxq "full" "$calls"; then
     echo "FAIL: expected pre-push to run full when local full approval set" >&2
     echo "Calls: $(cat "$calls" 2>/dev/null || true)" >&2
