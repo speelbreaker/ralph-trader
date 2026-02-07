@@ -6659,6 +6659,40 @@ PY
   test_pass "30.4"
 fi
 
+if test_start "30.4b" "gate input hash cache persists within shell" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  tmpdir=".ralph/checkpoint_hash_cache"
+  rm -rf "$tmpdir"
+  mkdir -p "$tmpdir"
+  cp plans/checkpoint_dependency_manifest.json "$tmpdir/manifest.json"
+  CHECKPOINT_DEPENDENCY_MANIFEST_FILE="$ROOT/$tmpdir/manifest.json"
+  unset CHECKPOINT_INPUT_HASH_CONTRACT_COVERAGE
+
+  first=""
+  checkpoint_gate_input_hash "contract_coverage" first
+  if [[ -z "$first" ]]; then
+    echo "FAIL: expected contract_coverage hash" >&2
+    exit 1
+  fi
+
+  printf "bad" > "$tmpdir/manifest.json"
+  second=""
+  checkpoint_gate_input_hash "contract_coverage" second
+  if [[ "$second" != "$first" ]]; then
+    echo "FAIL: expected cached gate hash to persist within shell" >&2
+    exit 1
+  fi
+
+  unset CHECKPOINT_DEPENDENCY_MANIFEST_FILE CHECKPOINT_INPUT_HASH_CONTRACT_COVERAGE
+  rm -rf "$tmpdir"
+  '
+  test_pass "30.4b"
+fi
+
 if test_start "30.5" "local full verify requires approval" 1; then
   run_in_worktree bash -c '
   set -euo pipefail

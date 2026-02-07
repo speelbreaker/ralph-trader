@@ -767,6 +767,7 @@ checkpoint_dependency_manifest_file() {
 
 checkpoint_gate_input_hash() {
   local gate="${1:?gate required}"
+  local out_var="${2:-}"
   local cache_var
   case "$gate" in
     contract_coverage) cache_var="CHECKPOINT_INPUT_HASH_CONTRACT_COVERAGE" ;;
@@ -779,6 +780,10 @@ checkpoint_gate_input_hash() {
 
   eval "local cached=\${$cache_var:-}"
   if [[ -n "${cached:-}" ]]; then
+    if [[ -n "$out_var" ]]; then
+      printf -v "$out_var" '%s' "$cached"
+      return 0
+    fi
     echo "$cached"
     return 0
   fi
@@ -888,6 +893,10 @@ PY
   fi
 
   eval "$cache_var='$out'"
+  if [[ -n "$out_var" ]]; then
+    printf -v "$out_var" '%s' "$out"
+    return 0
+  fi
   echo "$out"
 }
 
@@ -1089,7 +1098,8 @@ checkpoint_decide_skip_gate() {
   local hash_start_ms hash_end_ms hash_elapsed_ms
   local input_hash override_fingerprint tool_versions_json
   hash_start_ms="$(checkpoint_now_millis)"
-  input_hash="$(checkpoint_gate_input_hash "$gate" || true)"
+  input_hash=""
+  checkpoint_gate_input_hash "$gate" input_hash || true
   if [[ -z "$input_hash" ]]; then
     CHECKPOINT_DECISION_REASON="${CHECKPOINT_INELIGIBLE_REASON:-gate_input_hash_failed}"
     return 1

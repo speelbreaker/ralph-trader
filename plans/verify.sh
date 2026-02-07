@@ -387,8 +387,10 @@ checkpoint_counter_init() {
   local override_fp tool_versions_json contract_hash spec_hash
   override_fp="$(checkpoint_override_fingerprint || true)"
   tool_versions_json="$(checkpoint_tool_versions_json || true)"
-  contract_hash="$(checkpoint_gate_input_hash "contract_coverage" || true)"
-  spec_hash="$(checkpoint_gate_input_hash "spec_validators_group" || true)"
+  contract_hash=""
+  checkpoint_gate_input_hash "contract_coverage" contract_hash || true
+  spec_hash=""
+  checkpoint_gate_input_hash "spec_validators_group" spec_hash || true
   if [[ -z "$override_fp" || -z "$tool_versions_json" || -z "$contract_hash" || -z "$spec_hash" ]]; then
     if [[ -z "${CHECKPOINT_INELIGIBLE_REASON:-}" ]]; then
       CHECKPOINT_INELIGIBLE_REASON="checkpoint_hash_inputs_unavailable"
@@ -477,8 +479,10 @@ checkpoint_counter_record_success() {
     gate_contract_scheduled=1
   fi
   local gate_contract_hash gate_spec_hash override_fp tool_versions_json
-  gate_contract_hash="$(checkpoint_gate_input_hash "contract_coverage" || true)"
-  gate_spec_hash="$(checkpoint_gate_input_hash "spec_validators_group" || true)"
+  gate_contract_hash=""
+  checkpoint_gate_input_hash "contract_coverage" gate_contract_hash || true
+  gate_spec_hash=""
+  checkpoint_gate_input_hash "spec_validators_group" gate_spec_hash || true
   override_fp="$(checkpoint_override_fingerprint || true)"
   tool_versions_json="$(checkpoint_tool_versions_json || true)"
   VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" \
