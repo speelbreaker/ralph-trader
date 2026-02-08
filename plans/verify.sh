@@ -2249,6 +2249,10 @@ fi
 
 if should_run_workflow_acceptance; then
   WORKFLOW_ACCEPTANCE_MODE="$(workflow_acceptance_mode)"
+  # Quick mode gets 5-minute timeout; full keeps the 30m default
+  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "quick" && "$WORKFLOW_ACCEPTANCE_TIMEOUT" == "30m" ]]; then
+    WORKFLOW_ACCEPTANCE_TIMEOUT="5m"
+  fi
   log "6) Workflow acceptance (${WORKFLOW_ACCEPTANCE_MODE})"
   # VERIFY_WA_PARALLEL_INTEGRATION: full mode uses parallel acceptance runner when available
   if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "full" && -x ./plans/workflow_acceptance_parallel.sh ]]; then

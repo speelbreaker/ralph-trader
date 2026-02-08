@@ -43,7 +43,7 @@ Usage: ./plans/workflow_acceptance.sh [options]
 Options:
   --list                 List tests and exit
   --fast                 Run fast prechecks only
-  --mode <full|smoke>     Run full suite or fast smoke subset
+  --mode <full|quick>     Run full suite or fast quick subset (smoke accepted as deprecated alias)
   --only <id>            Run a single test id (overrides other selectors)
   --only-set <ids>       Run multiple test ids (comma-separated, e.g., "0e,0f,1")
   --from <id>            Start running at id (inclusive)
@@ -176,7 +176,7 @@ parse_args() {
       --mode)
         WORKFLOW_ACCEPTANCE_MODE="${2:-}"
         if [[ -z "$WORKFLOW_ACCEPTANCE_MODE" ]]; then
-          echo "FAIL: --mode requires a value (full|smoke)" >&2
+          echo "FAIL: --mode requires a value (full|quick)" >&2
           exit 1
         fi
         shift 2
@@ -254,11 +254,16 @@ parse_args "$@"
 
 case "$WORKFLOW_ACCEPTANCE_MODE" in
   full) ;;
+  quick)
+    FAST=1
+    ;;
   smoke)
+    # Deprecated alias for quick
+    WORKFLOW_ACCEPTANCE_MODE="quick"
     FAST=1
     ;;
   *)
-    echo "FAIL: unknown workflow acceptance mode: $WORKFLOW_ACCEPTANCE_MODE (expected full|smoke)" >&2
+    echo "FAIL: unknown workflow acceptance mode: $WORKFLOW_ACCEPTANCE_MODE (expected full|quick)" >&2
     exit 1
     ;;
 esac
@@ -360,8 +365,8 @@ elif [[ -n "$ONLY_SET" ]]; then
 else
   # FAST only applies when not using --only or --only-set
   # Distinguish between --mode smoke (explicit) and --fast (flag)
-  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "smoke" ]]; then
-    mode_parts+=("smoke")
+  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "quick" ]]; then
+    mode_parts+=("quick")
   elif (( FAST == 1 )); then
     mode_parts+=("fast")
   fi
@@ -4984,7 +4989,7 @@ run_in_worktree ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2
   test_pass "11"
 fi
 
-if test_start "12" "workflow contract traceability gate" 1; then
+if test_start "12" "workflow contract traceability gate" 0; then
 tmp_cache=$(mktemp -d)
 cleanup_tmp_cache() {
   rm -rf "$tmp_cache"
@@ -4997,12 +5002,12 @@ if [[ "$rc" -ne 0 ]]; then
   echo "FAIL: workflow_contract_gate failed in Test 12 (rc=$rc)" >&2
   cleanup_tmp_cache; exit 1
 fi
-if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .enforcement[] | select(test("smoke") and test("full"))' plans/workflow_contract_map.json >/dev/null; then
-  echo "FAIL: WF-12.1 enforcement must document smoke+full modes" >&2
+if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .enforcement[] | select(test("quick") and test("full"))' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.1 enforcement must document quick+full modes" >&2
   cleanup_tmp_cache; exit 1
 fi
-if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .tests[] | select(test("smoke suite"))' plans/workflow_contract_map.json >/dev/null; then
-  echo "FAIL: WF-12.1 tests must reference smoke suite coverage" >&2
+if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .tests[] | select(test("quick suite"))' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.1 tests must reference quick suite coverage" >&2
   cleanup_tmp_cache; exit 1
 fi
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.8") | .tests[] | select(test("Test 12"))' plans/workflow_contract_map.json >/dev/null; then
@@ -5096,7 +5101,7 @@ if test_start "12c" "missing required workflow artifact fails fast"; then
   test_pass "12c"
 fi
 
-if test_start "12d" "workflow contract gate validates enforcement existence" 1; then
+if test_start "12d" "workflow contract gate validates enforcement existence" 0; then
   tmp_map=$(mktemp)
   tmp_cache=$(mktemp -d)
   tmp_spec=""

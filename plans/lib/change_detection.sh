@@ -151,12 +151,12 @@ workflow_acceptance_mode() {
     return 0
   fi
   if is_ci; then
-    echo "smoke"
+    echo "quick"
     return 0
   fi
   if [[ "${MODE:-}" == "full" ]]; then
     echo "full"
     return 0
   fi
-  echo "smoke"
+  echo "quick"
 }

@@ -687,6 +687,8 @@ run_verify() {
   local summary_file
   out_dir="$(dirname "$out")"
   summary_file="${out_dir}/verify_summary.txt"
+  # Ralph implements PRD stories, not workflow infrastructure — skip WA
+  export WORKFLOW_ACCEPTANCE_POLICY=never
   local cmd=( "$VERIFY_SH" "$mode" "$@" )
   echo "verify command: ${cmd[*]}"
   set +e

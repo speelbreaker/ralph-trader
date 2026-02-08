@@ -429,7 +429,7 @@ Bootstrap exception (missing workspace) [WF-5.5.2]
 
 Workflow acceptance policy (local throughput, CI non-bypass):
 - verify.sh MAY skip workflow acceptance locally when no workflow-critical files changed.
-- verify.sh MUST run workflow acceptance in CI; when no workflow-critical files changed it may run in smoke mode.
+- verify.sh MUST run workflow acceptance in CI; when no workflow-critical files changed it may run in quick mode.
 - verify.sh MUST run workflow acceptance in full mode when workflow-critical files change or when change detection fails (fail-closed).
 - Local override: WORKFLOW_ACCEPTANCE_POLICY=auto|always|never (never ignored in CI).
 - The workflow-critical allowlist is defined in plans/verify.sh:is_workflow_file and is authoritative.
@@ -703,7 +703,7 @@ CI / verify drift observability [WF-12.7]
 [ ] ./plans/verify.sh logs change detection status (change_detection_ok, files, base_ref).
 [ ] .ralph/iter_*/verify_pre.log and verify_post.log contain that same VERIFY_SH_SHA=....
 [ ] CI logs/artifacts for a run contain the same VERIFY_SH_SHA=... line.
-[ ] verify.sh runs workflow acceptance in full when workflow files change (or detection fails), smoke otherwise in CI.
+[ ] verify.sh runs workflow acceptance in full when workflow files change (or detection fails), quick otherwise in CI.
 
 Traceability / drift gate [WF-12.8]
 
