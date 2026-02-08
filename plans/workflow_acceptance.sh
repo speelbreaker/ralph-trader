@@ -2832,6 +2832,38 @@ echo "<mark_pass>${id}</mark_pass>"
 EOF
 chmod +x "$STUB_DIR/agent_mark_pass_with_postmortem.sh"
 
+cat > "$STUB_DIR/agent_mark_pass_postmortem_only.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+postmortem_file="${ACCEPTANCE_POSTMORTEM_FILE:-reviews/postmortems/acceptance_scope_postmortem_only.md}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mark pass with postmortem only to validate meta-only guard
+Commands: write postmortem and progress (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+EOT
+mkdir -p "$(dirname "$postmortem_file")"
+cat > "$postmortem_file" <<EOT
+# Postmortem: acceptance scope ignore (meta-only)
+
+- Summary: acceptance stub postmortem only for meta-only guard
+- Governing contract: workflow
+- Outcome: fixture
+EOT
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$postmortem_file"
+else
+  git add "$progress" "$postmortem_file"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: postmortem only" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_mark_pass_postmortem_only.sh"
+
 cat > "$STUB_DIR/agent_mark_pass_meta_only.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -4590,7 +4622,7 @@ fi
   test_pass "10"
 fi
 
-if test_start "10e" "postmortem edits do not trigger scope violation"; then
+if test_start "10e" "postmortem-only changes do not bypass pass flip guard"; then
 reset_state
 valid_prd_10e="$WORKTREE/.ralph/valid_prd_10e.json"
 write_valid_prd "$valid_prd_10e" "S1-009"
@@ -4602,7 +4634,7 @@ run_ralph env \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
   VERIFY_SH="$STUB_DIR/verify_pass.sh" \
-  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_postmortem.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_postmortem_only.sh" \
   SELECTED_ID="S1-009" \
   RPH_VERIFY_MODE="promotion" \
   RPH_PROMOTION_VERIFY_MODE="promotion" \
@@ -4618,14 +4650,15 @@ run_ralph env \
   ./plans/ralph.sh 1 >"$test10e_log" 2>&1
 rc=$?
 set -e
-if [[ "$rc" -ne 0 ]]; then
-  echo "FAIL: expected zero exit for postmortem scope ignore" >&2
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for postmortem-only pass flip" >&2
   tail -n 120 "$test10e_log" >&2 || true
   exit 1
 fi
-pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_10e")"
-if [[ "$pass_state" != "true" ]]; then
-  echo "FAIL: expected passes=true for postmortem scope ignore" >&2
+latest_block="$(latest_blocked_with_reason "pass_flip_no_touch" || true)"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for pass_flip_no_touch" >&2
+  tail -n 120 "$test10e_log" >&2 || true
   exit 1
 fi
   test_pass "10e"

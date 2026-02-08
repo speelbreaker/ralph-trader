@@ -176,7 +176,7 @@ RPH_FINAL_VERIFY="${RPH_FINAL_VERIFY:-1}"  # 0|1
 RPH_VERIFY_PASS_TAIL="${RPH_VERIFY_PASS_TAIL:-20}"
 RPH_VERIFY_FAIL_TAIL="${RPH_VERIFY_FAIL_TAIL:-200}"
 RPH_VERIFY_SUMMARY_MAX="${RPH_VERIFY_SUMMARY_MAX:-200}"
-RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nplans/logs/*\nartifacts/*\n.ralph/*'}"
+RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nreviews/postmortems/*\nplans/logs/*\nartifacts/*\n.ralph/*'}"
 ARTIFACT_MANIFEST="${ARTIFACT_MANIFEST:-.ralph/artifacts.json}"
 SKIPPED_CHECKS_JSON="[]"
 
