@@ -1838,6 +1838,7 @@ is_ignored_file() {
   local file="$1"
   case "$file" in
     plans/prd.json|plans/progress.txt|plans/progress_archive.txt) return 0 ;;
+    reviews/postmortems/*) return 0 ;;
     .ralph/*|plans/logs/*) return 0 ;;
   esac
   return 1

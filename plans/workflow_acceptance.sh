@@ -2797,6 +2797,41 @@ echo "<mark_pass>${id}</mark_pass>"
 EOF
 chmod +x "$STUB_DIR/agent_mark_pass_with_commit.sh"
 
+cat > "$STUB_DIR/agent_mark_pass_with_postmortem.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
+postmortem_file="${ACCEPTANCE_POSTMORTEM_FILE:-reviews/postmortems/acceptance_scope_postmortem.md}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mark pass with postmortem (scope ignore) to satisfy progress gate length requirements
+Commands: echo >> ${touch_file}; git add; git commit (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+EOT
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+mkdir -p "$(dirname "$postmortem_file")"
+cat > "$postmortem_file" <<EOT
+# Postmortem: acceptance scope ignore
+
+- Summary: acceptance stub postmortem for scope ignore test
+- Governing contract: workflow
+- Outcome: fixture
+EOT
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file" "$postmortem_file"
+else
+  git add "$touch_file" "$progress" "$postmortem_file"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: touch + postmortem" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_mark_pass_with_postmortem.sh"
+
 cat > "$STUB_DIR/agent_mark_pass_meta_only.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -4553,6 +4588,47 @@ if [[ "$required_count" -lt 1 || "$missing_count" -ne 0 ]]; then
   exit 1
 fi
   test_pass "10"
+fi
+
+if test_start "10e" "postmortem edits do not trigger scope violation"; then
+reset_state
+valid_prd_10e="$WORKTREE/.ralph/valid_prd_10e.json"
+write_valid_prd "$valid_prd_10e" "S1-009"
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10e_log="$WORKTREE/.ralph/test10e.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_10e" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_with_postmortem.sh" \
+  SELECTED_ID="S1-009" \
+  RPH_VERIFY_MODE="promotion" \
+  RPH_PROMOTION_VERIFY_MODE="promotion" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10e_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit for postmortem scope ignore" >&2
+  tail -n 120 "$test10e_log" >&2 || true
+  exit 1
+fi
+pass_state="$(run_in_worktree jq -r '.items[0].passes' "$valid_prd_10e")"
+if [[ "$pass_state" != "true" ]]; then
+  echo "FAIL: expected passes=true for postmortem scope ignore" >&2
+  exit 1
+fi
+  test_pass "10e"
 fi
 
 if test_start "10b" "final verify uses RPH_FINAL_VERIFY_MODE"; then
