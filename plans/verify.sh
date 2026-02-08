@@ -876,9 +876,12 @@ PY
 }
 
 checkpoint_write_opportunity_telemetry() {
-  # Opportunity telemetry is local quick-mode only.
-  if [[ "$MODE" != "quick" || -n "${CI:-}" ]]; then
-    return 0
+  local selftest="${VERIFY_CHECKPOINT_TELEMETRY_SELFTEST:-0}"
+  # Opportunity telemetry is local quick-mode only (unless selftest).
+  if [[ "$selftest" != "1" ]]; then
+    if [[ "$MODE" != "quick" || -n "${CI:-}" ]]; then
+      return 0
+    fi
   fi
 
   local pybin=""
