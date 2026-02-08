@@ -212,3 +212,10 @@ Summary: acceptance commit without pass including extra detail to satisfy progre
 Commands: echo >> acceptance_tick.txt; git add; git commit (placeholder text to meet minimum command length requirements)
 Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
 Next: continue with subsequent acceptance steps in the workflow acceptance suite
+
+Date: 2026-02-07
+Summary: Hardened checkpoint skip batch behavior: preserved caller errexit in checkpoint helper subprocess paths, made unscheduled skip-cache gate entries schema-complete, and stabilized acceptance for enforce cache-hit and local-full approval isolation.
+Commands: VERIFY_ALLOW_LOCAL_FULL=1 ./plans/verify.sh full (clean snapshot worktree); ./plans/verify.sh quick (pre-push hook); ./plans/workflow_verify.sh.
+Evidence: plans/lib/verify_checkpoint.sh; plans/verify.sh; plans/workflow_acceptance.sh; reviews/postmortems/2026-02-07_checkpoint-skip-batch.md; PR #110.
+Next: Continue remaining implementation batches from ~/.claude/plans/clever-dazzling-volcano.md and keep per-batch verify + postmortem discipline.
+Story: workflow-maintenance

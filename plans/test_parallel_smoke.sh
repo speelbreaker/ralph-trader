@@ -28,8 +28,13 @@ fi
 echo "[OK] Parallel execution flags exist"
 
 # 3. Check spec validator array exists
-if ! grep -q "SPEC_VALIDATOR_SPECS=" "$SCRIPT_DIR/verify.sh"; then
+if ! grep -q "SPEC_VALIDATOR_SPECS=" "$SCRIPT_DIR/verify.sh" && \
+   ! grep -q "SPEC_VALIDATOR_SPECS=" "$SCRIPT_DIR/lib/spec_validators_group.sh"; then
   echo "[FAIL] Spec validator array not found"
+  exit 1
+fi
+if ! grep -q "spec_validators_group_build_specs" "$SCRIPT_DIR/verify.sh"; then
+  echo "[FAIL] spec_validators_group_build_specs not invoked"
   exit 1
 fi
 echo "[OK] Spec validators converted to parallel array"

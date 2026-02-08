@@ -56,6 +56,25 @@ cache_path_for() {
   echo "${CACHE_DIR}/${prefix}_${hash}.txt"
 }
 
+write_cache_atomic() {
+  local cache_path="$1"
+  local dir base tmp
+  dir="$(dirname "$cache_path")"
+  base="$(basename "$cache_path")"
+  mkdir -p "$dir" 2>/dev/null || true
+  tmp="$(mktemp "${dir}/.${base}.tmp.XXXXXX")" || return 1
+  if ! cat > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  cat "$tmp"
+  if ! mv -f "$tmp" "$cache_path"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  return 0
+}
+
 extract_ids_all() {
   local file="$1"
   awk '
@@ -89,7 +108,7 @@ extract_ids() {
     fi
   fi
   if [[ -n "$cache_path" ]]; then
-    extract_ids_all "$file" | sed '/^$/d' | sort | tee "$cache_path"
+    extract_ids_all "$file" | sed '/^$/d' | sort | write_cache_atomic "$cache_path"
   else
     extract_ids_all "$file" | sed '/^$/d' | sort
   fi
@@ -160,9 +179,9 @@ get_acceptance_test_ids() {
   fi
 
   if [[ -n "$cache_path" ]]; then
-    echo "$ids" | sort -u | tee "$cache_path"
+    printf '%s\n' "$ids" | sed '/^$/d' | sort -u | write_cache_atomic "$cache_path"
   else
-    echo "$ids" | sort -u
+    printf '%s\n' "$ids" | sed '/^$/d' | sort -u
   fi
 }
 

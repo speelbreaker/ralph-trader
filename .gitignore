@@ -8,6 +8,7 @@ patches/
 .DS_Store
 __pycache__/
 evals/
+audit/
 
 # Local Codex config
 .codex/
