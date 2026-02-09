@@ -186,8 +186,8 @@
       ],
       "verify": [
         "./plans/verify.sh",
-        "test -s docs/keys_and_secrets.md",
-        "python -c \"import json; json.load(open('evidence/phase0/keys/key_scope_probe.json'))\""
+        "python -c \"import json; json.load(open('evidence/phase0/keys/key_scope_probe.json'))\"",
+        "test -s docs/keys_and_secrets.md"
       ],
       "evidence": [
         "docs/keys_and_secrets.md",
@@ -245,9 +245,9 @@
       "scope": {
         "touch": [
           "docs/break_glass_runbook.md",
-          "evidence/phase0/break_glass/runbook_snapshot.md",
           "evidence/phase0/break_glass/drill.md",
-          "evidence/phase0/break_glass/log_excerpt.txt"
+          "evidence/phase0/break_glass/log_excerpt.txt",
+          "evidence/phase0/break_glass/runbook_snapshot.md"
         ],
         "create": [],
         "avoid": []
@@ -275,15 +275,15 @@
       "verify": [
         "./plans/verify.sh",
         "test -s docs/break_glass_runbook.md",
-        "test -s evidence/phase0/break_glass/runbook_snapshot.md",
         "test -s evidence/phase0/break_glass/drill.md",
-        "test -s evidence/phase0/break_glass/log_excerpt.txt"
+        "test -s evidence/phase0/break_glass/log_excerpt.txt",
+        "test -s evidence/phase0/break_glass/runbook_snapshot.md"
       ],
       "evidence": [
         "docs/break_glass_runbook.md",
-        "evidence/phase0/break_glass/runbook_snapshot.md",
         "evidence/phase0/break_glass/drill.md",
-        "evidence/phase0/break_glass/log_excerpt.txt"
+        "evidence/phase0/break_glass/log_excerpt.txt",
+        "evidence/phase0/break_glass/runbook_snapshot.md"
       ],
       "dependencies": [],
       "est_size": "S",
@@ -347,10 +347,10 @@
       ],
       "scope": {
         "touch": [
-          "docs/health_endpoint.md",
-          "crates/soldier_infra/src/lib.rs",
           "crates/soldier_infra/src/health.rs",
-          "crates/soldier_infra/tests/test_health.rs"
+          "crates/soldier_infra/src/lib.rs",
+          "crates/soldier_infra/tests/test_health.rs",
+          "docs/health_endpoint.md"
         ],
         "create": [],
         "avoid": []
@@ -447,14 +447,14 @@
       ],
       "scope": {
         "touch": [
+          "crates/soldier_infra/config/**",
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests",
-          "crates/soldier_infra/config"
+          "crates/soldier_infra/tests/**"
         ],
         "create": [],
         "avoid": [
-          "plans/**",
-          "crates/soldier_core/**"
+          "crates/soldier_core/**",
+          "plans/**"
         ]
       },
       "acceptance": [
@@ -527,17 +527,17 @@
       ],
       "scope": {
         "touch": [
-          "Cargo.toml",
           ".gitignore",
+          "Cargo.toml",
           "crates/soldier_core/Cargo.toml",
           "crates/soldier_core/src/lib.rs",
           "crates/soldier_infra/Cargo.toml",
           "crates/soldier_infra/src/lib.rs"
         ],
         "avoid": [
+          "artifacts/**",
           "python/**",
-          "specs/**",
-          "artifacts/**"
+          "specs/**"
         ]
       },
       "acceptance": [
@@ -596,10 +596,10 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_infra/src/deribit/public/mod.rs",
+          "crates/soldier_infra/Cargo.toml",
           "crates/soldier_infra/src/deribit/mod.rs",
-          "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/Cargo.toml"
+          "crates/soldier_infra/src/deribit/public/mod.rs",
+          "crates/soldier_infra/src/lib.rs"
         ],
         "avoid": [
           "crates/soldier_core/**"
@@ -611,7 +611,7 @@
         "GIVEN soldier_core will consume Deribit metadata (AT-333) WHEN the Deribit public module is compiled THEN the instrument structs are pub-exported from soldier_infra and importable by dependent crates."
       ],
       "steps": [
-        "Define the minimal Deribit public instrument structs needed for mapping in crates/soldier_infra/deribit/public, including tick_size, amount_step, min_amount, and contract_multiplier.",
+        "Define the minimal Deribit public instrument structs needed for mapping in crates/soldier_infra/src/deribit/public, including tick_size, amount_step, min_amount, and contract_multiplier.",
         "Add required serde derives for deserialization from Deribit API responses.",
         "Wire imports in crates/soldier_infra/src/deribit/mod.rs and src/lib.rs to expose the public module.",
         "Add basic unit tests or compile checks to verify the struct fields are correctly defined.",
@@ -663,16 +663,16 @@
       ],
       "scope": {
         "touch": [
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/risk/state.rs",
           "crates/soldier_core/src/venue/mod.rs",
           "crates/soldier_core/src/venue/types.rs",
-          "crates/soldier_core/src/risk/state.rs",
-          "crates/soldier_core/src/risk/mod.rs",
-          "crates/soldier_core/src/lib.rs",
           "crates/soldier_core/tests/test_instrument_kind_mapping.rs"
         ],
         "avoid": [
-          "crates/soldier_core/src/execution/**",
           "crates/soldier_core/policy/**",
+          "crates/soldier_core/src/execution/**",
           "crates/soldier_infra/**"
         ]
       },
@@ -683,8 +683,8 @@
         "GIVEN the RiskState enum WHEN compiled THEN it includes Healthy, Degraded, Maintenance, and Kill variants."
       ],
       "steps": [
-        "Define the RiskState enum in crates/soldier_core/risk/state.rs with the contract variants.",
-        "Define the InstrumentKind enum in crates/soldier_core/venue/types.rs with contract values.",
+        "Define the RiskState enum in crates/soldier_core/src/risk/state.rs with the contract variants.",
+        "Define the InstrumentKind enum in crates/soldier_core/src/venue/types.rs with contract values.",
         "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual \u2192 linear_future and metadata field passthrough.",
         "Add unit tests in crates/soldier_core/tests/test_instrument_kind_mapping.rs for mapping behavior and metadata passthrough (test_instrument_metadata_uses_get_instruments).",
         "Wire any required imports so the new enums are accessible where used."
@@ -778,10 +778,10 @@
         "cargo test -p soldier_core --test test_instrument_cache_ttl"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_instrument_cache_ttl output",
-        "Unit test asserts RiskState::Degraded on stale metadata",
         "Unit test asserts OPEN blocked and CLOSE/HEDGE/CANCEL allowed when metadata is stale",
-        "Unit test asserts instrument_cache_ttl_s comparison is deterministic"
+        "Unit test asserts RiskState::Degraded on stale metadata",
+        "Unit test asserts instrument_cache_ttl_s comparison is deterministic",
+        "cargo test -p soldier_core --test test_instrument_cache_ttl output"
       ],
       "dependencies": [
         "S1-002"
@@ -879,11 +879,11 @@
         "cargo test -p soldier_core --test test_instrument_cache_ttl"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_instrument_cache_ttl output",
         "Log capture shows InstrumentCacheTtlBreach with instrument_id, age_s, ttl_s",
+        "Unit test asserts instrument_cache_age_s gauge update",
         "Unit test asserts instrument_cache_hits_total and instrument_cache_stale_total increments",
         "Unit test asserts instrument_cache_refresh_errors_total increment",
-        "Unit test asserts instrument_cache_age_s gauge update"
+        "cargo test -p soldier_core --test test_instrument_cache_ttl output"
       ],
       "dependencies": [
         "S1-003"
@@ -956,14 +956,14 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/order_size.rs",
           "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/src/execution/order_size.rs",
           "crates/soldier_core/src/lib.rs",
           "crates/soldier_core/tests/test_order_size.rs"
         ],
         "avoid": [
-          "crates/soldier_infra/**",
-          "crates/soldier_core/src/venue/**"
+          "crates/soldier_core/src/venue/**",
+          "crates/soldier_infra/**"
         ]
       },
       "acceptance": [
@@ -974,7 +974,7 @@
       ],
       "steps": [
         "Review docs/order_size_discovery.md for current gaps and proposed tests.",
-        "Create crates/soldier_core/execution/order_size.rs if missing.",
+        "Create crates/soldier_core/src/execution/order_size.rs if missing.",
         "Define the OrderSize struct with contracts, qty_coin, qty_usd, and notional_usd.",
         "Implement a constructor/builder that computes canonical units based on InstrumentKind.",
         "Ensure option sizing uses qty_coin and leaves qty_usd unset.",
@@ -1066,7 +1066,7 @@
       ],
       "steps": [
         "Review docs/dispatch_map_discovery.md for current gaps and proposed tests.",
-        "Create or update crates/soldier_core/execution/dispatch_map.rs with OrderSize mapping logic.",
+        "Create or update crates/soldier_core/src/execution/dispatch_map.rs with OrderSize mapping logic.",
         "Implement the rule: exactly one canonical amount field is sent per instrument_kind.",
         "Ensure outbound request uses qty_coin for option/linear_future and qty_usd for perpetual/inverse_future.",
         "Map reduce_only from intent classification only (CLOSE/HEDGE=true, OPEN=false or omitted).",
@@ -1078,8 +1078,8 @@
         "cargo test -p soldier_core --test test_dispatch_map"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_dispatch_map output",
-        "Unit test asserts reduce_only mapping by intent classification"
+        "Unit test asserts reduce_only mapping by intent classification",
+        "cargo test -p soldier_core --test test_dispatch_map output"
       ],
       "dependencies": [
         "S1-004",
@@ -1163,10 +1163,10 @@
         "cargo test -p soldier_core --test test_order_size"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_dispatch_map output",
-        "cargo test -p soldier_core --test test_order_size output",
+        "Unit test asserts contracts_amount_match_tolerance=0.001 applied",
         "Unit test asserts order_intent_reject_unit_mismatch_total increment",
-        "Unit test asserts contracts_amount_match_tolerance=0.001 applied"
+        "cargo test -p soldier_core --test test_dispatch_map output",
+        "cargo test -p soldier_core --test test_order_size output"
       ],
       "dependencies": [
         "S1-005"
@@ -1249,8 +1249,8 @@
       ],
       "verify": [
         "./plans/verify.sh",
-        "test -f docs/order_size_discovery.md",
-        "rg -n \"OrderSize\" docs/order_size_discovery.md"
+        "rg -n \"OrderSize\" docs/order_size_discovery.md",
+        "test -f docs/order_size_discovery.md"
       ],
       "evidence": [
         "docs/order_size_discovery.md"
@@ -1315,8 +1315,8 @@
       ],
       "verify": [
         "./plans/verify.sh",
-        "test -f docs/dispatch_map_discovery.md",
-        "rg -n \"dispatch\" docs/dispatch_map_discovery.md"
+        "rg -n \"dispatch\" docs/dispatch_map_discovery.md",
+        "test -f docs/dispatch_map_discovery.md"
       ],
       "evidence": [
         "docs/dispatch_map_discovery.md"
@@ -1362,11 +1362,11 @@
       ],
       "scope": {
         "touch": [
-          "python/tools/f1_certify.py",
-          "scripts/f1_certify.py",
-          "python/tests/test_f1_certify.py",
           "artifacts/F1_CERT.json",
-          "artifacts/F1_CERT.md"
+          "artifacts/F1_CERT.md",
+          "python/tests/test_f1_certify.py",
+          "python/tools/f1_certify.py",
+          "scripts/f1_certify.py"
         ],
         "create": [],
         "avoid": []
@@ -1452,8 +1452,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/quantize.rs",
           "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/src/execution/quantize.rs",
           "crates/soldier_core/tests/test_quantize.rs"
         ],
         "avoid": [
@@ -1480,8 +1480,8 @@
         "cargo test -p soldier_core --test test_quantize"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_quantize output",
-        "Unit test asserts metric increment via in-memory metrics registry/mock"
+        "Unit test asserts metric increment via in-memory metrics registry/mock",
+        "cargo test -p soldier_core --test test_quantize output"
       ],
       "dependencies": [],
       "est_size": "S",
@@ -1560,7 +1560,7 @@
         "GIVEN quantized qty_steps and price_ticks WHEN hashing THEN those integer values (plus stable strings) are used, not raw f64."
       ],
       "steps": [
-        "Implement or update the intent_hash function in crates/soldier_core/idempotency/hash.rs to accept quantized integer inputs.",
+        "Implement or update the intent_hash function in crates/soldier_core/src/idempotency/hash.rs to accept quantized integer inputs.",
         "Remove any inclusion of wall-clock timestamps from the hash input.",
         "Use qty_steps and price_ticks (integers) alongside instrument, side, group_id, and leg_idx in the hash material.",
         "Add unit tests in crates/soldier_core/tests/test_idempotency.rs for deterministic hashing.",
@@ -1651,8 +1651,8 @@
         "cargo test -p soldier_core --test test_label"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_label output",
-        "Test assertions for LabelTooLong rejection and label parsing"
+        "Test assertions for LabelTooLong rejection and label parsing",
+        "cargo test -p soldier_core --test test_label output"
       ],
       "dependencies": [
         "S2-001"
@@ -1716,12 +1716,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/lib.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/lib.rs",
           "crates/soldier_core/src/recovery",
           "crates/soldier_core/tests/test_label_match.rs"
         ],
+        "create": [],
         "avoid": [
           "crates/soldier_core/src/execution/**"
         ]
@@ -1744,8 +1743,8 @@
         "cargo test -p soldier_core --test test_label_match"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_label_match output",
-        "Unit test asserts metric increment via in-memory metrics registry/mock"
+        "Unit test asserts metric increment via in-memory metrics registry/mock",
+        "cargo test -p soldier_core --test test_label_match output"
       ],
       "dependencies": [
         "S2-002"
@@ -1829,19 +1828,18 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/preflight.rs",
           "crates/soldier_core/src/execution/order_type_guard.rs",
           "crates/soldier_core/tests/test_preflight.rs"
         ],
+        "create": [],
         "avoid": [
           "crates/soldier_core/src/execution/dispatch_map.rs",
           "crates/soldier_core/src/execution/order_size.rs",
+          "crates/soldier_core/src/venue/**",
           "crates/soldier_core/tests/test_dispatch_map.rs",
           "crates/soldier_core/tests/test_order_size.rs",
-          "crates/soldier_core/src/venue/**",
           "crates/soldier_infra/**"
         ]
       },
@@ -1865,8 +1863,8 @@
         "cargo test -p soldier_core --test test_preflight"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_preflight output",
-        "Unit test asserts reject reasons for market/stop/linked orders"
+        "Unit test asserts reject reasons for market/stop/linked orders",
+        "cargo test -p soldier_core --test test_preflight output"
       ],
       "dependencies": [
         "S2-003"
@@ -1932,18 +1930,17 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/post_only_guard.rs",
           "crates/soldier_core/tests/test_post_only_guard.rs"
         ],
+        "create": [],
         "avoid": [
           "crates/soldier_core/src/execution/dispatch_map.rs",
           "crates/soldier_core/src/execution/order_size.rs",
+          "crates/soldier_core/src/venue/**",
           "crates/soldier_core/tests/test_dispatch_map.rs",
           "crates/soldier_core/tests/test_order_size.rs",
-          "crates/soldier_core/src/venue/**",
           "crates/soldier_infra/**"
         ]
       },
@@ -2036,11 +2033,11 @@
           "crates/soldier_core/tests/test_capabilities.rs"
         ],
         "avoid": [
+          "crates/soldier_core/src/execution/**",
           "crates/soldier_core/src/venue/cache.rs",
           "crates/soldier_core/src/venue/types.rs",
           "crates/soldier_core/tests/test_dispatch_map.rs",
           "crates/soldier_core/tests/test_order_size.rs",
-          "crates/soldier_core/src/execution/**",
           "crates/soldier_infra/**"
         ]
       },
@@ -2127,7 +2124,7 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests"
+          "crates/soldier_infra/tests/**"
         ],
         "create": [
           "crates/soldier_infra/src/store"
@@ -2234,13 +2231,13 @@
           "crates/soldier_core/src/execution/dispatch_map.rs",
           "crates/soldier_core/src/execution/order_size.rs",
           "crates/soldier_core/tests/test_dispatch_map.rs",
-          "crates/soldier_core/tests/test_order_size.rs",
-          "crates/soldier_core/tests/test_instrument_kind_mapping.rs",
-          "crates/soldier_core/tests/test_instrument_cache_ttl.rs",
-          "crates/soldier_core/tests/test_quantize.rs",
           "crates/soldier_core/tests/test_idempotency.rs",
+          "crates/soldier_core/tests/test_instrument_cache_ttl.rs",
+          "crates/soldier_core/tests/test_instrument_kind_mapping.rs",
           "crates/soldier_core/tests/test_label.rs",
-          "crates/soldier_core/tests/test_label_match.rs"
+          "crates/soldier_core/tests/test_label_match.rs",
+          "crates/soldier_core/tests/test_order_size.rs",
+          "crates/soldier_core/tests/test_quantize.rs"
         ]
       },
       "acceptance": [
@@ -2317,7 +2314,7 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests"
+          "crates/soldier_infra/tests/**"
         ],
         "create": [
           "crates/soldier_infra/src/store"
@@ -2412,14 +2409,14 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests"
+          "crates/soldier_infra/tests/**"
         ],
         "create": [
           "crates/soldier_infra/src/wal.rs"
         ],
         "avoid": [
-          "crates/soldier_infra/src/deribit/**",
-          "crates/soldier_core/**"
+          "crates/soldier_core/**",
+          "crates/soldier_infra/src/deribit/**"
         ]
       },
       "acceptance": [
@@ -2523,8 +2520,8 @@
           "crates/soldier_core/tests/test_liquidity_gate.rs"
         ],
         "avoid": [
-          "plans/**",
-          "crates/soldier_infra/**"
+          "crates/soldier_infra/**",
+          "plans/**"
         ]
       },
       "acceptance": [
@@ -2546,9 +2543,9 @@
         "cargo test -p soldier_core --test test_liquidity_gate"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_liquidity_gate output",
         "Assertions in test_liquidity_gate.rs for Rejected(ExpectedSlippageTooHigh) and Rejected(LiquidityGateNoL2)",
-        "Captured LiquidityGateReject log entry with WAP and slippage_bps in test output"
+        "Captured LiquidityGateReject log entry with WAP and slippage_bps in test output",
+        "cargo test -p soldier_core --test test_liquidity_gate output"
       ],
       "dependencies": [],
       "est_size": "S",
@@ -2626,9 +2623,9 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_infra/src/deribit/mod.rs",
           "crates/soldier_core/src/risk/mod.rs",
-          "crates/soldier_core/src/risk/state.rs"
+          "crates/soldier_core/src/risk/state.rs",
+          "crates/soldier_infra/src/deribit/mod.rs"
         ],
         "create": [
           "crates/soldier_infra/src/deribit/account_summary.rs",
@@ -2656,13 +2653,13 @@
       ],
       "verify": [
         "./plans/verify.sh",
-        "cargo test -p soldier_core --test test_fee_staleness",
-        "cargo test -p soldier_core --test test_fee_cache"
+        "cargo test -p soldier_core --test test_fee_cache",
+        "cargo test -p soldier_core --test test_fee_staleness"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_fee_staleness output",
+        "Test assertions showing soft-stale fee buffer and hard-stale OPEN rejection",
         "cargo test -p soldier_core --test test_fee_cache output",
-        "Test assertions showing soft-stale fee buffer and hard-stale OPEN rejection"
+        "cargo test -p soldier_core --test test_fee_staleness output"
       ],
       "dependencies": [
         "S5-000"
@@ -2750,8 +2747,8 @@
           "crates/soldier_core/tests/test_net_edge_gate.rs"
         ],
         "avoid": [
-          "plans/**",
-          "crates/soldier_infra/**"
+          "crates/soldier_infra/**",
+          "plans/**"
         ]
       },
       "acceptance": [
@@ -2772,8 +2769,8 @@
         "cargo test -p soldier_core --test test_net_edge_gate"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_net_edge_gate output",
-        "Test assertions for Rejected(NetEdgeTooLow) and Rejected(NetEdgeInputMissing)"
+        "Test assertions for Rejected(NetEdgeTooLow) and Rejected(NetEdgeInputMissing)",
+        "cargo test -p soldier_core --test test_net_edge_gate output"
       ],
       "dependencies": [
         "S5-001"
@@ -2845,8 +2842,8 @@
           "crates/soldier_core/tests/test_pricer.rs"
         ],
         "avoid": [
-          "plans/**",
-          "crates/soldier_infra/**"
+          "crates/soldier_infra/**",
+          "plans/**"
         ]
       },
       "acceptance": [
@@ -2867,8 +2864,8 @@
         "cargo test -p soldier_core --test test_pricer"
       ],
       "evidence": [
-        "cargo test -p soldier_core --test test_pricer output",
-        "Test assertions showing limit_price clamp and min-edge enforcement"
+        "Test assertions showing limit_price clamp and min-edge enforcement",
+        "cargo test -p soldier_core --test test_pricer output"
       ],
       "dependencies": [
         "S5-002"
@@ -2939,8 +2936,8 @@
           "crates/soldier_core/tests/test_phase1_dispatch_auth.rs"
         ],
         "avoid": [
-          "plans/**",
-          "crates/soldier_infra/**"
+          "crates/soldier_infra/**",
+          "plans/**"
         ]
       },
       "acceptance": [
@@ -2963,9 +2960,9 @@
         "cargo test -p soldier_core --test test_phase1_dispatch_auth"
       ],
       "evidence": [
+        "Gate sequence trace assertions showing ordered steps",
         "cargo test -p soldier_core --test test_gate_ordering output",
-        "cargo test -p soldier_core --test test_phase1_dispatch_auth output",
-        "Gate sequence trace assertions showing ordered steps"
+        "cargo test -p soldier_core --test test_phase1_dispatch_auth output"
       ],
       "dependencies": [
         "S5-003"
@@ -3424,8 +3421,8 @@
       ],
       "evidence": [
         "cargo test output showing test_missing_config_fails_closed PASS",
-        "evidence/phase1/config_fail_closed/missing_keys_matrix.json",
-        "docs/critical_config_keys.md"
+        "docs/critical_config_keys.md",
+        "evidence/phase1/config_fail_closed/missing_keys_matrix.json"
       ],
       "dependencies": [],
       "est_size": "S",
@@ -3495,8 +3492,8 @@
         "cargo test -p soldier_infra --test test_crash_mid_intent"
       ],
       "evidence": [
-        "cargo test output showing test_crash_mid_intent_no_duplicate_dispatch PASS",
-        "OR evidence/phase1/crash_mid_intent/drill.md with recorded proof"
+        "OR evidence/phase1/crash_mid_intent/drill.md with recorded proof",
+        "cargo test output showing test_crash_mid_intent_no_duplicate_dispatch PASS"
       ],
       "dependencies": [
         "S4-000",
