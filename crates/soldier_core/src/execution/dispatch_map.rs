@@ -41,10 +41,11 @@ pub enum DispatchRejectReason {
     UnitMismatch,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DispatchReject {
     pub risk_state: RiskState,
     pub reason: DispatchRejectReason,
+    pub mismatch_delta: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,7 +88,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
     index_price: f64,
 ) -> Result<DeribitOrderAmount, DispatchReject> {
     if order_size.qty_coin.is_some() && order_size.qty_usd.is_some() {
-        return reject_unit_mismatch(metrics, "both_qty");
+        return reject_unit_mismatch(metrics, "both_qty", None);
     }
 
     let (canonical_amount, derived_qty_coin) = match instrument_kind {
@@ -97,7 +98,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
         }
         InstrumentKind::Perpetual | InstrumentKind::InverseFuture => {
             if index_price <= 0.0 {
-                return reject_unit_mismatch(metrics, "invalid_index_price");
+                return reject_unit_mismatch(metrics, "invalid_index_price", None);
             }
             let amount = order_size.qty_usd;
             let derived_qty_coin = amount.map(|qty_usd| qty_usd / index_price);
@@ -107,7 +108,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
 
     let canonical_amount = match canonical_amount {
         Some(amount) => amount,
-        None => return reject_unit_mismatch(metrics, "missing_canonical"),
+        None => return reject_unit_mismatch(metrics, "missing_canonical", None),
     };
 
     // Derive or Validate contracts
@@ -124,10 +125,12 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
     if let Some(contracts) = order_size.contracts {
         let multiplier = match contract_multiplier {
             Some(value) => value,
-            None => return reject_unit_mismatch(metrics, "missing_multiplier_for_validation"),
+            None => return reject_unit_mismatch(metrics, "missing_multiplier_for_validation", None),
         };
         if !contracts_amount_matches(canonical_amount, contracts, multiplier) {
-            return reject_unit_mismatch(metrics, "contracts_mismatch");
+            let expected = contracts as f64 * multiplier;
+            let delta = (canonical_amount - expected).abs();
+            return reject_unit_mismatch(metrics, "contracts_mismatch", Some(delta));
         }
     }
 
@@ -145,11 +148,16 @@ pub fn order_intent_reject_unit_mismatch_total() -> u64 {
 fn reject_unit_mismatch(
     metrics: &DispatchMetrics,
     reason: &str,
+    mismatch_delta: Option<f64>,
 ) -> Result<DeribitOrderAmount, DispatchReject> {
     metrics.unit_mismatch_total.fetch_add(1, Ordering::Relaxed);
-    eprintln!("order_intent_reject_unit_mismatch reason={}", reason);
+    eprintln!(
+        "order_intent_reject_unit_mismatch reason={} mismatch_delta={:?}",
+        reason, mismatch_delta
+    );
     Err(DispatchReject {
         risk_state: RiskState::Degraded,
         reason: DispatchRejectReason::UnitMismatch,
+        mismatch_delta,
     })
 }

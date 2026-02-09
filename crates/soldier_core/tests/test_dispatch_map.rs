@@ -1,5 +1,5 @@
 use soldier_core::execution::{
-    DispatchMetrics, DispatchRejectReason, IntentClassification, OrderSize,
+    DispatchMetrics, IntentClassification, OrderSize, RejectReason,
     map_order_size_to_deribit_amount, map_order_size_to_deribit_amount_with_metrics,
     reduce_only_from_intent_classification,
 };
@@ -87,7 +87,7 @@ fn test_dispatch_rejects_both_canonical_amounts() {
         map_order_size_to_deribit_amount(InstrumentKind::Option, &invalid, Some(1.0), index_price)
             .unwrap_err();
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn test_dispatch_rejects_missing_canonical_amount() {
         map_order_size_to_deribit_amount(InstrumentKind::Option, &invalid, Some(1.0), index_price)
             .unwrap_err();
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn test_dispatch_rejects_wrong_canonical_field_for_kind() {
     )
     .unwrap_err();
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
 
     let perp_wrong = OrderSize {
         contracts: None,
@@ -140,7 +140,7 @@ fn test_dispatch_rejects_wrong_canonical_field_for_kind() {
     )
     .unwrap_err();
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
 }
 
 #[test]
@@ -225,7 +225,8 @@ fn validates_contracts_if_present() {
         index_price,
     )
     .unwrap_err();
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
+    assert_eq!(err.mismatch_delta, Some(3.0));
 }
 
 #[test]
@@ -239,7 +240,7 @@ fn reject_zero_index_price_for_usd_instruments() {
     );
     let err = map_order_size_to_deribit_amount(InstrumentKind::Perpetual, &perp, Some(10.0), 0.0)
         .unwrap_err();
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch); // "invalid_index_price" maps to UnitMismatch
+    assert_eq!(err.reason, RejectReason::UnitMismatch); // "invalid_index_price" maps to UnitMismatch
 }
 
 #[test]
@@ -266,6 +267,8 @@ fn rejects_contract_mismatch_and_increments_counter() {
     let after = metrics.unit_mismatch_total();
 
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
+    let mismatch_delta = err.mismatch_delta.expect("mismatch delta missing");
+    assert!((mismatch_delta - 0.1).abs() < 1e-9);
     assert_eq!(after, before + 1);
 }

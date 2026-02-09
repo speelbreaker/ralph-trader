@@ -1174,7 +1174,7 @@
       "est_size": "XS",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md If a mismatch is detected: **reject the intent** and set `RiskState::Degraded`",

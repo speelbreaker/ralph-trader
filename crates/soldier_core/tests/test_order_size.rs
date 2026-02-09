@@ -1,5 +1,5 @@
 use soldier_core::execution::{
-    DispatchRejectReason, OrderSize, contracts_amount_matches, map_order_size_to_deribit_amount,
+    OrderSize, RejectReason, contracts_amount_matches, map_order_size_to_deribit_amount,
 };
 use soldier_core::risk::RiskState;
 use soldier_core::venue::InstrumentKind;
@@ -89,5 +89,7 @@ fn rejects_contract_mismatch_in_dispatch_map() {
             .expect_err("mismatch should reject");
 
     assert_eq!(err.risk_state, RiskState::Degraded);
-    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+    assert_eq!(err.reason, RejectReason::UnitMismatch);
+    let mismatch_delta = err.mismatch_delta.expect("mismatch delta missing");
+    assert!((mismatch_delta - 0.1).abs() < 1e-9);
 }
