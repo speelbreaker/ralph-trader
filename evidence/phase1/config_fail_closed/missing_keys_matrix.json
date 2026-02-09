@@ -1,19 +1,35 @@
 {
-  "generated": "2026-01-27T19:21:53Z",
+  "generated": "2026-02-09T17:42:59Z",
   "test": "test_missing_config_fails_closed",
   "results": {
-    "INSTRUMENT_CACHE_TTL_MS": {
+    "INSTRUMENT_TICK_SIZE": {
       "status": "PASS",
       "reason": "CONFIG_MISSING"
     },
-    "MAX_ORDER_SIZE": {
+    "INSTRUMENT_AMOUNT_STEP": {
+      "status": "PASS",
+      "reason": "CONFIG_MISSING"
+    },
+    "INSTRUMENT_MIN_AMOUNT": {
+      "status": "PASS",
+      "reason": "CONFIG_MISSING"
+    },
+    "L2_BOOK_SNAPSHOT": {
+      "status": "PASS",
+      "reason": "CONFIG_MISSING"
+    },
+    "FEE_MODEL_CACHED_AT_TS_MS": {
+      "status": "PASS",
+      "reason": "CONFIG_MISSING"
+    },
+    "NET_EDGE_MIN_USD": {
       "status": "PASS",
       "reason": "CONFIG_MISSING"
     }
   },
   "summary": {
-    "total": 2,
-    "passed": 2,
+    "total": 6,
+    "passed": 6,
     "failed": 0
   }
 }
