@@ -36,6 +36,15 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 
 ## Contract requirements (brief)
 - `OrderSize` struct fields are required as shown in `CONTRACT.md` §1.0.
+  - Contract OrderSize struct (reference):
+    ```rust
+    pub struct OrderSize {
+      pub contracts: Option<i64>,
+      pub qty_coin: Option<f64>,
+      pub qty_usd: Option<f64>,
+      pub notional_usd: f64,
+    }
+    ```
 - Canonical units and notional rules:
   - `option | linear_future`: canonical = `qty_coin`; `qty_usd` must be unset; `notional_usd = qty_coin * index_price`.
   - `perpetual | inverse_future`: canonical = `qty_usd`; derive `qty_coin = qty_usd / index_price`; `notional_usd = qty_usd`.
@@ -57,6 +66,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - Contract tolerance is relative (`contracts_amount_match_tolerance = 0.001` with epsilon `1e-9`); current code uses absolute epsilon only (`UNIT_MISMATCH_EPSILON = 1e-9`).
 - No use of `contracts_amount_match_tolerance` in code today; current checks only use `UNIT_MISMATCH_EPSILON`.
 - Contract requires `contract_size_usd` for USD-sized instruments; current mapping only accepts a single `contract_multiplier` input and applies it to all instrument kinds.
+- USD-sized derivation effectively assumes `contract_size_usd == contract_multiplier`, which is not stated or guaranteed by the contract.
 - `index_price > 0` is required by contract market-data definitions, but `OrderSize::new` does not validate for coin-sized instruments (dispatch_map only checks USD-sized mapping).
 - Current mapping logic is only exercised by tests; production dispatch path is not yet using `OrderSize` helpers.
 
