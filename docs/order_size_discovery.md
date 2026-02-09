@@ -56,6 +56,7 @@ OrderSize struct, sizing invariants, and mapping to contract sizing rules. No di
 - `DispatchRejectReason::UnitMismatch` does not match the contract-required `Rejected(ContractsAmountMismatch)` for sizing mismatches.
 - Contract tolerance is relative (`contracts_amount_match_tolerance = 0.001` with epsilon `1e-9`); current code uses absolute epsilon only (`UNIT_MISMATCH_EPSILON = 1e-9`).
 - No use of `contracts_amount_match_tolerance` in code today; current checks only use `UNIT_MISMATCH_EPSILON`.
+- Contract requires `contract_size_usd` for USD-sized instruments; current mapping only accepts a single `contract_multiplier` input and applies it to all instrument kinds.
 - `index_price > 0` is required by contract market-data definitions, but `OrderSize::new` does not validate for coin-sized instruments (dispatch_map only checks USD-sized mapping).
 - Current mapping logic is only exercised by tests; production dispatch path is not yet using `OrderSize` helpers.
 
