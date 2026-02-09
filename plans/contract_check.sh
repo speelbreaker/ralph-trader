@@ -252,12 +252,12 @@ if [[ "$contract_ref_count" -lt 1 ]]; then
   add_violation "MAJOR" "PRD" "story has empty contract_refs" "plans/prd.json" "NEEDS_HUMAN"
 fi
 
-touch_count="$(story_jq_r '(.scope.touch // []) | length' 2>/dev/null || echo "0")"
+touch_count="$(story_jq_r '((.scope.touch // []) + (.scope.create // [])) | length' 2>/dev/null || echo "0")"
 if ! [[ "$touch_count" =~ ^[0-9]+$ ]]; then
   touch_count=0
 fi
 if [[ "$touch_count" -lt 1 ]]; then
-  add_violation "MAJOR" "PRD" "story has empty scope.touch" "plans/prd.json" "NEEDS_HUMAN"
+  add_violation "MAJOR" "PRD" "story has empty scope (no touch or create paths)" "plans/prd.json" "NEEDS_HUMAN"
 fi
 
 if [[ ! -f "$contract_file" ]]; then
@@ -267,7 +267,8 @@ fi
 normalize_text() {
   # Shared normalization: lowercase, strip markdown chars, collapse spaces,
   # remove spaces around punctuation (colon, braces, parens, brackets)
-  sed 's/[*`_]/ /g' \
+  sed 's/\\//g' \
+    | sed 's/[*`_]/ /g' \
     | sed 's/[[:space:]][[:space:]]*/ /g' \
     | sed 's/ :/:/g; s/: /:/g' \
     | sed 's/ {/{/g; s/{ /{/g' \
