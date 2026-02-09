@@ -2107,8 +2107,8 @@ detect_cheating() {
   # Threshold of 3 allows for normal refactoring (e.g., replacing loose range checks with
   # tighter equality, or removing expect() calls when restructuring code).
   local removed_asserts added_asserts net_removed
-  removed_asserts="$(grep -cE '^\-.*\b(assert|expect|should|must)\b' "$filtered" 2>/dev/null || echo 0)"
-  added_asserts="$(grep -cE '^\+.*\b(assert|expect|should|must)\b' "$filtered" 2>/dev/null || echo 0)"
+  removed_asserts="$(grep -cE '^\-.*\b(assert|expect|should|must)\b' "$filtered" 2>/dev/null)" || removed_asserts=0
+  added_asserts="$(grep -cE '^\+.*\b(assert|expect|should|must)\b' "$filtered" 2>/dev/null)" || added_asserts=0
   net_removed="$((removed_asserts - added_asserts))"
   if [[ "$net_removed" -ge 3 ]]; then
     cheats+=("removed_assertion:net_removed=${net_removed}")
