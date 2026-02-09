@@ -1,7 +1,8 @@
 use soldier_core::execution::{
-    decode_compact_label, encode_compact_label, encode_compact_label_with_hashes,
-    label_truncated_total,
+    LabelRejectReason, decode_compact_label, encode_compact_label,
+    encode_compact_label_with_hashes,
 };
+use soldier_core::risk::RiskState;
 
 #[test]
 fn test_compact_label_encode_decode() {
@@ -10,7 +11,8 @@ fn test_compact_label_encode_decode() {
     let leg_idx = 1;
     let intent_hash = 0x0123456789abcdefu64;
 
-    let label = encode_compact_label(strat_id, group_id, leg_idx, intent_hash);
+    let label =
+        encode_compact_label(strat_id, group_id, leg_idx, intent_hash).expect("encode label");
     assert!(label.len() <= 64);
 
     let parts: Vec<&str> = label.split(':').collect();
@@ -39,21 +41,13 @@ fn test_decode_parses_components() {
 }
 
 #[test]
-fn test_overlength_truncates_hashes_and_increments_counter() {
-    let before = label_truncated_total();
+fn test_overlength_rejects_label_too_long() {
     let sid = "s".repeat(80);
     let ih = "i".repeat(80);
     let gid12 = "0123456789ab";
 
-    let label = encode_compact_label_with_hashes(&sid, gid12, 0, &ih);
-    let after = label_truncated_total();
-
-    assert!(label.len() <= 64);
-    let parts: Vec<&str> = label.split(':').collect();
-    assert_eq!(parts.len(), 5);
-    assert_eq!(parts[0], "s4");
-    assert_eq!(parts[2], gid12);
-    assert_eq!(parts[3], "0");
-    assert!(parts[1].len() < sid.len() || parts[4].len() < ih.len());
-    assert_eq!(after, before + 1);
+    let err = encode_compact_label_with_hashes(&sid, gid12, 0, &ih)
+        .expect_err("expected label-too-long rejection");
+    assert_eq!(err.reason, LabelRejectReason::LabelTooLong);
+    assert_eq!(err.risk_state, RiskState::Degraded);
 }

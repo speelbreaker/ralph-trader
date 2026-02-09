@@ -11,8 +11,8 @@ pub use dispatch_map::{
 };
 pub type RejectReason = DispatchRejectReason;
 pub use label::{
-    CompactLabelParts, LabelDecodeError, decode_compact_label, encode_compact_label,
-    encode_compact_label_with_hashes, label_truncated_total,
+    CompactLabelParts, LabelDecodeError, LabelEncodeReject, LabelRejectReason,
+    decode_compact_label, encode_compact_label, encode_compact_label_with_hashes,
 };
 pub use order_size::{
     CONTRACTS_AMOUNT_MATCH_EPSILON, CONTRACTS_AMOUNT_MATCH_TOLERANCE, OrderSize, OrderSizeError,
