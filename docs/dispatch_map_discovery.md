@@ -54,5 +54,10 @@ Dispatch mapping for outbound Deribit order sizing (canonical amount selection, 
 - Accept contract size inputs that distinguish coin-sized multiplier vs USD `contract_size_usd`, and apply the correct one by `instrument_kind`.
 - Ensure production dispatch path uses this mapping helper so only the canonical amount is emitted on outbound Deribit requests.
 
+## Evidence (sources inspected)
+- `crates/soldier_core/src/execution/dispatch_map.rs`
+- `crates/soldier_core/tests/test_dispatch_map.rs`
+- `crates/soldier_core/tests/test_order_size.rs`
+
 ## Open questions
 - Should `contracts_amount_match_tolerance` be configurable in runtime config or hard-coded to the contract default before wiring mapping into production dispatch?
