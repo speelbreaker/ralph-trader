@@ -2,7 +2,8 @@
 
 use soldier_infra::config::{
     ConfigError, EVIDENCEGUARD_GLOBAL_COOLDOWN_DEFAULT, INSTRUMENT_CACHE_TTL_S_DEFAULT,
-    MM_UTIL_KILL_DEFAULT, SafetyConfigInput, apply_defaults, resolve_required_f64,
+    MM_UTIL_KILL_DEFAULT, ParamKind, SafetyConfigInput, apply_defaults, resolve_required_f64,
+    resolve_required_u64,
 };
 
 /// GIVEN config omits instrument_cache_ttl_s and evidenceguard_global_cooldown
@@ -67,6 +68,31 @@ fn test_missing_non_appendix_a_parameter_fails_closed() {
     assert_eq!(
         err.to_string(),
         "missing safety-critical config value: dd_limit (no Appendix A default)",
+        "error message MUST be deterministic"
+    );
+}
+
+/// GIVEN a mismatched Appendix A default type
+/// WHEN the parameter is missing
+/// THEN the gate fails closed with a deterministic type error.
+#[test]
+fn test_type_mismatch_fails_closed() {
+    let err = resolve_required_u64("mm_util_kill", None)
+        .expect_err("type mismatch must fail closed for safety-critical key");
+
+    assert!(
+        matches!(
+            err,
+            ConfigError::TypeMismatch {
+                key: "mm_util_kill",
+                expected: ParamKind::U64
+            }
+        ),
+        "error MUST identify the key and expected type"
+    );
+    assert_eq!(
+        err.to_string(),
+        "type mismatch for safety-critical config value: mm_util_kill (expected u64)",
         "error message MUST be deterministic"
     );
 }
