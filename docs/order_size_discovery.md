@@ -3,6 +3,9 @@
 ## Scope
 OrderSize struct, sizing invariants, and mapping to contract sizing rules. No dispatcher or policy changes.
 
+## Out of scope (contract refs)
+- Anchor-021 / VR-024 are status endpoint requirements; this discovery report makes no `/api/v1/status` changes or tests.
+
 ## Current implementation
 - `crates/soldier_core/src/execution/order_size.rs`
   - `OrderSize { contracts, qty_coin, qty_usd, notional_usd }`.
