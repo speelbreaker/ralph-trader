@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const CHOKEPOINT_RELATIVE_PATH: &str = "src/execution/build_order_intent.rs";
-const DISPATCH_MARKER: &str = "DispatchStep::DispatchAttempt";
+const EXCHANGE_CLIENT_MARKER: &str = "DispatchStep::DispatchAttempt";
 
 fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     for entry in fs::read_dir(dir)? {
@@ -42,7 +42,7 @@ fn test_dispatch_chokepoint_no_direct_exchange_client_usage() {
     for file in rs_files {
         let contents = fs::read_to_string(&file)
             .unwrap_or_else(|err| panic!("failed to read {}: {err}", file.display()));
-        if contents.contains(DISPATCH_MARKER) {
+        if contents.contains(EXCHANGE_CLIENT_MARKER) {
             let canonical = file
                 .canonicalize()
                 .unwrap_or_else(|err| panic!("failed to canonicalize {}: {err}", file.display()));
@@ -56,12 +56,12 @@ fn test_dispatch_chokepoint_no_direct_exchange_client_usage() {
 
     assert!(
         chokepoint_seen,
-        "dispatch marker '{DISPATCH_MARKER}' missing from chokepoint {}",
+        "exchange client marker '{EXCHANGE_CLIENT_MARKER}' missing from chokepoint {}",
         rel_path(&chokepoint, &manifest_dir)
     );
     assert!(
         offenders.is_empty(),
-        "dispatch marker '{DISPATCH_MARKER}' found outside chokepoint: {}",
+        "exchange client marker '{EXCHANGE_CLIENT_MARKER}' found outside chokepoint: {}",
         offenders.join(", ")
     );
 }
