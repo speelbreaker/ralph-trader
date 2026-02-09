@@ -5,6 +5,8 @@ pub mod order_type_guard;
 pub mod post_only_guard;
 pub mod preflight;
 pub mod quantize;
+pub mod state;
+pub mod tlsm;
 
 pub use dispatch_map::{
     map_order_size_to_deribit_amount, map_order_size_to_deribit_amount_with_metrics,
@@ -36,6 +38,10 @@ pub use quantize::{
     quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
     Side,
+};
+pub use state::{TlsmEvent, TlsmIntent, TlsmLedgerEntry, TlsmSide, TlsmState};
+pub use tlsm::{
+    tlsm_out_of_order_total, Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -2263,7 +2263,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md 2.1 Trade Lifecycle State Machine (TLSM)",
