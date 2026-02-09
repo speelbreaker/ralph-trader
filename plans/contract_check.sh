@@ -239,7 +239,7 @@ evidence_required=()
 
 if [[ -n "$story_json" ]]; then
   contract_refs_checked_json="$(story_jq_c '(.contract_refs // [])' 2>/dev/null || echo '[]')"
-  read_lines touch_patterns < <(story_jq_r '.scope.touch[]?' 2>/dev/null || true)
+  read_lines touch_patterns < <(story_jq_r '((.scope.touch // []) + (.scope.create // []))[]?' 2>/dev/null || true)
   read_lines avoid_patterns < <(story_jq_r '.scope.avoid[]?' 2>/dev/null || true)
   read_lines evidence_required < <(story_jq_r '.evidence[]?' 2>/dev/null || true)
 fi
@@ -445,6 +445,12 @@ matches_any() {
     [[ -z "$pat" ]] && continue
     if [[ "$path" == $pat ]]; then
       return 0
+    fi
+    # Auto-expand bare directory patterns (no wildcards) as prefixes
+    if [[ "$pat" != *"*"* && "$pat" != *"?"* ]]; then
+      if [[ "$path" == ${pat}/* ]]; then
+        return 0
+      fi
     fi
   done
   return 1
