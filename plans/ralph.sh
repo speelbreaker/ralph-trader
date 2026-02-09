@@ -2103,8 +2103,12 @@ detect_cheating() {
     fi
   done
 
-  if grep -qE '^\-.*\b(assert|expect|should|must)\b' "$filtered"; then
-    cheats+=("removed_assertion")
+  # Check net assertion count: only flag if more assertions removed than added
+  local removed_asserts added_asserts
+  removed_asserts="$(grep -cE '^\-.*\b(assert|expect|should|must)\b' "$filtered" 2>/dev/null || echo 0)"
+  added_asserts="$(grep -cE '^\+.*\b(assert|expect|should|must)\b' "$filtered" 2>/dev/null || echo 0)"
+  if [[ "$removed_asserts" -gt "$added_asserts" ]]; then
+    cheats+=("removed_assertion:net_removed=$((removed_asserts - added_asserts))")
   fi
   if grep -qE '^\+.*(#\[ignore\]|@pytest\.mark\.(skip|skipif)|\.skip\(|it\.skip|xtest|xit|pending\(|\.pending\()' "$filtered"; then
     cheats+=("added_skip_marker")
