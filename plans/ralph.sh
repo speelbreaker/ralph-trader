@@ -1823,6 +1823,13 @@ patterns = [p.strip() for p in os.environ.get("RPH_PATTERNS","").splitlines() if
 for p in patterns:
     if fnmatch.fnmatchcase(file, p):
         sys.exit(0)
+    # Auto-expand bare directory patterns: "dir" also matches "dir/**"
+    if "*" not in p and "?" not in p and not p.endswith("/"):
+        if fnmatch.fnmatchcase(file, p + "/*") or fnmatch.fnmatchcase(file, p + "/**"):
+            sys.exit(0)
+        # Handle deep nesting: dir/sub/file via startswith
+        if file.startswith(p + "/"):
+            sys.exit(0)
 sys.exit(1)
 ' "$file"
     return $?
@@ -1831,6 +1838,12 @@ sys.exit(1)
     [[ -z "$pattern" ]] && continue
     if [[ "$file" == $pattern ]]; then
       return 0
+    fi
+    # Auto-expand bare directory patterns for bash fallback
+    if [[ "$pattern" != *"*"* && "$pattern" != *"?"* ]]; then
+      if [[ "$file" == ${pattern}/* ]]; then
+        return 0
+      fi
     fi
   done <<<"$patterns"
   return 1
