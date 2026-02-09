@@ -1,0 +1,82 @@
+# Phase 1 Gate Tests
+# UTC: 2026-02-09T17:42:50Z
+# HEAD: 0f89186a
+
+$ cargo test -p soldier_core --test test_dispatch_chokepoint
+   Compiling soldier_core v0.1.0 (/Users/admin/Desktop/ralph-slice1-rerun/crates/soldier_core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.40s
+     Running tests/test_dispatch_chokepoint.rs (target/debug/deps/test_dispatch_chokepoint-1340bb7e111160bf)
+
+running 2 tests
+test test_dispatch_visibility_is_restricted ... ok
+test test_dispatch_chokepoint_no_direct_exchange_client_usage ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+$ cargo test -p soldier_core --test test_intent_determinism
+   Compiling soldier_core v0.1.0 (/Users/admin/Desktop/ralph-slice1-rerun/crates/soldier_core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.89s
+     Running tests/test_intent_determinism.rs (target/debug/deps/test_intent_determinism-8dd64b9e487dcc23)
+
+running 2 tests
+test test_intent_determinism_hashmap_order_independent ... ok
+test test_intent_determinism_same_inputs_same_hash ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+$ cargo test -p soldier_core --test test_rejection_side_effects
+   Compiling soldier_core v0.1.0 (/Users/admin/Desktop/ralph-slice1-rerun/crates/soldier_core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.81s
+     Running tests/test_rejection_side_effects.rs (target/debug/deps/test_rejection_side_effects-3a4deace50570d15)
+
+running 1 test
+test test_rejected_intent_has_no_side_effects ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+$ cargo test -p soldier_core --test test_intent_id_propagation
+   Compiling soldier_core v0.1.0 (/Users/admin/Desktop/ralph-slice1-rerun/crates/soldier_core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.91s
+     Running tests/test_intent_id_propagation.rs (target/debug/deps/test_intent_id_propagation-b7815d0d7cf93b59)
+
+running 1 test
+test test_intent_id_propagates_to_logs_and_metrics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+$ cargo test -p soldier_core --test test_gate_ordering
+   Compiling soldier_core v0.1.0 (/Users/admin/Desktop/ralph-slice1-rerun/crates/soldier_core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.77s
+     Running tests/test_gate_ordering.rs (target/debug/deps/test_gate_ordering-8593737869d632df)
+
+running 2 tests
+test test_gate_ordering_constraints ... ok
+test gate_sequence_is_deterministic_for_open ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+$ cargo test -p soldier_core --test test_missing_config
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running tests/test_missing_config.rs (target/debug/deps/test_missing_config-2879c3121ecd66b8)
+
+running 1 test
+[P1Evidence] Wrote: /Users/admin/Desktop/ralph-slice1-rerun/evidence/phase1/config_fail_closed/missing_keys_matrix.json
+test test_missing_config_fails_closed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+
+$ cargo test -p soldier_infra --test test_crash_mid_intent
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/test_crash_mid_intent.rs (target/debug/deps/test_crash_mid_intent-43fc52f0fe3f1943)
+
+running 1 test
+test test_crash_mid_intent_no_duplicate_dispatch ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
