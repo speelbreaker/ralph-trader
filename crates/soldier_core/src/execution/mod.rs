@@ -1,4 +1,5 @@
 pub mod dispatch_map;
+pub mod gate;
 pub mod label;
 pub mod order_size;
 pub mod order_type_guard;
@@ -13,6 +14,11 @@ pub use dispatch_map::{
     order_intent_reject_unit_mismatch_total, reduce_only_from_intent_classification,
     DeribitOrderAmount, DispatchMetrics, DispatchReject, DispatchRejectReason,
     IntentClassification,
+};
+pub use gate::{
+    evaluate_liquidity_gate, expected_slippage_bps_samples, liquidity_gate_reject_total,
+    LiquidityGateConfig, LiquidityGateIntent, LiquidityGateOutcome, LiquidityGateReject,
+    LiquidityGateRejectReason, L2BookLevel, L2BookSnapshot,
 };
 pub type RejectReason = DispatchRejectReason;
 pub use label::{
