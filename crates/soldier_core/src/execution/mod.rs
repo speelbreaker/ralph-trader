@@ -12,7 +12,10 @@ pub use label::{
     CompactLabelParts, LabelDecodeError, decode_compact_label, encode_compact_label,
     encode_compact_label_with_hashes, label_truncated_total,
 };
-pub use order_size::OrderSize;
+pub use order_size::{
+    CONTRACTS_AMOUNT_MATCH_EPSILON, CONTRACTS_AMOUNT_MATCH_TOLERANCE, OrderSize, OrderSizeError,
+    contracts_amount_matches,
+};
 pub use quantize::{
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, Side,
     quantization_reject_too_small_total, quantize,
