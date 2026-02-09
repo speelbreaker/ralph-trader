@@ -1,8 +1,8 @@
 {
   "build_id": "seed-build",
   "contract_version": "5.2",
-  "expires_at_ts_ms": 1770686408562,
-  "generated_ts_ms": 1770600008562,
+  "expires_at_ts_ms": 1770688426263,
+  "generated_ts_ms": 1770602026263,
   "release_gate_metrics": {
     "atomic_naked_events_24h": 0,
     "fee_drag_ratio": 0.1,

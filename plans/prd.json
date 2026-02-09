@@ -1351,27 +1351,27 @@
       "story_ref": "S1.12 F1 cert tooling",
       "category": "tooling",
       "description": "Implement f1_certify tooling and F1_CERT artifacts required for promotion verify.",
-  "contract_refs": [
-      "CONTRACT.md f1_cert (from artifacts/F1_CERT.json: {status, generated_ts_ms, build_id, runtime_config_hash, contract_version})",
-      "CONTRACT.md python/tools/f1_certify.py",
-      "CONTRACT.md outputs artifacts/F1_CERT.json and artifacts/F1_CERT.md",
-      "CONTRACT.md artifacts/F1_CERT.json MUST include (minimum): { status, generated_ts_ms, build_id, runtime_config_hash, contract_version }"
-  ],
+      "contract_refs": [
+        "CONTRACT.md f1_cert (from artifacts/F1_CERT.json: {status, generated_ts_ms, build_id, runtime_config_hash, contract_version})",
+        "CONTRACT.md python/tools/f1_certify.py",
+        "CONTRACT.md outputs artifacts/F1_CERT.json and artifacts/F1_CERT.md",
+        "CONTRACT.md artifacts/F1_CERT.json MUST include (minimum): { status, generated_ts_ms, build_id, runtime_config_hash, contract_version }"
+      ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md PL-10 — f1_certify CLI + F1_CERT schema completeness (contract)",
         "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.12 — F1 cert tooling (moved from PL-10; Slice 1 exception)"
       ],
-  "scope": {
-    "touch": [
-      "python/tools/f1_certify.py",
-      "scripts/f1_certify.py",
-      "python/tests/test_f1_certify.py",
-      "artifacts/F1_CERT.json",
-      "artifacts/F1_CERT.md"
-    ],
-    "create": [],
-    "avoid": []
-  },
+      "scope": {
+        "touch": [
+          "python/tools/f1_certify.py",
+          "scripts/f1_certify.py",
+          "python/tests/test_f1_certify.py",
+          "artifacts/F1_CERT.json",
+          "artifacts/F1_CERT.md"
+        ],
+        "create": [],
+        "avoid": []
+      },
       "acceptance": [
         "GIVEN python/tools/f1_certify.py WHEN run with --window=24h and --out artifacts/F1_CERT.json THEN it writes artifacts/F1_CERT.json with required keys {status, generated_ts_ms, build_id, runtime_config_hash, contract_version, expires_at_ts_ms, release_gate_metrics}.",
         "GIVEN scripts/f1_certify.py WHEN invoked with the same CLI args THEN it delegates to python/tools/f1_certify.py and produces identical outputs.",
@@ -1397,7 +1397,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [],
       "reason_codes": {
@@ -1406,30 +1406,30 @@
       },
       "enforcement_point": "PolicyGuard",
       "failure_mode": [],
-  "observability": {
-    "metrics": [
-      {
-        "name": "release_gate_metrics.fee_drag_ratio",
-        "type": "gauge",
-        "unit": "pct",
-        "labels": []
+      "observability": {
+        "metrics": [
+          {
+            "name": "release_gate_metrics.fee_drag_ratio",
+            "type": "gauge",
+            "unit": "pct",
+            "labels": []
+          },
+          {
+            "name": "release_gate_metrics.replay_coverage_pct",
+            "type": "gauge",
+            "unit": "pct",
+            "labels": []
+          },
+          {
+            "name": "release_gate_metrics.atomic_naked_events_24h",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
       },
-      {
-        "name": "release_gate_metrics.replay_coverage_pct",
-        "type": "gauge",
-        "unit": "pct",
-        "labels": []
-      },
-      {
-        "name": "release_gate_metrics.atomic_naked_events_24h",
-        "type": "counter",
-        "unit": "count",
-        "labels": []
-      }
-    ],
-    "status_fields": [],
-    "status_contract_ats": []
-  },
       "implementation_tests": [
         "python/tests/test_f1_certify.py"
       ]
