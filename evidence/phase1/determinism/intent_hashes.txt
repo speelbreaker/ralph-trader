@@ -1,8 +1,12 @@
 # test_intent_determinism_same_inputs_same_hash
-# Generated: 2026-01-27T19:21:51Z
-# Runs: 2
+# Generated: 2026-02-09T08:05:08Z
+# Inputs: instrument_id=BTC-PERP side=Buy group_id=determinism-group-1 leg_idx=0
+# Encoding: len-prefixed LE strings, u8 side, i64 qty_steps/price_ticks, u8 leg_idx
 
-run_1: abc123def456
-run_2: abc123def456
+intent_bytes_hex: 080000004254432d50455250000c00000000000000c9000000000000001300000064657465726d696e69736d2d67726f75702d3100
+intent_hash_hex: e8639a540275a523
+
+run_1: e8639a540275a523
+run_2: e8639a540275a523
 
 RESULT: PASS (all hashes identical)
