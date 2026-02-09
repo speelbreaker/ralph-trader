@@ -2778,7 +2778,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "net_edge_usd = gross_edge_usd - fee_usd - expected_slippage_usd.",
