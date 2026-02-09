@@ -4,3 +4,5 @@
 pub mod config;
 pub mod deribit;
 pub mod health;
+
+pub use deribit::{DeribitInstrument, DeribitPublicInstrumentKind, DeribitPublicSettlementPeriod};
