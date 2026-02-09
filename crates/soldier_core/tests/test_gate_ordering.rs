@@ -3,9 +3,9 @@ use std::sync::atomic::Ordering;
 use soldier_core::execution::{
     build_order_intent, take_build_order_intent_outcome, take_dispatch_trace,
     take_gate_sequence_trace, with_build_order_intent_context, BuildOrderIntentContext,
-    BuildOrderIntentObservers, BuildOrderIntentOutcome, DispatchStep, GateStep,
-    InstrumentQuantization, IntentClassification, L2BookLevel, L2BookSnapshot, LiquidityGateConfig,
-    OrderIntent, OrderType, OrderTypeGuardConfig, RecordIntentOutcome, Side,
+    BuildOrderIntentObservers, BuildOrderIntentOutcome, BuildOrderIntentRejectReason, DispatchStep,
+    GateStep, InstrumentQuantization, IntentClassification, L2BookLevel, L2BookSnapshot,
+    LiquidityGateConfig, OrderIntent, OrderType, OrderTypeGuardConfig, RecordIntentOutcome, Side,
 };
 use soldier_core::risk::{FeeModelSnapshot, FeeStalenessConfig, RiskState};
 use soldier_core::venue::InstrumentKind;
@@ -98,4 +98,59 @@ fn gate_sequence_is_deterministic_for_open() {
     assert_eq!(outcome, BuildOrderIntentOutcome::Allowed);
     assert_eq!(observers.recorded_total.load(Ordering::Relaxed), 1);
     assert_eq!(observers.dispatch_total.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn test_gate_ordering_constraints() {
+    let observers = BuildOrderIntentObservers::new();
+    let mut context = context_for_open(observers.clone());
+    context.risk_state = RiskState::Degraded;
+    let intent = base_intent();
+    let result = with_build_order_intent_context(context, || {
+        build_order_intent(intent, OrderTypeGuardConfig::default())
+    });
+    assert!(result.is_ok());
+
+    let outcome = take_build_order_intent_outcome().expect("expected outcome");
+    assert_eq!(
+        outcome,
+        BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::DispatchAuth(
+            RiskState::Degraded
+        ))
+    );
+    assert!(take_dispatch_trace().is_empty());
+    assert_eq!(observers.recorded_total.load(Ordering::Relaxed), 0);
+    assert_eq!(observers.dispatch_total.load(Ordering::Relaxed), 0);
+
+    let observers = BuildOrderIntentObservers::new();
+    let intent = base_intent();
+    let result = with_build_order_intent_context(context_for_open(observers.clone()), || {
+        build_order_intent(intent, OrderTypeGuardConfig::default())
+    });
+    assert!(result.is_ok());
+    assert_eq!(
+        take_dispatch_trace(),
+        vec![DispatchStep::RecordIntent, DispatchStep::DispatchAttempt]
+    );
+    let outcome = take_build_order_intent_outcome().expect("expected outcome");
+    assert_eq!(outcome, BuildOrderIntentOutcome::Allowed);
+    assert_eq!(observers.recorded_total.load(Ordering::Relaxed), 1);
+    assert_eq!(observers.dispatch_total.load(Ordering::Relaxed), 1);
+
+    let observers = BuildOrderIntentObservers::new();
+    let mut context = context_for_open(observers.clone());
+    context.record_outcome = RecordIntentOutcome::Failed;
+    let intent = base_intent();
+    let result = with_build_order_intent_context(context, || {
+        build_order_intent(intent, OrderTypeGuardConfig::default())
+    });
+    assert!(result.is_ok());
+    assert_eq!(take_dispatch_trace(), vec![DispatchStep::RecordIntent]);
+    let outcome = take_build_order_intent_outcome().expect("expected outcome");
+    assert_eq!(
+        outcome,
+        BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::RecordedBeforeDispatch)
+    );
+    assert_eq!(observers.recorded_total.load(Ordering::Relaxed), 1);
+    assert_eq!(observers.dispatch_total.load(Ordering::Relaxed), 0);
 }
