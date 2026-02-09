@@ -108,6 +108,42 @@ fn test_dispatch_rejects_missing_canonical_amount() {
 }
 
 #[test]
+fn test_dispatch_rejects_wrong_canonical_field_for_kind() {
+    let index_price = 100_000.0;
+    let option_wrong = OrderSize {
+        contracts: None,
+        qty_coin: None,
+        qty_usd: Some(10_000.0),
+        notional_usd: 10_000.0,
+    };
+    let err = map_order_size_to_deribit_amount(
+        InstrumentKind::Option,
+        &option_wrong,
+        Some(1.0),
+        index_price,
+    )
+    .unwrap_err();
+    assert_eq!(err.risk_state, RiskState::Degraded);
+    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+
+    let perp_wrong = OrderSize {
+        contracts: None,
+        qty_coin: Some(0.2),
+        qty_usd: None,
+        notional_usd: 20_000.0,
+    };
+    let err = map_order_size_to_deribit_amount(
+        InstrumentKind::Perpetual,
+        &perp_wrong,
+        Some(10.0),
+        index_price,
+    )
+    .unwrap_err();
+    assert_eq!(err.risk_state, RiskState::Degraded);
+    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+}
+
+#[test]
 fn test_reduce_only_flag_set_by_intent_classification() {
     assert_eq!(
         reduce_only_from_intent_classification(IntentClassification::Close),
