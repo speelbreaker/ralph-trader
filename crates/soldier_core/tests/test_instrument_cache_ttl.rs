@@ -28,6 +28,30 @@ fn test_fresh_instrument_cache_is_healthy() {
 }
 
 #[test]
+fn test_instrument_cache_ttl_boundary_is_healthy() {
+    let _guard = TEST_MUTEX.lock().expect("instrument cache test mutex");
+    let ttl = Duration::from_secs(10);
+    let mut cache = InstrumentCache::new(ttl);
+    let base = Instant::now();
+    cache.insert_with_instant("BTC-BOUNDARY", "metadata", base);
+
+    let hits_before = instrument_cache_hits_total();
+    let stale_before = instrument_cache_stale_total();
+    let read = cache
+        .get_with_instant("BTC-BOUNDARY", base + ttl)
+        .expect("cache hit");
+    let hits_after = instrument_cache_hits_total();
+    let stale_after = instrument_cache_stale_total();
+    let age_s = instrument_cache_age_s();
+
+    assert_eq!(read.risk_state, RiskState::Healthy);
+    assert_eq!(read.metadata, &"metadata");
+    assert!(hits_after > hits_before);
+    assert_eq!(stale_after, stale_before);
+    assert!((age_s - 10.0).abs() < 0.001);
+}
+
+#[test]
 fn test_stale_instrument_cache_sets_degraded() {
     let _guard = TEST_MUTEX.lock().expect("instrument cache test mutex");
     let ttl = Duration::from_secs(10);
