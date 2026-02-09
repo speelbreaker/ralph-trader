@@ -379,7 +379,7 @@ if [[ "${#hard_missing[@]}" -gt 0 ]]; then
   add_violation "MAJOR" "CONTRACT_REFS" "missing/weak contract refs: $(printf '%s; ' "${hard_missing[@]}")" "$contract_file" "PATCH_CONTRACT"
 fi
 if [[ "${#soft_missing[@]}" -gt 0 ]]; then
-  add_followup "soft anchor refs not found in CONTRACT.md (non-blocking): $(printf '%s; ' "${soft_missing[@]}")"
+  add_rationale "soft anchor refs not in CONTRACT.md (informational): $(printf '%s; ' "${soft_missing[@]}")"
 fi
 
 head_before=""
