@@ -19,6 +19,6 @@ pub use order_size::{
     contracts_amount_matches,
 };
 pub use quantize::{
-    InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, Side,
-    quantization_reject_too_small_total, quantize,
+    InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
+    Side, quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
 };
