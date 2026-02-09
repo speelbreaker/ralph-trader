@@ -1,0 +1,6 @@
+serde_json v1.0.149
+serde_json feature "default"
+soldier_infra v0.1.0 (/Users/admin/Desktop/ralph-slice1-rerun/crates/soldier_infra)
+soldier_infra feature "default" (command-line)
+serde_json feature "std"
+serde_json feature "default" (*)

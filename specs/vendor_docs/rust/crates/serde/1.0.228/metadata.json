@@ -1,0 +1,9 @@
+{
+  "crate": "serde",
+  "version": "1.0.228",
+  "retrieved_at_utc": "2026-02-09T04:30:00Z",
+  "cargo_lock_sha256": "aa4ac97513b80235db0a7a6e1e2bcab9d7e390730ea7af51a6c4ee7b1ecc3601",
+  "resolved_features_sha256": "f85a49ec5ed68350f833e407de64d5d3689771fd02034cfeec1b91f3ec31b708",
+  "topics": ["derive", "attributes", "serde_json_interop"],
+  "source": "docsrs"
+}
