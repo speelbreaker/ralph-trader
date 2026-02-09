@@ -1,3 +1,10 @@
+pub mod fees;
 pub mod state;
 
+pub use fees::{
+    evaluate_fee_staleness, fee_model_cache_age_s, fee_model_refresh_fail_total,
+    record_fee_model_refresh_fail, FeeModelCache, FeeModelSnapshot, FeeStalenessConfig,
+    FeeStalenessDecision, FEE_CACHE_HARD_S_DEFAULT, FEE_CACHE_SOFT_S_DEFAULT,
+    FEE_MODEL_POLL_INTERVAL_MS, FEE_MODEL_POLL_INTERVAL_S, FEE_STALE_BUFFER_DEFAULT,
+};
 pub use state::{PolicyGuard, RiskState, TradingMode};
