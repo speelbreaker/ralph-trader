@@ -4,6 +4,9 @@ use std::fmt;
 pub const INSTRUMENT_CACHE_TTL_S_DEFAULT: u64 = 3600;
 pub const EVIDENCEGUARD_GLOBAL_COOLDOWN_DEFAULT: u64 = 120;
 pub const MM_UTIL_KILL_DEFAULT: f64 = 0.95;
+const KEY_INSTRUMENT_CACHE_TTL_S: &str = "instrument_cache_ttl_s";
+const KEY_EVIDENCEGUARD_GLOBAL_COOLDOWN: &str = "evidenceguard_global_cooldown";
+const KEY_MM_UTIL_KILL: &str = "mm_util_kill";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
@@ -79,11 +82,11 @@ impl Default for AppendixADefaults {
 impl AppendixADefaults {
     pub fn lookup(&self, key: &str) -> Option<DefaultValue> {
         match key {
-            "instrument_cache_ttl_s" => Some(DefaultValue::U64(self.instrument_cache_ttl_s)),
-            "evidenceguard_global_cooldown" => {
+            KEY_INSTRUMENT_CACHE_TTL_S => Some(DefaultValue::U64(self.instrument_cache_ttl_s)),
+            KEY_EVIDENCEGUARD_GLOBAL_COOLDOWN => {
                 Some(DefaultValue::U64(self.evidenceguard_global_cooldown))
             }
-            "mm_util_kill" => Some(DefaultValue::F64(self.mm_util_kill)),
+            KEY_MM_UTIL_KILL => Some(DefaultValue::F64(self.mm_util_kill)),
             _ => None,
         }
     }
@@ -106,17 +109,17 @@ pub struct SafetyConfig {
 pub fn apply_defaults(input: SafetyConfigInput) -> Result<SafetyConfig, ConfigError> {
     let defaults = AppendixADefaults::default();
     let instrument_cache_ttl_s = resolve_required_u64_with_defaults(
-        "instrument_cache_ttl_s",
+        KEY_INSTRUMENT_CACHE_TTL_S,
         input.instrument_cache_ttl_s,
         &defaults,
     )?;
     let evidenceguard_global_cooldown = resolve_required_u64_with_defaults(
-        "evidenceguard_global_cooldown",
+        KEY_EVIDENCEGUARD_GLOBAL_COOLDOWN,
         input.evidenceguard_global_cooldown,
         &defaults,
     )?;
     let mm_util_kill =
-        resolve_required_f64_with_defaults("mm_util_kill", input.mm_util_kill, &defaults)?;
+        resolve_required_f64_with_defaults(KEY_MM_UTIL_KILL, input.mm_util_kill, &defaults)?;
 
     Ok(SafetyConfig {
         instrument_cache_ttl_s,
