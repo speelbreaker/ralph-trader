@@ -1,9 +1,9 @@
 # F1 Certification Summary
 
 - Status: PASS
-- Generated (ms): 1770429879749
+- Generated (ms): 1770600008562
 - Window: 24h
-- Expires at (ms): 1770516279749
+- Expires at (ms): 1770686408562
 - Build ID: seed-build
 - Contract Version: 5.2
 - Runtime Config Hash: 9c2fd64f65b932f8d8924fa952b50569e76ebd9ce6d6d04b9884cb486e0f395b
