@@ -264,12 +264,23 @@ if [[ ! -f "$contract_file" ]]; then
   add_violation "CRITICAL" "CONTRACT_FILE" "missing contract file: $contract_file" "$contract_file" "NEEDS_HUMAN"
 fi
 
+normalize_text() {
+  # Shared normalization: lowercase, strip markdown chars, collapse spaces,
+  # remove spaces around punctuation (colon, braces, parens, brackets)
+  sed 's/[*`_]/ /g' \
+    | sed 's/[[:space:]][[:space:]]*/ /g' \
+    | sed 's/ :/:/g; s/: /:/g' \
+    | sed 's/ {/{/g; s/{ /{/g' \
+    | sed 's/ }/}/g; s/} /}/g' \
+    | sed 's/ (/(/g; s/( /(/g' \
+    | sed 's/ )/)/g; s/) /)/g' \
+    | sed 's/^ //; s/ $//'
+}
+
 contract_text_lc=""
 if [[ -f "$contract_file" ]]; then
   contract_text_lc="$(
-    tr '[:upper:]' '[:lower:]' < "$contract_file" \
-      | sed 's/[*`_]/ /g' \
-      | sed 's/[[:space:]]\+/ /g'
+    tr '[:upper:]' '[:lower:]' < "$contract_file" | normalize_text
   )"
 fi
 
@@ -279,7 +290,7 @@ normalize_ref() {
   r="${r#CONTRACT.md }"
   r="${r#CONTRACT.md}"
   r="${r//$'\xc2\xa7'/}"
-  echo "$r" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
+  echo "$r" | tr '[:upper:]' '[:lower:]' | normalize_text
 }
 
 contract_contains_lc() {
