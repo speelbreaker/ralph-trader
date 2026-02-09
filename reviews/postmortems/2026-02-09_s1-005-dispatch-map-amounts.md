@@ -1,8 +1,8 @@
 # PR Postmortem (Agent-Filled)
 
 ## 0) What shipped
-- Feature/behavior: Align dispatch mapping to canonical OrderSize amounts, add intent-classification reduce_only helper, and expand dispatch-map tests (canonical amount selection + reject both canonical fields).
-- What value it has (what problem it solves, upgrade provides): Ensures Deribit outbound sizing uses the correct canonical units and reduce_only is derived solely from intent classification, with regression coverage for invalid dual-canonical input.
+- Feature/behavior: Align dispatch mapping to canonical OrderSize amounts, add intent-classification reduce_only helper, and expand dispatch-map tests (canonical amount selection + reject missing/both canonical fields).
+- What value it has (what problem it solves, upgrade provides): Ensures Deribit outbound sizing uses the correct canonical units and reduce_only is derived solely from intent classification, with regression coverage for invalid or absent canonical sizing.
 - Governing contract: specs/CONTRACT.md
 
 ## 1) Constraint (ONE)

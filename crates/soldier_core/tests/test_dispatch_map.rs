@@ -91,6 +91,23 @@ fn test_dispatch_rejects_both_canonical_amounts() {
 }
 
 #[test]
+fn test_dispatch_rejects_missing_canonical_amount() {
+    let index_price = 100_000.0;
+    let invalid = OrderSize {
+        contracts: None,
+        qty_coin: None,
+        qty_usd: None,
+        notional_usd: 0.0,
+    };
+
+    let err =
+        map_order_size_to_deribit_amount(InstrumentKind::Option, &invalid, Some(1.0), index_price)
+            .unwrap_err();
+    assert_eq!(err.risk_state, RiskState::Degraded);
+    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+}
+
+#[test]
 fn test_reduce_only_flag_set_by_intent_classification() {
     assert_eq!(
         reduce_only_from_intent_classification(IntentClassification::Close),
