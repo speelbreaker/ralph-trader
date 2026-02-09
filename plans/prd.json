@@ -448,11 +448,10 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests"
-        ],
-        "create": [
+          "crates/soldier_infra/tests",
           "crates/soldier_infra/config"
         ],
+        "create": [],
         "avoid": [
           "plans/**",
           "crates/soldier_core/**"
