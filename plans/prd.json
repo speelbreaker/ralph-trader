@@ -3018,11 +3018,11 @@
         "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/tests/test_dispatch_chokepoint.rs",
           "docs/dispatch_chokepoint.md"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
