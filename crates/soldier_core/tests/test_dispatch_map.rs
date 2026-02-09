@@ -1,38 +1,43 @@
 use soldier_core::execution::{
-    DispatchMetrics, DispatchRejectReason, OrderSize, map_order_size_to_deribit_amount,
-    map_order_size_to_deribit_amount_with_metrics,
+    DispatchMetrics, DispatchRejectReason, IntentClassification, OrderSize,
+    map_order_size_to_deribit_amount, map_order_size_to_deribit_amount_with_metrics,
+    reduce_only_from_intent_classification,
 };
 use soldier_core::risk::RiskState;
 use soldier_core::venue::InstrumentKind;
 
 #[test]
-fn acceptance_option_and_perp_mapping() {
+fn test_dispatch_amount_field_coin_vs_usd() {
     let index_price = 100_000.0;
-    // Option: 0.3 coin. Multiplier 1.0 (standard option). Contracts = 0.3 / 1.0 = 0 (rounded? No, options are usually 1 contract = 1 coin).
-    // Actually, Deribit Options: 1 contract = 1 instrument. Multiplier = 1.
-    // If qty_coin is 0.3, and multiplier is 1, contracts would be 0 (0.3 rounds to 0).
-    // Wait, Options usually have size in contracts (e.g. 1 contract).
-    // If I send 0.3 BTC, that's 0.3 contracts?
-    // Deribit: "amount": "Amount in contract units". For options, 1 contract = 1 coin?
-    // Let's assume multiplier = 1.0 for options for this test.
 
     let option = OrderSize::new(InstrumentKind::Option, None, Some(0.3), None, index_price);
-    // Passing multiplier 1.0
+    assert_eq!(option.qty_coin, Some(0.3));
+    assert_eq!(option.qty_usd, None);
     let option_amount =
         map_order_size_to_deribit_amount(InstrumentKind::Option, &option, Some(1.0), index_price)
             .unwrap();
     assert!((option_amount.amount - 0.3).abs() < 1e-9);
-    // 0.3 contracts rounds to 0? Or is it fractional?
-    // Rounding: 0.3 -> 0.
-    // OrderSize contracts is i64.
-    // So if I send 0.3, derived contracts is 0.
-    assert_eq!(option_amount.contracts, Some(0));
+    assert_eq!(option_amount.derived_qty_coin, Some(0.3));
 
-    let option_qty_coin = option_amount.derived_qty_coin.expect("derived qty coin");
-    assert!((option_qty_coin - 0.3).abs() < 1e-9);
+    let linear = OrderSize::new(
+        InstrumentKind::LinearFuture,
+        None,
+        Some(1.2),
+        None,
+        index_price,
+    );
+    assert_eq!(linear.qty_coin, Some(1.2));
+    assert_eq!(linear.qty_usd, None);
+    let linear_amount = map_order_size_to_deribit_amount(
+        InstrumentKind::LinearFuture,
+        &linear,
+        Some(1.0),
+        index_price,
+    )
+    .unwrap();
+    assert!((linear_amount.amount - 1.2).abs() < 1e-9);
+    assert_eq!(linear_amount.derived_qty_coin, Some(1.2));
 
-    // Perp: 30,000 USD. Multiplier 10.0 (e.g. 10 USD per contract).
-    // Contracts = 30000 / 10 = 3000.
     let perp = OrderSize::new(
         InstrumentKind::Perpetual,
         None,
@@ -40,14 +45,69 @@ fn acceptance_option_and_perp_mapping() {
         Some(30_000.0),
         index_price,
     );
+    assert_eq!(perp.qty_usd, Some(30_000.0));
+    assert_eq!(perp.qty_coin, None);
     let perp_amount =
         map_order_size_to_deribit_amount(InstrumentKind::Perpetual, &perp, Some(10.0), index_price)
             .unwrap();
     assert!((perp_amount.amount - 30_000.0).abs() < 1e-9);
-    assert_eq!(perp_amount.contracts, Some(3000));
+    assert_eq!(perp_amount.derived_qty_coin, Some(0.3));
 
-    let perp_qty_coin = perp_amount.derived_qty_coin.expect("derived qty coin");
-    assert!((perp_qty_coin - 0.3).abs() < 1e-9);
+    let inverse = OrderSize::new(
+        InstrumentKind::InverseFuture,
+        None,
+        None,
+        Some(12_500.0),
+        index_price,
+    );
+    assert_eq!(inverse.qty_usd, Some(12_500.0));
+    assert_eq!(inverse.qty_coin, None);
+    let inverse_amount = map_order_size_to_deribit_amount(
+        InstrumentKind::InverseFuture,
+        &inverse,
+        Some(10.0),
+        index_price,
+    )
+    .unwrap();
+    assert!((inverse_amount.amount - 12_500.0).abs() < 1e-9);
+    assert_eq!(inverse_amount.derived_qty_coin, Some(0.125));
+}
+
+#[test]
+fn test_dispatch_rejects_both_canonical_amounts() {
+    let index_price = 100_000.0;
+    let invalid = OrderSize {
+        contracts: None,
+        qty_coin: Some(0.1),
+        qty_usd: Some(10_000.0),
+        notional_usd: 10_000.0,
+    };
+
+    let err =
+        map_order_size_to_deribit_amount(InstrumentKind::Option, &invalid, Some(1.0), index_price)
+            .unwrap_err();
+    assert_eq!(err.risk_state, RiskState::Degraded);
+    assert_eq!(err.reason, DispatchRejectReason::UnitMismatch);
+}
+
+#[test]
+fn test_reduce_only_flag_set_by_intent_classification() {
+    assert_eq!(
+        reduce_only_from_intent_classification(IntentClassification::Close),
+        Some(true)
+    );
+    assert_eq!(
+        reduce_only_from_intent_classification(IntentClassification::Hedge),
+        Some(true)
+    );
+    assert_eq!(
+        reduce_only_from_intent_classification(IntentClassification::Open),
+        None
+    );
+    assert_eq!(
+        reduce_only_from_intent_classification(IntentClassification::Cancel),
+        None
+    );
 }
 
 #[test]

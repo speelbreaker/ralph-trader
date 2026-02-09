@@ -3,9 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::risk::RiskState;
 use crate::venue::InstrumentKind;
 
-use super::OrderSize;
-
-const UNIT_MISMATCH_EPSILON: f64 = 1e-9;
+use super::{OrderSize, contracts_amount_matches};
 
 pub struct DispatchMetrics {
     unit_mismatch_total: AtomicU64,
@@ -47,6 +45,23 @@ pub enum DispatchRejectReason {
 pub struct DispatchReject {
     pub risk_state: RiskState,
     pub reason: DispatchRejectReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntentClassification {
+    Open,
+    Close,
+    Hedge,
+    Cancel,
+}
+
+pub fn reduce_only_from_intent_classification(
+    classification: IntentClassification,
+) -> Option<bool> {
+    match classification {
+        IntentClassification::Close | IntentClassification::Hedge => Some(true),
+        IntentClassification::Open | IntentClassification::Cancel => None,
+    }
 }
 
 pub fn map_order_size_to_deribit_amount(
@@ -111,8 +126,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
             Some(value) => value,
             None => return reject_unit_mismatch(metrics, "missing_multiplier_for_validation"),
         };
-        let expected = contracts as f64 * multiplier;
-        if !approx_eq(canonical_amount, expected, UNIT_MISMATCH_EPSILON) {
+        if !contracts_amount_matches(canonical_amount, contracts, multiplier) {
             return reject_unit_mismatch(metrics, "contracts_mismatch");
         }
     }
@@ -126,10 +140,6 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
 
 pub fn order_intent_reject_unit_mismatch_total() -> u64 {
     DISPATCH_METRICS.unit_mismatch_total()
-}
-
-fn approx_eq(lhs: f64, rhs: f64, epsilon: f64) -> bool {
-    (lhs - rhs).abs() <= epsilon
 }
 
 fn reject_unit_mismatch(
