@@ -1,4 +1,4 @@
-use soldier_core::execution::{InstrumentQuantization, QuantizedFields, Side};
+use soldier_core::execution::{InstrumentQuantization, QuantizedSteps, Side};
 use soldier_core::idempotency::{IntentHashInput, intent_hash};
 
 #[test]
@@ -10,13 +10,14 @@ fn test_intent_hash_deterministic_from_quantized() {
     };
 
     let first = meta
-        .quantize(Side::Buy, 1.29, 100.74)
+        .quantize_steps(Side::Buy, 1.29, 100.74)
         .expect("quantize first");
     let second = meta
-        .quantize(Side::Buy, 1.24, 100.51)
+        .quantize_steps(Side::Buy, 1.24, 100.51)
         .expect("quantize second");
 
-    assert_eq!(first, second);
+    assert_eq!(first.qty_steps, second.qty_steps);
+    assert_eq!(first.price_ticks, second.price_ticks);
 
     let input_a = IntentHashInput {
         instrument_id: "BTC-PERP",
@@ -47,7 +48,9 @@ fn test_intent_hash_excludes_timestamps() {
         intent_hash(&intent.input)
     }
 
-    let quantized = QuantizedFields {
+    let quantized = QuantizedSteps {
+        qty_steps: 12,
+        price_ticks: 201,
         qty_q: 1.2,
         limit_price_q: 100.5,
     };
@@ -77,28 +80,47 @@ fn test_intent_hash_excludes_timestamps() {
 }
 
 #[test]
-fn test_intent_hash_uses_quantized_fields_verbatim() {
+fn test_intent_hash_uses_quantized_steps_only() {
     let base = IntentHashInput {
         instrument_id: "ETH-PERP",
         side: Side::Buy,
-        quantized: QuantizedFields {
-            qty_q: 1.21,
+        quantized: QuantizedSteps {
+            qty_steps: 12,
+            price_ticks: 201,
+            qty_q: 1.2,
             limit_price_q: 100.5,
         },
         group_id: "group-3",
         leg_idx: 0,
     };
 
-    let adjusted = IntentHashInput {
+    let float_adjusted = IntentHashInput {
         instrument_id: "ETH-PERP",
         side: Side::Buy,
-        quantized: QuantizedFields {
-            qty_q: 1.24,
+        quantized: QuantizedSteps {
+            qty_steps: 12,
+            price_ticks: 201,
+            qty_q: 1.2000001,
+            limit_price_q: 100.5000001,
+        },
+        group_id: "group-3",
+        leg_idx: 0,
+    };
+
+    assert_eq!(intent_hash(&base), intent_hash(&float_adjusted));
+
+    let step_adjusted = IntentHashInput {
+        instrument_id: "ETH-PERP",
+        side: Side::Buy,
+        quantized: QuantizedSteps {
+            qty_steps: 13,
+            price_ticks: 201,
+            qty_q: 1.3,
             limit_price_q: 100.5,
         },
         group_id: "group-3",
         leg_idx: 0,
     };
 
-    assert_ne!(intent_hash(&base), intent_hash(&adjusted));
+    assert_ne!(intent_hash(&base), intent_hash(&step_adjusted));
 }

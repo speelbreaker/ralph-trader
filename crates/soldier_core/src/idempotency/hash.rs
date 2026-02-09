@@ -1,4 +1,4 @@
-use crate::execution::{QuantizedFields, Side};
+use crate::execution::{QuantizedSteps, Side};
 
 const PRIME1: u64 = 11400714785074694791;
 const PRIME2: u64 = 14029467366897019727;
@@ -10,7 +10,7 @@ const PRIME5: u64 = 2870177450012600261;
 pub struct IntentHashInput<'a> {
     pub instrument_id: &'a str,
     pub side: Side,
-    pub quantized: QuantizedFields,
+    pub quantized: QuantizedSteps,
     pub group_id: &'a str,
     pub leg_idx: u8,
 }
@@ -19,8 +19,8 @@ pub fn intent_hash(input: &IntentHashInput<'_>) -> u64 {
     let mut buf = Vec::with_capacity(64);
     write_str(&mut buf, input.instrument_id);
     write_u8(&mut buf, side_code(input.side));
-    write_f64_bits(&mut buf, input.quantized.qty_q);
-    write_f64_bits(&mut buf, input.quantized.limit_price_q);
+    write_i64(&mut buf, input.quantized.qty_steps);
+    write_i64(&mut buf, input.quantized.price_ticks);
     write_str(&mut buf, input.group_id);
     write_u8(&mut buf, input.leg_idx);
     xxhash64(&buf)
@@ -43,8 +43,8 @@ fn write_u8(buf: &mut Vec<u8>, value: u8) {
     buf.push(value);
 }
 
-fn write_f64_bits(buf: &mut Vec<u8>, value: f64) {
-    buf.extend_from_slice(&value.to_bits().to_le_bytes());
+fn write_i64(buf: &mut Vec<u8>, value: i64) {
+    buf.extend_from_slice(&value.to_le_bytes());
 }
 
 fn xxhash64(input: &[u8]) -> u64 {
