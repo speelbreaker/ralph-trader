@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 use soldier_core::risk::{PolicyGuard, RiskState, TradingMode};
 use soldier_core::venue::{
     InstrumentCache, instrument_cache_age_s, instrument_cache_hits_total,
-    instrument_cache_stale_total,
+    instrument_cache_refresh_errors_total, instrument_cache_stale_total,
+    record_instrument_cache_refresh_error, take_instrument_cache_ttl_breach,
 };
 
 static TEST_MUTEX: Mutex<()> = Mutex::new(());
@@ -21,10 +22,12 @@ fn test_fresh_instrument_cache_is_healthy() {
         .get_with_instant("BTC-PERP", base + Duration::from_secs(5))
         .expect("cache hit");
     let hits_after = instrument_cache_hits_total();
+    let age_s = instrument_cache_age_s();
 
     assert_eq!(read.risk_state, RiskState::Healthy);
     assert_eq!(read.metadata, &"metadata");
     assert!(hits_after > hits_before);
+    assert!((age_s - 5.0).abs() < 0.001);
 }
 
 #[test]
@@ -58,6 +61,7 @@ fn test_stale_instrument_cache_sets_degraded() {
     let mut cache = InstrumentCache::new(ttl);
     let base = Instant::now();
     cache.insert_with_instant("ETH-PERP", "stale", base);
+    let _ = take_instrument_cache_ttl_breach();
 
     let hits_before = instrument_cache_hits_total();
     let before = instrument_cache_stale_total();
@@ -73,6 +77,10 @@ fn test_stale_instrument_cache_sets_degraded() {
     assert!(after > before);
     assert!(hits_after > hits_before);
     assert!((age_s - 30.0).abs() < 0.001);
+    let breach = take_instrument_cache_ttl_breach().expect("ttl breach log");
+    assert_eq!(breach.instrument_id, "ETH-PERP");
+    assert!((breach.age_s - 30.0).abs() < 0.001);
+    assert!((breach.ttl_s - 10.0).abs() < 0.001);
 }
 
 #[test]
@@ -93,4 +101,14 @@ fn test_instrument_cache_ttl_blocks_opens_allows_closes() {
     assert!(mode.allows_close());
     assert!(mode.allows_hedge());
     assert!(mode.allows_cancel());
+}
+
+#[test]
+fn test_instrument_cache_refresh_errors_increment() {
+    let _guard = TEST_MUTEX.lock().expect("instrument cache test mutex");
+    let before = instrument_cache_refresh_errors_total();
+    record_instrument_cache_refresh_error();
+    let after = instrument_cache_refresh_errors_total();
+
+    assert_eq!(after, before + 1);
 }
