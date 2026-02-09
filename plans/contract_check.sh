@@ -460,6 +460,7 @@ is_ignored_file() {
   case "$1" in
     plans/progress.txt|plans/progress_archive.txt) return 0 ;;
     .ralph/*|plans/logs/*) return 0 ;;
+    reviews/postmortems/*) return 0 ;;
   esac
   return 1
 }
