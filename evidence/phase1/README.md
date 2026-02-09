@@ -24,10 +24,10 @@
 
 ## What failed
 - No Phase 1 gate failures in the local completion run.
-- Hosted CI run `21842775668` failed overall due `pr-template-lint`; the `verify` job itself passed.
+- Earlier hosted runs (`21842775668`, `21842850883`) failed on `pr-template-lint` before PR body sections were fixed.
 
 ## What remains risky
-- Overall CI remains red until `pr-template-lint` is resolved; Phase 1 gate evidence is still present via local run artifacts plus hosted verify job output.
+- CI is green for run `21843261304`; remaining risk is evidence drift if future commits are made without retargeting run links.
 
 ---
 
