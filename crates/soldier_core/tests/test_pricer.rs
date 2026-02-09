@@ -1,4 +1,4 @@
-use soldier_core::execution::{price_ioc_limit, PricerIntent, RejectReason, Side};
+use soldier_core::execution::{PricerIntent, RejectReason, Side, price_ioc_limit};
 
 fn intent(
     side: Side,

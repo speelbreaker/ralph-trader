@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use soldier_core::risk::{
-    evaluate_fee_staleness, FeeStalenessConfig, PolicyGuard, RiskState, TradingMode,
+    FeeStalenessConfig, PolicyGuard, RiskState, TradingMode, evaluate_fee_staleness,
 };
 
 static TEST_MUTEX: Mutex<()> = Mutex::new(());

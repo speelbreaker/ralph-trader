@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TradeIdRecord {
@@ -289,7 +289,7 @@ fn unescape_field(value: &str) -> Result<String, TradeIdRegistryError> {
                 other => {
                     return Err(TradeIdRegistryError::Parse(format!(
                         "invalid escape: %{other}"
-                    )))
+                    )));
                 }
             };
             out.push(ch);

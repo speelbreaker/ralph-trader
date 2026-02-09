@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::risk::RiskState;
 use crate::venue::InstrumentKind;
 
-use super::{contracts_amount_matches, OrderSize};
+use super::{OrderSize, contracts_amount_matches};
 
 pub struct DispatchMetrics {
     unit_mismatch_total: AtomicU64,
@@ -126,7 +126,7 @@ pub fn map_order_size_to_deribit_amount_with_metrics(
         let multiplier = match contract_multiplier {
             Some(value) => value,
             None => {
-                return reject_unit_mismatch(metrics, "missing_multiplier_for_validation", None)
+                return reject_unit_mismatch(metrics, "missing_multiplier_for_validation", None);
             }
         };
         if !contracts_amount_matches(canonical_amount, contracts, multiplier) {

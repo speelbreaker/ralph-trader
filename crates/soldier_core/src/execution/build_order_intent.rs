@@ -1,15 +1,15 @@
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::risk::{evaluate_fee_staleness, FeeModelSnapshot, FeeStalenessConfig, RiskState};
+use crate::risk::{FeeModelSnapshot, FeeStalenessConfig, RiskState, evaluate_fee_staleness};
 
 use super::{
-    evaluate_liquidity_gate, evaluate_net_edge_gate, preflight, price_ioc_limit, quantize_steps,
     InstrumentQuantization, IntentClassification, L2BookSnapshot, LiquidityGateConfig,
     LiquidityGateIntent, LiquidityGateRejectReason, NetEdgeGateIntent, NetEdgeRejectReason,
     OrderIntent, OrderTypeGuardConfig, OrderTypeRejectReason, PreflightReject, PricerIntent,
-    QuantizeRejectReason, RejectReason, Side,
+    QuantizeRejectReason, RejectReason, Side, evaluate_liquidity_gate, evaluate_net_edge_gate,
+    preflight, price_ioc_limit, quantize_steps,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

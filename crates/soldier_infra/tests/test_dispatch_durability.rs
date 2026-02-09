@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use soldier_infra::store::RecordOutcome;

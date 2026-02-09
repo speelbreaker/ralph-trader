@@ -16,9 +16,9 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -124,8 +124,7 @@ impl LedgerRecord {
 
     fn to_line(&self) -> String {
         format!(
-            "intent_hash={}|group_id={}|leg_idx={}|instrument={}|side={}|qty_steps={}|qty_q={}|limit_price_q={}|price_ticks={}|tls_state={}|created_ts={}|sent_ts={}|ack_ts={}|last_fill_ts={}|exchange_order_id={}|last_trade_id={}"
-            ,
+            "intent_hash={}|group_id={}|leg_idx={}|instrument={}|side={}|qty_steps={}|qty_q={}|limit_price_q={}|price_ticks={}|tls_state={}|created_ts={}|sent_ts={}|ack_ts={}|last_fill_ts={}|exchange_order_id={}|last_trade_id={}",
             self.intent_hash,
             escape_field(&self.group_id),
             self.leg_idx,

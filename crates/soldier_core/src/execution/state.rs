@@ -11,7 +11,10 @@ pub enum TlsmState {
 
 impl TlsmState {
     pub fn is_terminal(self) -> bool {
-        matches!(self, TlsmState::Filled | TlsmState::Canceled | TlsmState::Failed)
+        matches!(
+            self,
+            TlsmState::Filled | TlsmState::Canceled | TlsmState::Failed
+        )
     }
 
     pub fn as_str(self) -> &'static str {

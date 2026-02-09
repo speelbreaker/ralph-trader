@@ -75,9 +75,9 @@ impl LiquidityGateMetrics {
 
     pub fn reject_total(&self, reason: LiquidityGateRejectReason) -> u64 {
         match reason {
-            LiquidityGateRejectReason::ExpectedSlippageTooHigh => self
-                .reject_expected_slippage_total
-                .load(Ordering::Relaxed),
+            LiquidityGateRejectReason::ExpectedSlippageTooHigh => {
+                self.reject_expected_slippage_total.load(Ordering::Relaxed)
+            }
             LiquidityGateRejectReason::LiquidityGateNoL2 => {
                 self.reject_no_l2_total.load(Ordering::Relaxed)
             }
@@ -101,7 +101,8 @@ impl LiquidityGateMetrics {
     }
 
     fn record_expected_slippage(&self) {
-        self.expected_slippage_samples.fetch_add(1, Ordering::Relaxed);
+        self.expected_slippage_samples
+            .fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -183,7 +184,11 @@ fn reject_slippage(stats: LiquidityGateStats) -> LiquidityGateReject {
 }
 
 fn reject_no_l2(wap: Option<f64>, slippage_bps: Option<f64>) -> LiquidityGateReject {
-    reject_with_metrics(LiquidityGateRejectReason::LiquidityGateNoL2, wap, slippage_bps)
+    reject_with_metrics(
+        LiquidityGateRejectReason::LiquidityGateNoL2,
+        wap,
+        slippage_bps,
+    )
 }
 
 fn reject_with_metrics(

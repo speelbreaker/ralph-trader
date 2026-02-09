@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use soldier_core::execution::{InstrumentQuantization, QuantizedSteps, Side};
-use soldier_core::idempotency::{intent_hash, IntentHashInput};
+use soldier_core::idempotency::{IntentHashInput, intent_hash};
 
 const EVIDENCE_RELATIVE_PATH: &str = "evidence/phase1/determinism/intent_hashes.txt";
 const SAMPLE_INSTRUMENT_ID: &str = "BTC-PERP";
@@ -191,7 +191,10 @@ fn test_intent_determinism_same_inputs_same_hash() {
 
     let hash_a = intent_hash(&first.input);
     let hash_b = intent_hash(&second.input);
-    assert_eq!(hash_a, hash_b, "hash must be identical for identical inputs");
+    assert_eq!(
+        hash_a, hash_b,
+        "hash must be identical for identical inputs"
+    );
 
     let bytes_hex = hex_bytes(&encode_intent_bytes(&first.input));
     let hash_hex = hash_hex(hash_a);

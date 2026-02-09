@@ -1,6 +1,6 @@
 use soldier_core::execution::{
-    preflight_intent_with_post_only, OrderIntent, OrderType, OrderTypeGuardConfig, PostOnlyIntent,
-    PostOnlyRejectReason, PreflightGuardRejectReason, Side,
+    OrderIntent, OrderType, OrderTypeGuardConfig, PostOnlyIntent, PostOnlyRejectReason,
+    PreflightGuardRejectReason, Side, preflight_intent_with_post_only,
 };
 use soldier_core::venue::InstrumentKind;
 

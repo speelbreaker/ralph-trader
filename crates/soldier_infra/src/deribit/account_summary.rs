@@ -1,5 +1,5 @@
-use serde::de::{self, Deserializer, Visitor};
 use serde::Deserialize;
+use serde::de::{self, Deserializer, Visitor};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

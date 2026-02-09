@@ -1,12 +1,12 @@
 use std::sync::atomic::Ordering;
 
 use soldier_core::execution::{
+    BuildOrderIntentContext, BuildOrderIntentObservers, BuildOrderIntentOutcome,
+    BuildOrderIntentRejectReason, InstrumentQuantization, IntentClassification, L2BookLevel,
+    L2BookSnapshot, LinkedOrderType, LiquidityGateConfig, OrderIntent, OrderType,
+    OrderTypeGuardConfig, OrderTypeRejectReason, QuantizeRejectReason, RecordIntentOutcome, Side,
     build_order_intent, take_build_order_intent_outcome, take_dispatch_trace,
-    with_build_order_intent_context, BuildOrderIntentContext, BuildOrderIntentObservers,
-    BuildOrderIntentOutcome, BuildOrderIntentRejectReason, InstrumentQuantization,
-    IntentClassification, L2BookLevel, L2BookSnapshot, LinkedOrderType, LiquidityGateConfig,
-    OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason, QuantizeRejectReason,
-    RecordIntentOutcome, Side,
+    with_build_order_intent_context,
 };
 use soldier_core::risk::{FeeModelSnapshot, FeeStalenessConfig, RiskState};
 use soldier_core::venue::InstrumentKind;

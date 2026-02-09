@@ -1,6 +1,6 @@
 use soldier_core::execution::{
-    build_order_intent, preflight_intent, LinkedOrderType, OrderIntent, OrderType,
-    OrderTypeGuardConfig, OrderTypeRejectReason, TriggerType,
+    LinkedOrderType, OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason,
+    TriggerType, build_order_intent, preflight_intent,
 };
 use soldier_core::venue::InstrumentKind;
 

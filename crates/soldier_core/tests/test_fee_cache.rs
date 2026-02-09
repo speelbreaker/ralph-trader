@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 
 use soldier_core::risk::{
-    evaluate_fee_staleness, fee_model_cache_age_s, FeeModelCache, FeeModelSnapshot,
-    FeeStalenessConfig, PolicyGuard, RiskState, TradingMode, FEE_MODEL_POLL_INTERVAL_MS,
+    FEE_MODEL_POLL_INTERVAL_MS, FeeModelCache, FeeModelSnapshot, FeeStalenessConfig, PolicyGuard,
+    RiskState, TradingMode, evaluate_fee_staleness, fee_model_cache_age_s,
 };
 
 static TEST_MUTEX: Mutex<()> = Mutex::new(());

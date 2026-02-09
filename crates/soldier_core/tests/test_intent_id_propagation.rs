@@ -2,10 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use soldier_core::execution::{
-    build_order_intent, gate_sequence_total, preflight_reject_total,
-    take_build_order_intent_outcome, BuildOrderIntentOutcome, BuildOrderIntentRejectReason,
-    GateSequenceResult, LinkedOrderType, OrderIntent, OrderType, OrderTypeGuardConfig,
-    OrderTypeRejectReason,
+    BuildOrderIntentOutcome, BuildOrderIntentRejectReason, GateSequenceResult, LinkedOrderType,
+    OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason, build_order_intent,
+    gate_sequence_total, preflight_reject_total, take_build_order_intent_outcome,
 };
 use soldier_core::venue::InstrumentKind;
 

@@ -1,6 +1,5 @@
 use soldier_core::execution::{
-    LabelRejectReason, decode_compact_label, encode_compact_label,
-    encode_compact_label_with_hashes,
+    LabelRejectReason, decode_compact_label, encode_compact_label, encode_compact_label_with_hashes,
 };
 use soldier_core::risk::RiskState;
 

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::venue::InstrumentKind;
 
 use super::order_type_guard::{
-    validate_order_type, LinkedOrderType, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason,
+    LinkedOrderType, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason, validate_order_type,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -12,7 +12,9 @@ fn test_quantization_rounding_buy_sell() {
         min_amount: 0.2,
     };
 
-    let buy = meta.quantize(Side::Buy, 1.24, 100.74).expect("buy quantize");
+    let buy = meta
+        .quantize(Side::Buy, 1.24, 100.74)
+        .expect("buy quantize");
     assert!((buy.qty_q - 1.2).abs() < 1e-9);
     assert!((buy.limit_price_q - 100.5).abs() < 1e-9);
 

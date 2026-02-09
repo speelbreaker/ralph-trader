@@ -1,6 +1,6 @@
 use soldier_core::execution::{
-    evaluate_liquidity_gate, IntentClassification, L2BookLevel, L2BookSnapshot,
-    LiquidityGateConfig, LiquidityGateIntent, LiquidityGateRejectReason, Side,
+    IntentClassification, L2BookLevel, L2BookSnapshot, LiquidityGateConfig, LiquidityGateIntent,
+    LiquidityGateRejectReason, Side, evaluate_liquidity_gate,
 };
 
 fn snapshot(ts_ms: u64, bids: Vec<L2BookLevel>, asks: Vec<L2BookLevel>) -> L2BookSnapshot {
@@ -26,8 +26,14 @@ fn base_intent<'a>(
 #[test]
 fn test_liquidity_gate_rejects_sweep() {
     let asks = vec![
-        L2BookLevel { price: 100.0, qty: 1.0 },
-        L2BookLevel { price: 101.0, qty: 1.0 },
+        L2BookLevel {
+            price: 100.0,
+            qty: 1.0,
+        },
+        L2BookLevel {
+            price: 101.0,
+            qty: 1.0,
+        },
     ];
     let bids = vec![L2BookLevel {
         price: 99.0,
@@ -45,7 +51,10 @@ fn test_liquidity_gate_rejects_sweep() {
     let err = evaluate_liquidity_gate(&intent, LiquidityGateConfig::default())
         .expect_err("expected slippage rejection");
 
-    assert_eq!(err.reason, LiquidityGateRejectReason::ExpectedSlippageTooHigh);
+    assert_eq!(
+        err.reason,
+        LiquidityGateRejectReason::ExpectedSlippageTooHigh
+    );
     let wap = err.wap.expect("wap should be captured on slippage reject");
     let slippage_bps = err
         .slippage_bps
@@ -66,8 +75,14 @@ fn test_liquidity_gate_no_l2_blocks_open() {
 
 #[test]
 fn test_liquidity_gate_no_l2_reject_reason() {
-    let asks = vec![L2BookLevel { price: 100.0, qty: 1.0 }];
-    let bids = vec![L2BookLevel { price: 99.0, qty: 1.0 }];
+    let asks = vec![L2BookLevel {
+        price: 100.0,
+        qty: 1.0,
+    }];
+    let bids = vec![L2BookLevel {
+        price: 99.0,
+        qty: 1.0,
+    }];
     let book = snapshot(1_000, bids, asks);
     let intent = base_intent(
         IntentClassification::Open,
@@ -91,11 +106,17 @@ fn test_liquidity_gate_no_l2_blocks_close_hedge_allows_cancel() {
 
     let close_err = evaluate_liquidity_gate(&close_intent, LiquidityGateConfig::default())
         .expect_err("expected close to reject without L2");
-    assert_eq!(close_err.reason, LiquidityGateRejectReason::LiquidityGateNoL2);
+    assert_eq!(
+        close_err.reason,
+        LiquidityGateRejectReason::LiquidityGateNoL2
+    );
 
     let hedge_err = evaluate_liquidity_gate(&hedge_intent, LiquidityGateConfig::default())
         .expect_err("expected hedge to reject without L2");
-    assert_eq!(hedge_err.reason, LiquidityGateRejectReason::LiquidityGateNoL2);
+    assert_eq!(
+        hedge_err.reason,
+        LiquidityGateRejectReason::LiquidityGateNoL2
+    );
 
     evaluate_liquidity_gate(&cancel_intent, LiquidityGateConfig::default())
         .expect("expected cancel to allow without L2");

@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use soldier_core::execution::{
-    Tlsm, TlsmEvent, TlsmIntent, TlsmLedger, TlsmLedgerEntry, TlsmLedgerError, TlsmSide,
-    TlsmState,
+    Tlsm, TlsmEvent, TlsmIntent, TlsmLedger, TlsmLedgerEntry, TlsmLedgerError, TlsmSide, TlsmState,
 };
 
 #[derive(Clone, Default)]
@@ -16,10 +15,7 @@ impl TestLedger {
     }
 
     fn entries(&self) -> Vec<TlsmLedgerEntry> {
-        self.entries
-            .lock()
-            .expect("lock ledger entries")
-            .clone()
+        self.entries.lock().expect("lock ledger entries").clone()
     }
 }
 

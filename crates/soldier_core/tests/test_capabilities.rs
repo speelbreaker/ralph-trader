@@ -1,6 +1,4 @@
-use soldier_core::venue::{
-    FeatureFlags, InstrumentKind, VenueCapabilities,
-};
+use soldier_core::venue::{FeatureFlags, InstrumentKind, VenueCapabilities};
 
 #[test]
 fn test_oco_not_supported() {

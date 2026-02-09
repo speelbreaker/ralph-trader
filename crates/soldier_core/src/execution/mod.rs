@@ -13,53 +13,52 @@ pub mod state;
 pub mod tlsm;
 
 pub use build_order_intent::{
+    BuildOrderIntentContext, BuildOrderIntentObservers, BuildOrderIntentOutcome,
+    BuildOrderIntentRejectReason, DispatchStep, GateSequenceResult, GateStep, RecordIntentOutcome,
     build_order_intent, gate_sequence_total, take_build_order_intent_outcome, take_dispatch_trace,
-    take_gate_sequence_trace, with_build_order_intent_context, BuildOrderIntentContext,
-    BuildOrderIntentObservers, BuildOrderIntentOutcome, BuildOrderIntentRejectReason, DispatchStep,
-    GateSequenceResult, GateStep, RecordIntentOutcome,
+    take_gate_sequence_trace, with_build_order_intent_context,
 };
 pub use dispatch_map::{
-    map_order_size_to_deribit_amount, map_order_size_to_deribit_amount_with_metrics,
-    order_intent_reject_unit_mismatch_total, reduce_only_from_intent_classification,
     DeribitOrderAmount, DispatchMetrics, DispatchReject, DispatchRejectReason,
-    IntentClassification,
+    IntentClassification, map_order_size_to_deribit_amount,
+    map_order_size_to_deribit_amount_with_metrics, order_intent_reject_unit_mismatch_total,
+    reduce_only_from_intent_classification,
 };
 pub use gate::{
-    evaluate_liquidity_gate, expected_slippage_bps_samples, liquidity_gate_reject_total,
     L2BookLevel, L2BookSnapshot, LiquidityGateConfig, LiquidityGateIntent, LiquidityGateOutcome,
-    LiquidityGateReject, LiquidityGateRejectReason,
+    LiquidityGateReject, LiquidityGateRejectReason, evaluate_liquidity_gate,
+    expected_slippage_bps_samples, liquidity_gate_reject_total,
 };
 pub use gates::{
-    evaluate_net_edge_gate, net_edge_reject_total, NetEdgeGateIntent, NetEdgeGateOutcome,
-    NetEdgeReject, NetEdgeRejectReason,
+    NetEdgeGateIntent, NetEdgeGateOutcome, NetEdgeReject, NetEdgeRejectReason,
+    evaluate_net_edge_gate, net_edge_reject_total,
 };
 pub use label::{
-    decode_compact_label, encode_compact_label, encode_compact_label_with_hashes,
     CompactLabelParts, LabelDecodeError, LabelEncodeReject, LabelRejectReason,
+    decode_compact_label, encode_compact_label, encode_compact_label_with_hashes,
 };
 pub use order_size::{
-    contracts_amount_matches, OrderSize, OrderSizeError, CONTRACTS_AMOUNT_MATCH_EPSILON,
-    CONTRACTS_AMOUNT_MATCH_TOLERANCE,
+    CONTRACTS_AMOUNT_MATCH_EPSILON, CONTRACTS_AMOUNT_MATCH_TOLERANCE, OrderSize, OrderSizeError,
+    contracts_amount_matches,
 };
 pub use order_type_guard::{
     LinkedOrderType, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason,
 };
 pub use post_only_guard::{
-    post_only_cross_reject_total, preflight_post_only, PostOnlyIntent, PostOnlyReject,
-    PostOnlyRejectReason,
+    PostOnlyIntent, PostOnlyReject, PostOnlyRejectReason, post_only_cross_reject_total,
+    preflight_post_only,
 };
 pub use preflight::{
-    preflight_intent, preflight_reject_total, OrderIntent, PreflightReject, TriggerType,
+    OrderIntent, PreflightReject, TriggerType, preflight_intent, preflight_reject_total,
 };
-pub use pricer::{price_ioc_limit, PricerIntent, PricerOutcome, PricerReject};
+pub use pricer::{PricerIntent, PricerOutcome, PricerReject, price_ioc_limit};
 pub use quantize::{
-    quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
-    Side,
+    Side, quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
 };
 pub use state::{TlsmEvent, TlsmIntent, TlsmLedgerEntry, TlsmSide, TlsmState};
 pub use tlsm::{
-    tlsm_out_of_order_total, Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition,
+    Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition, tlsm_out_of_order_total,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

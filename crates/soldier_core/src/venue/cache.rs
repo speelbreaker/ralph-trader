@@ -132,8 +132,6 @@ fn record_stale(instrument: &str, age: Duration, ttl: Duration) {
     }
     eprintln!(
         "InstrumentCacheTtlBreach{{instrument_id=\"{}\", age_s={}, ttl_s={}}}",
-        instrument,
-        age_s,
-        ttl_s
+        instrument, age_s, ttl_s
     );
 }

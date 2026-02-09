@@ -29,9 +29,7 @@ fn test_dispatch_chokepoint_no_direct_exchange_client_usage() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let src_dir = manifest_dir.join("src");
     let chokepoint = manifest_dir.join(CHOKEPOINT_RELATIVE_PATH);
-    let chokepoint = chokepoint
-        .canonicalize()
-        .expect("chokepoint file missing");
+    let chokepoint = chokepoint.canonicalize().expect("chokepoint file missing");
 
     let mut rs_files = Vec::new();
     collect_rs_files(&src_dir, &mut rs_files).expect("failed to list source files");
@@ -70,8 +68,7 @@ fn test_dispatch_chokepoint_no_direct_exchange_client_usage() {
 fn test_dispatch_visibility_is_restricted() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let chokepoint = manifest_dir.join(CHOKEPOINT_RELATIVE_PATH);
-    let contents =
-        fs::read_to_string(&chokepoint).expect("failed to read chokepoint module");
+    let contents = fs::read_to_string(&chokepoint).expect("failed to read chokepoint module");
 
     let mut signature = None;
     for line in contents.lines() {
@@ -82,7 +79,10 @@ fn test_dispatch_visibility_is_restricted() {
     }
 
     let signature = signature.expect("expected record_dispatch_step signature");
-    if signature.trim_start().starts_with("pub fn record_dispatch_step") {
+    if signature
+        .trim_start()
+        .starts_with("pub fn record_dispatch_step")
+    {
         panic!(
             "dispatch helper visibility too wide; expected pub(crate) or narrower, got: {signature}"
         );

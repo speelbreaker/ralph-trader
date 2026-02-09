@@ -1,6 +1,6 @@
-use soldier_core::execution::{encode_compact_label_with_hashes, Side};
+use soldier_core::execution::{Side, encode_compact_label_with_hashes};
 use soldier_core::recovery::label_match::{
-    match_label_with_metrics, LabelMatchCandidate, LabelMatchMetrics, LabelMatchOrder,
+    LabelMatchCandidate, LabelMatchMetrics, LabelMatchOrder, match_label_with_metrics,
 };
 use soldier_core::risk::RiskState;
 

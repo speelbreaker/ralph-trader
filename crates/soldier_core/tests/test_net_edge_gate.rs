@@ -1,5 +1,5 @@
 use soldier_core::execution::{
-    evaluate_net_edge_gate, IntentClassification, NetEdgeGateIntent, NetEdgeRejectReason,
+    IntentClassification, NetEdgeGateIntent, NetEdgeRejectReason, evaluate_net_edge_gate,
 };
 
 fn intent(

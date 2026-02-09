@@ -61,10 +61,7 @@ fn test_crash_mid_intent_no_duplicate_dispatch() {
     for pending_record in pending {
         dispatch_count += 1;
         ledger
-            .record_replay_outcome(
-                pending_record,
-                ReplayOutcome::Sent { sent_ts: 200 },
-            )
+            .record_replay_outcome(pending_record, ReplayOutcome::Sent { sent_ts: 200 })
             .expect("mark sent");
     }
     assert_eq!(dispatch_count, 1);

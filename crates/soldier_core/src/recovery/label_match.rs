@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::execution::{decode_compact_label, CompactLabelParts, LabelDecodeError, Side};
+use crate::execution::{CompactLabelParts, LabelDecodeError, Side, decode_compact_label};
 use crate::risk::RiskState;
 
 #[derive(Debug, Clone)]
