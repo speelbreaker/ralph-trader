@@ -1,3 +1,4 @@
+mod build_order_intent;
 pub mod dispatch_map;
 pub mod gate;
 pub mod gates;
@@ -5,12 +6,18 @@ pub mod label;
 pub mod order_size;
 pub mod order_type_guard;
 pub mod post_only_guard;
-pub mod preflight;
+mod preflight;
 pub mod pricer;
 pub mod quantize;
 pub mod state;
 pub mod tlsm;
 
+pub use build_order_intent::{
+    build_order_intent, gate_sequence_total, take_build_order_intent_outcome, take_dispatch_trace,
+    take_gate_sequence_trace, with_build_order_intent_context, BuildOrderIntentContext,
+    BuildOrderIntentObservers, BuildOrderIntentOutcome, BuildOrderIntentRejectReason, DispatchStep,
+    GateSequenceResult, GateStep, RecordIntentOutcome,
+};
 pub use dispatch_map::{
     map_order_size_to_deribit_amount, map_order_size_to_deribit_amount_with_metrics,
     order_intent_reject_unit_mismatch_total, reduce_only_from_intent_classification,
@@ -42,8 +49,7 @@ pub use post_only_guard::{
     PostOnlyRejectReason,
 };
 pub use preflight::{
-    build_order_intent, preflight_intent, preflight_reject_total, OrderIntent, PreflightReject,
-    TriggerType,
+    preflight_intent, preflight_reject_total, OrderIntent, PreflightReject, TriggerType,
 };
 pub use pricer::{price_ioc_limit, PricerIntent, PricerOutcome, PricerReject};
 pub use quantize::{
