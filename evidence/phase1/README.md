@@ -24,10 +24,10 @@
 
 ## What failed
 - No Phase 1 gate failures in the local completion run.
-- GitHub Actions links are not available for this local-only branch snapshot; local run artifacts are used instead.
+- Hosted CI run `21842775668` failed overall due `pr-template-lint`; the `verify` job itself passed.
 
 ## What remains risky
-- Hosted CI evidence should be attached after push so sign-off includes public run URLs in addition to local artifacts.
+- Overall CI remains red until `pr-template-lint` is resolved; Phase 1 gate evidence is still present via local run artifacts plus hosted verify job output.
 
 ---
 
