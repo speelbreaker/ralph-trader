@@ -6,6 +6,7 @@ pub mod order_size;
 pub mod order_type_guard;
 pub mod post_only_guard;
 pub mod preflight;
+pub mod pricer;
 pub mod quantize;
 pub mod state;
 pub mod tlsm;
@@ -25,7 +26,6 @@ pub use gates::{
     evaluate_net_edge_gate, net_edge_reject_total, NetEdgeGateIntent, NetEdgeGateOutcome,
     NetEdgeReject, NetEdgeRejectReason,
 };
-pub type RejectReason = DispatchRejectReason;
 pub use label::{
     decode_compact_label, encode_compact_label, encode_compact_label_with_hashes,
     CompactLabelParts, LabelDecodeError, LabelEncodeReject, LabelRejectReason,
@@ -45,6 +45,7 @@ pub use preflight::{
     build_order_intent, preflight_intent, preflight_reject_total, OrderIntent, PreflightReject,
     TriggerType,
 };
+pub use pricer::{price_ioc_limit, PricerIntent, PricerOutcome, PricerReject};
 pub use quantize::{
     quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
@@ -54,6 +55,35 @@ pub use state::{TlsmEvent, TlsmIntent, TlsmLedgerEntry, TlsmSide, TlsmState};
 pub use tlsm::{
     tlsm_out_of_order_total, Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RejectReason {
+    UnitMismatch,
+    NetEdgeTooLow,
+}
+
+impl From<DispatchRejectReason> for RejectReason {
+    fn from(reason: DispatchRejectReason) -> Self {
+        match reason {
+            DispatchRejectReason::UnitMismatch => RejectReason::UnitMismatch,
+        }
+    }
+}
+
+impl PartialEq<RejectReason> for DispatchRejectReason {
+    fn eq(&self, other: &RejectReason) -> bool {
+        match (self, other) {
+            (DispatchRejectReason::UnitMismatch, RejectReason::UnitMismatch) => true,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<DispatchRejectReason> for RejectReason {
+    fn eq(&self, other: &DispatchRejectReason) -> bool {
+        other == self
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreflightGuardRejectReason {
