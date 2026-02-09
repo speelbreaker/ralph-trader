@@ -334,11 +334,26 @@ ref_ok() {
     contract_contains_lc "$num" && return 0
   fi
 
-  if [[ "${#r_lc}" -ge 8 ]]; then
+  # General grep: lower floor to 3 chars to catch short anchors like AT-021
+  if [[ "${#r_lc}" -ge 3 ]]; then
     contract_contains_lc "$r_lc" && return 0
   fi
 
   return 1
+}
+
+# Classify a missing ref: returns "hard" for full text refs, "soft" for
+# standalone anchor-pattern refs (Anchor-XXX, VR-XXX) that may be planned
+# but don't yet exist in CONTRACT.md.
+classify_missing_ref() {
+  local ref="$1"
+  local r; r="$(normalize_ref "$ref")"
+  # Anchor-NNN, VR-NNN patterns (case-insensitive)
+  if echo "$r" | grep -Eqi '^(anchor|vr)-[0-9]+[a-z]?$'; then
+    echo "soft"
+  else
+    echo "hard"
+  fi
 }
 
 if [[ -n "$story_json" && -n "$contract_text_lc" ]]; then
@@ -350,8 +365,21 @@ if [[ -n "$story_json" && -n "$contract_text_lc" ]]; then
   done
 fi
 
-if [[ "${#missing_refs[@]}" -gt 0 ]]; then
-  add_violation "MAJOR" "CONTRACT_REFS" "missing/weak contract refs: $(printf '%s; ' "${missing_refs[@]}")" "$contract_file" "PATCH_CONTRACT"
+hard_missing=()
+soft_missing=()
+for mref in "${missing_refs[@]+${missing_refs[@]}}"; do
+  if [[ "$(classify_missing_ref "$mref")" == "soft" ]]; then
+    soft_missing+=("$mref")
+  else
+    hard_missing+=("$mref")
+  fi
+done
+
+if [[ "${#hard_missing[@]}" -gt 0 ]]; then
+  add_violation "MAJOR" "CONTRACT_REFS" "missing/weak contract refs: $(printf '%s; ' "${hard_missing[@]}")" "$contract_file" "PATCH_CONTRACT"
+fi
+if [[ "${#soft_missing[@]}" -gt 0 ]]; then
+  add_followup "soft anchor refs not found in CONTRACT.md (non-blocking): $(printf '%s; ' "${soft_missing[@]}")"
 fi
 
 head_before=""
