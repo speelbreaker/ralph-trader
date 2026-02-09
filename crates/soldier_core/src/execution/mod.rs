@@ -1,6 +1,8 @@
 pub mod dispatch_map;
 pub mod label;
 pub mod order_size;
+pub mod order_type_guard;
+pub mod preflight;
 pub mod quantize;
 
 pub use dispatch_map::{
@@ -17,6 +19,13 @@ pub use label::{
 pub use order_size::{
     CONTRACTS_AMOUNT_MATCH_EPSILON, CONTRACTS_AMOUNT_MATCH_TOLERANCE, OrderSize, OrderSizeError,
     contracts_amount_matches,
+};
+pub use order_type_guard::{
+    LinkedOrderType, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason,
+};
+pub use preflight::{
+    OrderIntent, PreflightReject, TriggerType, build_order_intent, preflight_intent,
+    preflight_reject_total,
 };
 pub use quantize::{
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
