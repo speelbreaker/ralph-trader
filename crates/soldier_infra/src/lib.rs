@@ -7,3 +7,4 @@ pub mod health;
 pub mod store;
 
 pub use deribit::{DeribitInstrument, DeribitPublicInstrumentKind, DeribitPublicSettlementPeriod};
+pub use store::{TradeIdInsertOutcome, TradeIdRecord, TradeIdRegistry, TradeIdRegistryError};
