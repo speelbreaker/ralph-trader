@@ -54,9 +54,13 @@ impl<T> InstrumentCache<T> {
     }
 
     pub fn get(&self, instrument: &str) -> Option<CacheRead<'_, T>> {
+        self.get_with_instant(instrument, Instant::now())
+    }
+
+    pub fn get_with_instant(&self, instrument: &str, now: Instant) -> Option<CacheRead<'_, T>> {
         let entry = self.entries.get(instrument)?;
         INSTRUMENT_CACHE_HITS_TOTAL.fetch_add(1, Ordering::Relaxed);
-        let age = Instant::now().saturating_duration_since(entry.updated_at);
+        let age = now.saturating_duration_since(entry.updated_at);
         INSTRUMENT_CACHE_AGE_MS.store(age.as_millis() as u64, Ordering::Relaxed);
         if age > self.ttl {
             record_stale(instrument, age, self.ttl);
