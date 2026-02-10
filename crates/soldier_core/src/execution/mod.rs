@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 mod build_order_intent;
 pub mod dispatch_map;
 pub mod gate;
@@ -117,4 +119,58 @@ pub fn preflight_intent_with_post_only(
         reason: PreflightGuardRejectReason::PostOnly(err.reason),
     })?;
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct ExecutionTraceIds {
+    intent_id: String,
+    run_id: String,
+}
+
+thread_local! {
+    static EXECUTION_TRACE_IDS: RefCell<Option<ExecutionTraceIds>> = const { RefCell::new(None) };
+    static EXECUTION_METRIC_LINES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+pub fn with_intent_trace_ids<F, R>(intent_id: &str, run_id: &str, f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    EXECUTION_TRACE_IDS.with(|cell| {
+        let previous = cell.borrow_mut().replace(ExecutionTraceIds {
+            intent_id: intent_id.to_string(),
+            run_id: run_id.to_string(),
+        });
+        let result = f();
+        *cell.borrow_mut() = previous;
+        result
+    })
+}
+
+pub fn take_execution_metric_lines() -> Vec<String> {
+    EXECUTION_METRIC_LINES.with(|cell| cell.borrow_mut().drain(..).collect())
+}
+
+pub(crate) fn clear_execution_metric_lines() {
+    EXECUTION_METRIC_LINES.with(|cell| cell.borrow_mut().clear());
+}
+
+pub(crate) fn emit_execution_metric_line(metric_name: &str, tail_fields: &str) {
+    let trace_ids = EXECUTION_TRACE_IDS.with(|cell| cell.borrow().clone());
+    let mut line = String::from(metric_name);
+    if let Some(trace) = trace_ids {
+        line.push_str(" intent_id=");
+        line.push_str(&trace.intent_id);
+        line.push_str(" run_id=");
+        line.push_str(&trace.run_id);
+    }
+    if !tail_fields.is_empty() {
+        line.push(' ');
+        line.push_str(tail_fields);
+    }
+
+    eprintln!("{line}");
+    EXECUTION_METRIC_LINES.with(|cell| {
+        cell.borrow_mut().push(line);
+    });
 }

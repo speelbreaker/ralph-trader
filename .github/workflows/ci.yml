@@ -143,8 +143,12 @@ jobs:
           BASE_REF: origin/main
           VERIFY_CONSOLE: verbose
         run: |
+          set -o pipefail
           chmod +x ./plans/verify.sh
           ./plans/verify.sh full 2>&1 | tee verify_output.log
+          verify_rc=${PIPESTATUS[0]}
+          echo "verify_rc=$verify_rc" >> "$GITHUB_OUTPUT"
+          exit "$verify_rc"
         continue-on-error: true
 
       - name: Parse verify output for annotations
@@ -181,7 +185,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Check verify result
-        if: steps.verify.outcome == 'failure'
+        if: steps.verify.outputs.verify_rc != '0'
         run: |
           echo "::error::verify.sh failed - see annotations above and verify-log artifact"
           exit 1

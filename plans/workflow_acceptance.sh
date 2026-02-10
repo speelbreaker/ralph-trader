@@ -1648,6 +1648,14 @@ if ! run_in_worktree grep -Eq "PIPESTATUS|pipefail" ".github/workflows/ci.yml"; 
   echo "FAIL: pr-template-lint must preserve linter exit status (PIPESTATUS or pipefail)" >&2
   exit 1
 fi
+if ! run_in_worktree grep -Fq "verify_rc=\${PIPESTATUS[0]}" ".github/workflows/ci.yml"; then
+  echo "FAIL: verify step must preserve verify.sh exit status via PIPESTATUS" >&2
+  exit 1
+fi
+if ! run_in_worktree grep -Fq "steps.verify.outputs.verify_rc != '0'" ".github/workflows/ci.yml"; then
+  echo "FAIL: CI must fail job when verify_rc is non-zero" >&2
+  exit 1
+fi
 if ! run_in_worktree grep -Fq "github.event_name == 'pull_request'" ".github/workflows/ci.yml"; then
   echo "FAIL: pr-template-lint must only run on pull_request events" >&2
   exit 1
@@ -7169,6 +7177,26 @@ if test_start "30.9" "reset_verify_checkpoint enforces lock policy and force ove
     echo "$out" >&2
     exit 1
   }
+
+  printf "pid=%s\nstart_epoch=1\n" "$$" > "$lock"
+  set +e
+  out="$(VERIFY_CHECKPOINT_FILE="$ckpt" VERIFY_CHECKPOINT_LOCK_FILE="$lock" VERIFY_CHECKPOINT_LOCK_STALE_SECS=1 VERIFY_CHECKPOINT_NOW_EPOCH=9999999999 ./plans/reset_verify_checkpoint.sh 2>&1)"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: stale lock with live pid should still fail without --force" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  echo "$out" | grep -q "active lock detected" || {
+    echo "FAIL: expected active lock error for stale live lock" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  if [[ ! -f "$lock" ]]; then
+    echo "FAIL: stale live lock should remain present after blocked reset" >&2
+    exit 1
+  fi
 
   VERIFY_CHECKPOINT_FILE="$ckpt" VERIFY_CHECKPOINT_LOCK_FILE="$lock" ./plans/reset_verify_checkpoint.sh --force --quiet
   if [[ -f "$ckpt" ]]; then

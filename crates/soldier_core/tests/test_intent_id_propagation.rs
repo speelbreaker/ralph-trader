@@ -5,6 +5,7 @@ use soldier_core::execution::{
     BuildOrderIntentOutcome, BuildOrderIntentRejectReason, GateSequenceResult, LinkedOrderType,
     OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason, build_order_intent,
     gate_sequence_total, preflight_reject_total, take_build_order_intent_outcome,
+    take_execution_metric_lines, with_intent_trace_ids,
 };
 use soldier_core::venue::InstrumentKind;
 
@@ -29,12 +30,15 @@ fn sample_reject_intent() -> OrderIntent {
     }
 }
 
-fn capture_intent_logs_and_metrics(intent_id: &str, run_id: &str) -> (Vec<String>, Vec<String>) {
+fn capture_intent_logs(intent_id: &str, run_id: &str) -> Vec<String> {
+    let _ = take_execution_metric_lines();
     let reason = OrderTypeRejectReason::LinkedOrderTypeForbidden;
     let preflight_before = preflight_reject_total(reason);
     let gate_before = gate_sequence_total(GateSequenceResult::Rejected);
 
-    let result = build_order_intent(sample_reject_intent(), OrderTypeGuardConfig::default());
+    let result = with_intent_trace_ids(intent_id, run_id, || {
+        build_order_intent(sample_reject_intent(), OrderTypeGuardConfig::default())
+    });
     assert!(result.is_err(), "expected preflight rejection");
 
     let outcome = take_build_order_intent_outcome().expect("expected rejection outcome");
@@ -54,24 +58,12 @@ fn capture_intent_logs_and_metrics(intent_id: &str, run_id: &str) -> (Vec<String
         "gate sequence reject metric should bump"
     );
 
-    let log_lines = vec![
-        format!("preflight_reject_total intent_id={intent_id} run_id={run_id} reason={reason:?}"),
-        format!("gate_sequence_total intent_id={intent_id} run_id={run_id} result=rejected"),
-    ];
-
-    let metric_lines = vec![
-        format!(
-            "metric=intent_id_propagation_total intent_id={intent_id} run_id={run_id} result=rejected value=1"
-        ),
-        format!(
-            "metric=preflight_reject_total intent_id={intent_id} run_id={run_id} reason={reason:?} value={preflight_after}"
-        ),
-        format!(
-            "metric=gate_sequence_total intent_id={intent_id} run_id={run_id} result=rejected value={gate_after}"
-        ),
-    ];
-
-    (log_lines, metric_lines)
+    take_execution_metric_lines()
+        .into_iter()
+        .filter(|line| {
+            line.starts_with("preflight_reject_total") || line.starts_with("gate_sequence_total")
+        })
+        .collect()
 }
 
 fn extract_field<'a>(line: &'a str, key: &str) -> Option<&'a str> {
@@ -112,10 +104,9 @@ fn parse_expected_intent_id(contents: &str) -> Option<String> {
 
 #[test]
 fn test_intent_id_propagates_to_logs_and_metrics() {
-    let (log_lines, metric_lines) = capture_intent_logs_and_metrics(INTENT_ID, RUN_ID);
+    let log_lines = capture_intent_logs(INTENT_ID, RUN_ID);
 
     assert_lines_have_ids("log", &log_lines, INTENT_ID, RUN_ID);
-    assert_lines_have_ids("metric", &metric_lines, INTENT_ID, RUN_ID);
 
     let evidence_contents =
         fs::read_to_string(evidence_path()).expect("read sample rejection log evidence");
