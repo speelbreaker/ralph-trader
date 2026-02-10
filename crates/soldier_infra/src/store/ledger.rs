@@ -357,6 +357,8 @@ impl Ledger {
     }
 
     pub fn flush(&self) -> Result<(), LedgerError> {
+        // Flush is a durability barrier; it must not hang behind a paused writer.
+        self.writer_paused.store(false, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
         self.writer_tx
             .send(LedgerWrite::Flush(tx))
@@ -404,6 +406,7 @@ impl Ledger {
 
 impl Drop for Ledger {
     fn drop(&mut self) {
+        self.writer_paused.store(false, Ordering::Relaxed);
         let _ = self.writer_tx.send(LedgerWrite::Shutdown);
         if let Some(handle) = self.writer_handle.take() {
             let _ = handle.join();
@@ -427,13 +430,11 @@ fn writer_loop(
     };
 
     loop {
-        if writer_paused.load(Ordering::Relaxed) {
-            thread::sleep(Duration::from_millis(10));
-            continue;
-        }
-
         match rx.recv() {
             Ok(LedgerWrite::Record(record)) => {
+                while writer_paused.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_millis(10));
+                }
                 let result = write_record(&mut file, &record);
                 if result.is_err() {
                     wal_write_errors.fetch_add(1, Ordering::Relaxed);

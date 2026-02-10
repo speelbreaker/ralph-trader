@@ -13,10 +13,11 @@ pub mod state;
 pub mod tlsm;
 
 pub use build_order_intent::{
-    BuildOrderIntentContext, BuildOrderIntentObservers, BuildOrderIntentOutcome,
-    BuildOrderIntentRejectReason, DispatchStep, GateSequenceResult, GateStep, RecordIntentOutcome,
-    build_order_intent, gate_sequence_total, take_build_order_intent_outcome, take_dispatch_trace,
-    take_gate_sequence_trace, with_build_order_intent_context,
+    BuildOrderIntentContext, BuildOrderIntentError, BuildOrderIntentObservers,
+    BuildOrderIntentOutcome, BuildOrderIntentRejectReason, DispatchStep, GateSequenceResult,
+    GateStep, RecordIntentOutcome, build_order_intent, gate_sequence_total,
+    take_build_order_intent_outcome, take_dispatch_trace, take_gate_sequence_trace,
+    with_build_order_intent_context,
 };
 pub use dispatch_map::{
     DeribitOrderAmount, DispatchMetrics, DispatchReject, DispatchRejectReason,

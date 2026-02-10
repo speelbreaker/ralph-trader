@@ -82,7 +82,7 @@ fn open_rejected_when_risk_state_degraded() {
         ),
         || build_order_intent(intent, OrderTypeGuardConfig::default()),
     );
-    assert!(result.is_ok());
+    assert!(result.is_err());
 
     let outcome = take_build_order_intent_outcome().expect("expected outcome");
     assert_eq!(

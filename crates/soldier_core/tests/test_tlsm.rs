@@ -1,7 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use soldier_core::execution::{
-    Tlsm, TlsmEvent, TlsmIntent, TlsmLedger, TlsmLedgerEntry, TlsmLedgerError, TlsmSide, TlsmState,
+    Tlsm, TlsmError, TlsmEvent, TlsmIntent, TlsmLedger, TlsmLedgerEntry, TlsmLedgerError,
+    TlsmSide, TlsmState,
 };
 
 #[derive(Clone, Default)]
@@ -26,6 +27,14 @@ impl TlsmLedger for TestLedger {
             .expect("lock ledger entries")
             .push(entry.clone());
         Ok(())
+    }
+}
+
+struct FailingLedger;
+
+impl TlsmLedger for FailingLedger {
+    fn append_transition(&self, _entry: &TlsmLedgerEntry) -> Result<(), TlsmLedgerError> {
+        Err(TlsmLedgerError::new("append failed"))
     }
 }
 
@@ -84,6 +93,22 @@ fn test_tlsm_out_of_order_converges() {
 
     assert_eq!(ordered_state, TlsmState::Filled);
     assert_eq!(out_of_order_state, TlsmState::Filled);
+}
+
+#[test]
+fn test_tlsm_ledger_append_failure_is_atomic() {
+    let ledger = FailingLedger;
+    let mut tlsm = Tlsm::new(sample_intent());
+
+    let err = tlsm
+        .apply_event(&ledger, TlsmEvent::Sent { ts_ms: 10 })
+        .expect_err("append should fail");
+    assert!(matches!(err, TlsmError::Ledger(_)));
+
+    assert_eq!(tlsm.state(), TlsmState::Created);
+    assert_eq!(tlsm.sent_ts(), None);
+    assert_eq!(tlsm.ack_ts(), None);
+    assert_eq!(tlsm.last_fill_ts(), None);
 }
 
 fn apply_events(events: Vec<TlsmEvent>) -> TlsmState {

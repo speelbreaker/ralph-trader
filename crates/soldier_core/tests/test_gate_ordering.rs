@@ -110,7 +110,7 @@ fn test_gate_ordering_constraints() {
     let result = with_build_order_intent_context(context, || {
         build_order_intent(intent, OrderTypeGuardConfig::default())
     });
-    assert!(result.is_ok());
+    assert!(result.is_err());
 
     let outcome = take_build_order_intent_outcome().expect("expected outcome");
     assert_eq!(
@@ -145,7 +145,7 @@ fn test_gate_ordering_constraints() {
     let result = with_build_order_intent_context(context, || {
         build_order_intent(intent, OrderTypeGuardConfig::default())
     });
-    assert!(result.is_ok());
+    assert!(result.is_err());
     assert_eq!(take_dispatch_trace(), vec![DispatchStep::RecordIntent]);
     let outcome = take_build_order_intent_outcome().expect("expected outcome");
     assert_eq!(

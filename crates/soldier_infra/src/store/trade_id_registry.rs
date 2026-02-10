@@ -208,6 +208,7 @@ fn write_record(file: &mut File, record: &TradeIdRecord) -> Result<(), TradeIdRe
     file.write_all(line.as_bytes())?;
     file.write_all(b"\n")?;
     file.flush()?;
+    file.sync_data()?;
     Ok(())
 }
 

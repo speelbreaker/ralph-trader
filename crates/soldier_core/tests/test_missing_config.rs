@@ -144,7 +144,7 @@ fn assert_rejects_without_side_effects(
     let result = with_build_order_intent_context(context, || {
         build_order_intent(base_intent(), OrderTypeGuardConfig::default())
     });
-    assert!(result.is_ok(), "{name} expected non-preflight rejection");
+    assert!(result.is_err(), "{name} expected fail-closed rejection");
 
     let outcome = take_build_order_intent_outcome().expect("expected outcome");
     assert_eq!(

@@ -46,6 +46,12 @@ pub enum BuildOrderIntentRejectReason {
     RecordedBeforeDispatch,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum BuildOrderIntentError {
+    Preflight(PreflightReject),
+    Rejected(BuildOrderIntentRejectReason),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateSequenceResult {
     Allowed,
@@ -213,20 +219,24 @@ fn finish_allowed() {
     finish_outcome(BuildOrderIntentOutcome::Allowed);
 }
 
+fn reject_with_error(reason: BuildOrderIntentRejectReason) -> BuildOrderIntentError {
+    finish_reject(reason.clone());
+    BuildOrderIntentError::Rejected(reason)
+}
+
 /// build_order_intent runs the deterministic gate sequence and records the outcome via
-/// take_build_order_intent_outcome(). Non-preflight gate failures are surfaced through
-/// that outcome channel while the returned Result preserves the preflight signature.
+/// take_build_order_intent_outcome().
 pub fn build_order_intent(
     intent: OrderIntent,
     config: OrderTypeGuardConfig,
-) -> Result<OrderIntent, PreflightReject> {
+) -> Result<OrderIntent, BuildOrderIntentError> {
     reset_trace();
     record_gate_step(GateStep::Preflight);
     let intent = match preflight::build_order_intent(intent, config) {
         Ok(intent) => intent,
         Err(err) => {
             finish_reject(BuildOrderIntentRejectReason::Preflight(err.reason));
-            return Err(err);
+            return Err(BuildOrderIntentError::Preflight(err));
         }
     };
 
@@ -234,8 +244,7 @@ pub fn build_order_intent(
     let context = match context {
         Some(context) => context,
         None => {
-            finish_reject(BuildOrderIntentRejectReason::MissingContext);
-            return Ok(intent);
+            return Err(reject_with_error(BuildOrderIntentRejectReason::MissingContext));
         }
     };
 
@@ -248,8 +257,9 @@ pub fn build_order_intent(
     ) {
         Ok(quantized) => quantized,
         Err(err) => {
-            finish_reject(BuildOrderIntentRejectReason::Quantize(err.reason));
-            return Ok(intent);
+            return Err(reject_with_error(BuildOrderIntentRejectReason::Quantize(
+                err.reason,
+            )));
         }
     };
 
@@ -265,10 +275,9 @@ pub fn build_order_intent(
     if context.classification == IntentClassification::Open
         && combined_risk_state != RiskState::Healthy
     {
-        finish_reject(BuildOrderIntentRejectReason::DispatchAuth(
+        return Err(reject_with_error(BuildOrderIntentRejectReason::DispatchAuth(
             combined_risk_state,
-        ));
-        return Ok(intent);
+        )));
     }
 
     record_gate_step(GateStep::LiquidityGate);
@@ -283,8 +292,9 @@ pub fn build_order_intent(
         match evaluate_liquidity_gate(&liquidity_intent, context.liquidity_config) {
             Ok(outcome) => outcome,
             Err(err) => {
-                finish_reject(BuildOrderIntentRejectReason::LiquidityGate(err.reason));
-                return Ok(intent);
+                return Err(reject_with_error(BuildOrderIntentRejectReason::LiquidityGate(
+                    err.reason,
+                )));
             }
         };
 
@@ -300,8 +310,9 @@ pub fn build_order_intent(
         min_edge_usd: Some(context.min_edge_usd),
     };
     if let Err(err) = evaluate_net_edge_gate(&net_edge_intent) {
-        finish_reject(BuildOrderIntentRejectReason::NetEdge(err.reason));
-        return Ok(intent);
+        return Err(reject_with_error(BuildOrderIntentRejectReason::NetEdge(
+            err.reason,
+        )));
     }
 
     record_gate_step(GateStep::Pricer);
@@ -314,8 +325,9 @@ pub fn build_order_intent(
         qty: quantized.qty_q,
     };
     if let Err(err) = price_ioc_limit(&pricer_intent) {
-        finish_reject(BuildOrderIntentRejectReason::Pricer(err.reason));
-        return Ok(intent);
+        return Err(reject_with_error(BuildOrderIntentRejectReason::Pricer(
+            err.reason,
+        )));
     }
 
     record_dispatch_step(DispatchStep::RecordIntent);
@@ -323,8 +335,9 @@ pub fn build_order_intent(
         observers.record_intent();
     }
     if context.record_outcome == RecordIntentOutcome::Failed {
-        finish_reject(BuildOrderIntentRejectReason::RecordedBeforeDispatch);
-        return Ok(intent);
+        return Err(reject_with_error(
+            BuildOrderIntentRejectReason::RecordedBeforeDispatch,
+        ));
     }
 
     record_dispatch_step(DispatchStep::DispatchAttempt);

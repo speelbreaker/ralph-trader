@@ -1,11 +1,12 @@
 use std::sync::atomic::Ordering;
 
 use soldier_core::execution::{
-    BuildOrderIntentContext, BuildOrderIntentObservers, BuildOrderIntentOutcome,
-    BuildOrderIntentRejectReason, InstrumentQuantization, IntentClassification, L2BookLevel,
-    L2BookSnapshot, LinkedOrderType, LiquidityGateConfig, OrderIntent, OrderType,
-    OrderTypeGuardConfig, OrderTypeRejectReason, QuantizeRejectReason, RecordIntentOutcome, Side,
-    build_order_intent, take_build_order_intent_outcome, take_dispatch_trace,
+    BuildOrderIntentContext, BuildOrderIntentError, BuildOrderIntentObservers,
+    BuildOrderIntentOutcome, BuildOrderIntentRejectReason, InstrumentQuantization,
+    IntentClassification, L2BookLevel, L2BookSnapshot, LinkedOrderType, LiquidityGateConfig,
+    OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason, QuantizeRejectReason,
+    RecordIntentOutcome, Side, build_order_intent, take_build_order_intent_outcome,
+    take_dispatch_trace,
     with_build_order_intent_context,
 };
 use soldier_core::risk::{FeeModelSnapshot, FeeStalenessConfig, RiskState};
@@ -74,7 +75,6 @@ fn assert_rejects_without_side_effects(
     config: OrderTypeGuardConfig,
     context: BuildOrderIntentContext,
     expected: BuildOrderIntentOutcome,
-    expect_err: bool,
 ) {
     let observers = context
         .observers
@@ -82,11 +82,7 @@ fn assert_rejects_without_side_effects(
         .expect("expected observers")
         .clone();
     let result = with_build_order_intent_context(context, || build_order_intent(intent, config));
-    if expect_err {
-        assert!(result.is_err(), "{name} expected preflight rejection");
-    } else {
-        assert!(result.is_ok(), "{name} expected non-preflight rejection");
-    }
+    assert!(result.is_err(), "{name} expected fail-closed rejection");
 
     let outcome = take_build_order_intent_outcome().expect("expected outcome");
     assert_eq!(outcome, expected, "{name} outcome mismatch");
@@ -130,7 +126,6 @@ fn test_rejected_intent_has_no_side_effects() {
         BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::Preflight(
             OrderTypeRejectReason::LinkedOrderTypeForbidden,
         )),
-        true,
     );
 
     let observers = BuildOrderIntentObservers::new();
@@ -152,7 +147,6 @@ fn test_rejected_intent_has_no_side_effects() {
         BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::Quantize(
             QuantizeRejectReason::InstrumentMetadataMissing,
         )),
-        false,
     );
 
     let observers = BuildOrderIntentObservers::new();
@@ -174,6 +168,37 @@ fn test_rejected_intent_has_no_side_effects() {
         BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::Quantize(
             QuantizeRejectReason::TooSmallAfterQuantization,
         )),
-        false,
+    );
+}
+
+#[test]
+fn test_build_order_intent_fail_closed_error_prevents_dispatch_attempt() {
+    let observers = BuildOrderIntentObservers::new();
+    let context = base_context(
+        observers,
+        InstrumentQuantization {
+            tick_size: 0.0,
+            amount_step: 0.1,
+            min_amount: 0.1,
+        },
+        1.2,
+        100.1,
+    );
+
+    let mut dispatch_attempted = false;
+    let result = with_build_order_intent_context(context, || {
+        let result = build_order_intent(base_intent(), OrderTypeGuardConfig::default());
+        if result.is_ok() {
+            dispatch_attempted = true;
+        }
+        result
+    });
+
+    assert!(!dispatch_attempted, "caller should not dispatch on rejection");
+    assert_eq!(
+        result,
+        Err(BuildOrderIntentError::Rejected(
+            BuildOrderIntentRejectReason::Quantize(QuantizeRejectReason::InstrumentMetadataMissing)
+        ))
     );
 }

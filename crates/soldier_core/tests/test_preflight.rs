@@ -1,6 +1,6 @@
 use soldier_core::execution::{
-    LinkedOrderType, OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason,
-    TriggerType, build_order_intent, preflight_intent,
+    BuildOrderIntentError, LinkedOrderType, OrderIntent, OrderType, OrderTypeGuardConfig,
+    OrderTypeRejectReason, TriggerType, build_order_intent, preflight_intent,
 };
 use soldier_core::venue::InstrumentKind;
 
@@ -88,7 +88,12 @@ fn build_order_intent_runs_preflight() {
     };
     let err = build_order_intent(intent, OrderTypeGuardConfig::default())
         .expect_err("expected preflight reject");
-    assert_eq!(err.reason, OrderTypeRejectReason::OrderTypeMarketForbidden);
+    match err {
+        BuildOrderIntentError::Preflight(reject) => {
+            assert_eq!(reject.reason, OrderTypeRejectReason::OrderTypeMarketForbidden);
+        }
+        other => panic!("expected preflight error, got {other:?}"),
+    }
 }
 
 #[test]

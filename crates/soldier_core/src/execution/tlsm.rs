@@ -125,11 +125,17 @@ impl Tlsm {
                 .out_of_order_total
                 .fetch_add(1, Ordering::Relaxed);
         }
-        self.apply_event_ts(&event);
+
+        let (sent_ts, ack_ts, last_fill_ts) = self.projected_event_ts(&event);
         let to = self.next_state(from, &event);
-        self.state = to;
-        let entry = self.build_ledger_entry();
+        let entry = self.build_ledger_entry_for(to, sent_ts, ack_ts, last_fill_ts);
         ledger.append_transition(&entry)?;
+
+        self.state = to;
+        self.sent_ts = sent_ts;
+        self.ack_ts = ack_ts;
+        self.last_fill_ts = last_fill_ts;
+
         Ok(TlsmTransition {
             from,
             to,
@@ -161,26 +167,32 @@ impl Tlsm {
         }
     }
 
-    fn apply_event_ts(&mut self, event: &TlsmEvent) {
+    fn projected_event_ts(&self, event: &TlsmEvent) -> (Option<u64>, Option<u64>, Option<u64>) {
+        let mut sent_ts = self.sent_ts;
+        let mut ack_ts = self.ack_ts;
+        let mut last_fill_ts = self.last_fill_ts;
+
         match event {
             TlsmEvent::Sent { ts_ms } => {
-                if self.sent_ts.is_none() {
-                    self.sent_ts = Some(*ts_ms);
+                if sent_ts.is_none() {
+                    sent_ts = Some(*ts_ms);
                 }
             }
             TlsmEvent::Acked { ts_ms } => {
-                if self.ack_ts.is_none() {
-                    self.ack_ts = Some(*ts_ms);
+                if ack_ts.is_none() {
+                    ack_ts = Some(*ts_ms);
                 }
             }
             TlsmEvent::PartiallyFilled { ts_ms } | TlsmEvent::Filled { ts_ms } => {
-                self.last_fill_ts = Some(match self.last_fill_ts {
+                last_fill_ts = Some(match last_fill_ts {
                     Some(existing) => existing.max(*ts_ms),
                     None => *ts_ms,
                 });
             }
             TlsmEvent::Canceled { .. } | TlsmEvent::Failed { .. } => {}
         }
+
+        (sent_ts, ack_ts, last_fill_ts)
     }
 
     fn is_out_of_order(&self, event: &TlsmEvent) -> bool {
@@ -219,7 +231,13 @@ impl Tlsm {
         }
     }
 
-    fn build_ledger_entry(&self) -> TlsmLedgerEntry {
+    fn build_ledger_entry_for(
+        &self,
+        tls_state: TlsmState,
+        sent_ts: Option<u64>,
+        ack_ts: Option<u64>,
+        last_fill_ts: Option<u64>,
+    ) -> TlsmLedgerEntry {
         TlsmLedgerEntry {
             intent_hash: self.intent.intent_hash,
             group_id: self.intent.group_id.clone(),
@@ -230,11 +248,11 @@ impl Tlsm {
             qty_q: self.intent.qty_q,
             limit_price_q: self.intent.limit_price_q,
             price_ticks: self.intent.price_ticks,
-            tls_state: self.state,
+            tls_state,
             created_ts: self.intent.created_ts,
-            sent_ts: self.sent_ts,
-            ack_ts: self.ack_ts,
-            last_fill_ts: self.last_fill_ts,
+            sent_ts,
+            ack_ts,
+            last_fill_ts,
             exchange_order_id: self.exchange_order_id.clone(),
             last_trade_id: self.last_trade_id.clone(),
         }

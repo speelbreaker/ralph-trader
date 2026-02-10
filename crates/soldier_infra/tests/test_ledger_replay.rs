@@ -1,5 +1,8 @@
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use soldier_infra::store::{Ledger, LedgerConfig, LedgerError, LedgerRecord, ReplayOutcome, Side};
 
@@ -120,4 +123,48 @@ fn test_ledger_record_schema_requires_qty_and_price() {
         .record_before_dispatch(record)
         .expect_err("schema error");
     assert!(matches!(err, LedgerError::RecordSchema(_)));
+}
+
+#[test]
+fn test_ledger_flush_unpauses_writer_and_completes() {
+    let path = temp_wal_path("flush_unpauses");
+    let ledger = Ledger::open_with_config(
+        &path,
+        LedgerConfig {
+            queue_capacity: 1,
+            writer_pause_on_start: true,
+        },
+    )
+    .expect("open ledger");
+
+    ledger
+        .record_before_dispatch(sample_record(10))
+        .expect("enqueue record");
+    ledger.flush().expect("flush should unpause writer");
+    assert_eq!(ledger.wal_queue_depth(), 0);
+}
+
+#[test]
+fn test_ledger_drop_does_not_hang_when_writer_paused() {
+    let path = temp_wal_path("drop_paused");
+    let ledger = Ledger::open_with_config(
+        &path,
+        LedgerConfig {
+            queue_capacity: 1,
+            writer_pause_on_start: true,
+        },
+    )
+    .expect("open ledger");
+    ledger
+        .record_before_dispatch(sample_record(11))
+        .expect("enqueue record");
+
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        drop(ledger);
+        let _ = tx.send(());
+    });
+
+    rx.recv_timeout(Duration::from_secs(2))
+        .expect("drop should not deadlock");
 }
