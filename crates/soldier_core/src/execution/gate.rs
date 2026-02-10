@@ -64,6 +64,12 @@ pub struct LiquidityGateMetrics {
     reject_no_l2_total: AtomicU64,
 }
 
+impl Default for LiquidityGateMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LiquidityGateMetrics {
     pub const fn new() -> Self {
         Self {

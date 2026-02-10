@@ -114,6 +114,12 @@ pub struct FeeModelCache {
     poll_interval_ms: u64,
 }
 
+impl Default for FeeModelCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FeeModelCache {
     pub fn new() -> Self {
         Self::with_poll_interval_ms(FEE_MODEL_POLL_INTERVAL_MS)
@@ -142,7 +148,7 @@ impl FeeModelCache {
         }
     }
 
-    pub fn apply_snapshot(self: &mut Self, snapshot: FeeModelSnapshot, now_ms: u64) {
+    pub fn apply_snapshot(&mut self, snapshot: FeeModelSnapshot, now_ms: u64) {
         self.fee_tier = snapshot.fee_tier;
         self.maker_fee_rate = snapshot.maker_fee_rate;
         self.taker_fee_rate = snapshot.taker_fee_rate;

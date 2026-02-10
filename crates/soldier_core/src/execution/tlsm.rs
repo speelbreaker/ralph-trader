@@ -7,6 +7,12 @@ pub struct TlsmMetrics {
     out_of_order_total: AtomicU64,
 }
 
+impl Default for TlsmMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TlsmMetrics {
     pub const fn new() -> Self {
         Self {

@@ -33,6 +33,12 @@ pub struct NetEdgeGateMetrics {
     reject_input_missing_total: AtomicU64,
 }
 
+impl Default for NetEdgeGateMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetEdgeGateMetrics {
     pub const fn new() -> Self {
         Self {

@@ -112,10 +112,10 @@ static GATE_SEQUENCE_ALLOWED_TOTAL: AtomicU64 = AtomicU64::new(0);
 static GATE_SEQUENCE_REJECTED_TOTAL: AtomicU64 = AtomicU64::new(0);
 
 thread_local! {
-    static BUILD_CONTEXT: RefCell<Option<BuildOrderIntentContext>> = RefCell::new(None);
-    static GATE_SEQUENCE_TRACE: RefCell<Vec<GateStep>> = RefCell::new(Vec::new());
-    static DISPATCH_TRACE: RefCell<Vec<DispatchStep>> = RefCell::new(Vec::new());
-    static LAST_OUTCOME: RefCell<Option<BuildOrderIntentOutcome>> = RefCell::new(None);
+    static BUILD_CONTEXT: RefCell<Option<BuildOrderIntentContext>> = const { RefCell::new(None) };
+    static GATE_SEQUENCE_TRACE: RefCell<Vec<GateStep>> = const { RefCell::new(Vec::new()) };
+    static DISPATCH_TRACE: RefCell<Vec<DispatchStep>> = const { RefCell::new(Vec::new()) };
+    static LAST_OUTCOME: RefCell<Option<BuildOrderIntentOutcome>> = const { RefCell::new(None) };
 }
 
 pub fn with_build_order_intent_context<F, R>(context: BuildOrderIntentContext, f: F) -> R

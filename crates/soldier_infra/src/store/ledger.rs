@@ -358,10 +358,9 @@ impl Ledger {
         self.writer_tx
             .send(LedgerWrite::Flush(tx))
             .map_err(|_| LedgerError::WriterUnavailable("writer channel closed".to_string()))?;
-        let result = rx
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|_| LedgerError::WriterUnavailable("flush timeout".to_string()))?;
-        result
+
+        rx.recv_timeout(Duration::from_secs(5))
+            .map_err(|_| LedgerError::WriterUnavailable("flush timeout".to_string()))?
     }
 
     pub fn replay_latest(&self) -> Result<LedgerReplay, LedgerError> {

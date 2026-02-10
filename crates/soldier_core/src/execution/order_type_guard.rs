@@ -20,19 +20,10 @@ pub enum OrderTypeRejectReason {
     LinkedOrderTypeForbidden,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct OrderTypeGuardConfig {
     pub linked_orders_supported: bool,
     pub enable_linked_orders_for_bot: bool,
-}
-
-impl Default for OrderTypeGuardConfig {
-    fn default() -> Self {
-        Self {
-            linked_orders_supported: false,
-            enable_linked_orders_for_bot: false,
-        }
-    }
 }
 
 impl OrderTypeGuardConfig {

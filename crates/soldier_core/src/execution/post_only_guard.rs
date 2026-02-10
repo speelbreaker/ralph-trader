@@ -25,6 +25,12 @@ pub struct PostOnlyMetrics {
     cross_reject_total: AtomicU64,
 }
 
+impl Default for PostOnlyMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PostOnlyMetrics {
     pub const fn new() -> Self {
         Self {

@@ -212,10 +212,10 @@ impl Drop for Wal {
     fn drop(&mut self) {
         self.writer_paused.store(false, Ordering::Relaxed);
         let _ = self.writer_tx.send(WalWrite::Shutdown);
-        if let Ok(mut handle_opt) = self.writer_handle.lock() {
-            if let Some(handle) = handle_opt.take() {
-                let _ = handle.join();
-            }
+        if let Ok(mut handle_opt) = self.writer_handle.lock()
+            && let Some(handle) = handle_opt.take()
+        {
+            let _ = handle.join();
         }
     }
 }

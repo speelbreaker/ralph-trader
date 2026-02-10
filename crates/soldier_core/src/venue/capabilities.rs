@@ -4,30 +4,14 @@ use crate::venue::InstrumentKind;
 
 pub const ENABLE_LINKED_ORDERS_FOR_BOT: &str = "ENABLE_LINKED_ORDERS_FOR_BOT";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct VenueCapabilities {
     pub linked_orders_supported: bool,
 }
 
-impl Default for VenueCapabilities {
-    fn default() -> Self {
-        Self {
-            linked_orders_supported: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FeatureFlags {
     pub enable_linked_orders_for_bot: bool,
-}
-
-impl Default for FeatureFlags {
-    fn default() -> Self {
-        Self {
-            enable_linked_orders_for_bot: false,
-        }
-    }
 }
 
 impl FeatureFlags {

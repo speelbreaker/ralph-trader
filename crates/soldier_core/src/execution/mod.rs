@@ -77,10 +77,13 @@ impl From<DispatchRejectReason> for RejectReason {
 
 impl PartialEq<RejectReason> for DispatchRejectReason {
     fn eq(&self, other: &RejectReason) -> bool {
-        match (self, other) {
-            (DispatchRejectReason::UnitMismatch, RejectReason::UnitMismatch) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (
+                DispatchRejectReason::UnitMismatch,
+                RejectReason::UnitMismatch
+            )
+        )
     }
 }
 
