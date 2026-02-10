@@ -62,7 +62,7 @@ impl From<std::io::Error> for WalError {
 
 enum WalWrite {
     Record {
-        record: WalRecord,
+        record: Box<WalRecord>,
         barrier: Option<mpsc::Sender<Result<(), WalError>>>,
     },
     Shutdown,
@@ -192,10 +192,10 @@ impl Wal {
         record: WalRecord,
         barrier: Option<mpsc::Sender<Result<(), WalError>>>,
     ) -> Result<RecordOutcome, WalError> {
-        match self
-            .writer_tx
-            .try_send(WalWrite::Record { record, barrier })
-        {
+        match self.writer_tx.try_send(WalWrite::Record {
+            record: Box::new(record),
+            barrier,
+        }) {
             Ok(()) => {
                 self.queue_depth.fetch_add(1, Ordering::Relaxed);
                 Ok(RecordOutcome::RecordedBeforeDispatch)

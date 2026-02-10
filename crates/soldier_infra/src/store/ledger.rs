@@ -248,7 +248,7 @@ impl From<std::io::Error> for LedgerError {
 }
 
 enum LedgerWrite {
-    Record(LedgerRecord),
+    Record(Box<LedgerRecord>),
     Flush(mpsc::Sender<Result<(), LedgerError>>),
     Shutdown,
 }
@@ -328,7 +328,10 @@ impl Ledger {
         record: LedgerRecord,
     ) -> Result<RecordOutcome, LedgerError> {
         record.validate_minimum()?;
-        match self.writer_tx.try_send(LedgerWrite::Record(record)) {
+        match self
+            .writer_tx
+            .try_send(LedgerWrite::Record(Box::new(record)))
+        {
             Ok(()) => {
                 self.queue_depth.fetch_add(1, Ordering::Relaxed);
                 Ok(RecordOutcome::RecordedBeforeDispatch)
