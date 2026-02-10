@@ -101,6 +101,7 @@ required=(
   plans/lib/node_gates.sh
   plans/lib/python_gates.sh
   plans/lib/rust_gates.sh
+  plans/lib/spec_validators_group.sh
   plans/lib/verify_checkpoint.sh
   plans/lib/verify_utils.sh
   plans/schemas/verify_checkpoint.schema.json

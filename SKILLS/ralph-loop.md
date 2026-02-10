@@ -208,6 +208,41 @@ Use quick verify during iteration; pass-flip still uses promotion verify.
 RPH_VERIFY_MODE=quick ./plans/ralph.sh 1
 ```
 
+Checkpoint rollout controls for local quick verify:
+```bash
+# Default safety posture
+VERIFY_CHECKPOINT_ROLLOUT=off
+
+# Evaluate skip eligibility without granting skip authority
+VERIFY_CHECKPOINT_ROLLOUT=dry_run
+
+# Enforce path (requires explicit kill switch token)
+VERIFY_CHECKPOINT_ROLLOUT=enforce VERIFY_CHECKPOINT_KILL_SWITCH="ks-$(openssl rand -hex 8)"
+```
+
+Checkpoint telemetry and guard defaults:
+```bash
+# Staleness + forced-run guardrails
+VERIFY_CHECKPOINT_MAX_AGE_SECS=86400
+VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS=10
+VERIFY_CHECKPOINT_FORCE_AFTER_SECS=21600
+
+# Hash phase target/budget for checkpoint logic (500ms target, 2.0s hard ceiling)
+VERIFY_CHECKPOINT_HASH_TARGET_MS=500
+VERIFY_CHECKPOINT_HASH_BUDGET_MS=2000
+
+# Telemetry retention (default mode-aware TTL: dry_run=30d, enforce=7d)
+VERIFY_CHECKPOINT_TELEMETRY_MAX_FILES=200
+VERIFY_CHECKPOINT_TELEMETRY_MAX_BYTES=20971520
+VERIFY_CHECKPOINT_TELEMETRY_TTL_DAYS=<override_optional>
+```
+
+If checkpoint state becomes corrupt or lock handling wedges:
+```bash
+./plans/reset_verify_checkpoint.sh
+./plans/verify.sh quick
+```
+
 ### 5) Pass-Touch Gate Reminder
 If only meta files changed (e.g., `plans/progress.txt`), pass-flip is blocked.
 Ensure at least one scope-touch change before printing `<mark_pass>`.

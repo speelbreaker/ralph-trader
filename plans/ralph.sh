@@ -176,7 +176,7 @@ RPH_FINAL_VERIFY="${RPH_FINAL_VERIFY:-1}"  # 0|1
 RPH_VERIFY_PASS_TAIL="${RPH_VERIFY_PASS_TAIL:-20}"
 RPH_VERIFY_FAIL_TAIL="${RPH_VERIFY_FAIL_TAIL:-200}"
 RPH_VERIFY_SUMMARY_MAX="${RPH_VERIFY_SUMMARY_MAX:-200}"
-RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nplans/logs/*\nartifacts/*\n.ralph/*'}"
+RPH_PASS_META_PATTERNS="${RPH_PASS_META_PATTERNS:-$'plans/prd.json\nplans/progress.txt\nplans/progress_archive.txt\nreviews/postmortems/*\nplans/logs/*\nartifacts/*\n.ralph/*'}"
 ARTIFACT_MANIFEST="${ARTIFACT_MANIFEST:-.ralph/artifacts.json}"
 SKIPPED_CHECKS_JSON="[]"
 
@@ -1104,6 +1104,7 @@ write_blocked_artifacts() {
   local prefix="${6:-blocked}"
   local block_dir
   local stamp
+  local recovery_suggestions_json
   stamp="$(date +%Y%m%d-%H%M%S)"
   mkdir -p ".ralph"
   block_dir="$(mktemp -d ".ralph/${prefix}_${stamp}_XXXXXX")"
@@ -1116,16 +1117,47 @@ write_blocked_artifacts() {
       cp "$pre_summary" "$block_dir/verify_summary.txt" || true
     fi
   fi
+  recovery_suggestions_json="$(blocked_recovery_suggestions_json "$reason")"
   jq -n \
     --arg reason "$reason" \
     --arg id "$id" \
     --argjson priority "$priority" \
     --arg description "$desc" \
     --argjson needs_human_decision "$needs_human" \
-    '{reason: $reason, id: $id, priority: $priority, description: $description, needs_human_decision: $needs_human_decision}' \
+    --argjson recovery_suggestions "$recovery_suggestions_json" \
+    '{reason: $reason, id: $id, priority: $priority, description: $description, needs_human_decision: $needs_human_decision, recovery_suggestions: $recovery_suggestions}' \
     > "$block_dir/blocked_item.json"
   write_artifact_manifest "${ITER_DIR:-}" "" "BLOCKED" "$block_dir" "$reason" "$desc"
   echo "$block_dir"
+}
+
+blocked_recovery_suggestions_json() {
+  local reason="${1:-}"
+  case "$reason" in
+    dirty_worktree)
+      cat <<'JSON'
+["git status --short","git stash -u"]
+JSON
+      ;;
+    verify_pre_failed|verify_post_failed)
+      cat <<'JSON'
+["ls -1dt .ralph/iter_* | head -1","tail -n 120 $(ls -1dt .ralph/iter_* | head -1)/verify_post.log","./plans/verify.sh quick"]
+JSON
+      ;;
+    checkpoint_untrusted_path|checkpoint_schema_invalid|checkpoint_schema_unavailable|checkpoint_lock_unavailable|writer_ci)
+      cat <<'JSON'
+["./plans/reset_verify_checkpoint.sh","./plans/verify.sh quick"]
+JSON
+      ;;
+    no_progress|circuit_breaker)
+      cat <<'JSON'
+["cat .ralph/state.json | jq .","ls -1dt .ralph/blocked_* | head -1","./plans/ralph.sh 1"]
+JSON
+      ;;
+    *)
+      echo '[]'
+      ;;
+  esac
 }
 
 sha256_file() {
@@ -1149,8 +1181,10 @@ hash_ralph_json_files() {
   local tmp
   tmp="$(mktemp)"
   find .ralph -type f -name '*.json' \
-    ! -path '.ralph/verify/*' \
-    ! -path '.ralph/workflow_acceptance_*/*' \
+    ! -path '.ralph/verify*' \
+    ! -path '.ralph/verify*/*' \
+    ! -path '.ralph/workflow_acceptance*' \
+    ! -path '.ralph/workflow_acceptance*/*' \
     2>/dev/null | LC_ALL=C sort | while IFS= read -r file; do
       printf '%s %s\n' "$(sha256_file "$file")" "$file"
     done > "$tmp"
@@ -1806,6 +1840,7 @@ is_ignored_file() {
   local file="$1"
   case "$file" in
     plans/prd.json|plans/progress.txt|plans/progress_archive.txt) return 0 ;;
+    reviews/postmortems/*) return 0 ;;
     .ralph/*|plans/logs/*) return 0 ;;
     reviews/postmortems/*) return 0 ;;
   esac
@@ -2323,6 +2358,7 @@ for ((i=1; i<=MAX_ITERS; i++)); do
   PHASE_VERIFY_PRE_MS="null"
   PHASE_AGENT_MS="null"
   PHASE_VERIFY_POST_MS="null"
+  PHASE_STORY_VERIFY_MS="null"
   PHASE_CONTRACT_REVIEW_MS="null"
   PHASE_PASS_FLIP_MS="null"
   PHASE_START_MS="$ITER_START_MS"
@@ -3018,6 +3054,8 @@ PROMPT
       exit 1
     fi
   fi
+  PHASE_STORY_VERIFY_MS=$(( $(now_ms) - PHASE_START_MS ))
+  PHASE_START_MS="$(now_ms)"
 
   VERIFY_POST_HEAD="$VERIFY_POST_HEAD_VERIFIED"
   VERIFY_POST_LOG_SHA="$(sha256_file "${ITER_DIR}/verify_post.log")"
@@ -3263,9 +3301,10 @@ PROMPT
     --argjson verify_pre_ms "$PHASE_VERIFY_PRE_MS" \
     --argjson agent_ms "$PHASE_AGENT_MS" \
     --argjson verify_post_ms "$PHASE_VERIFY_POST_MS" \
+    --argjson story_verify_ms "$PHASE_STORY_VERIFY_MS" \
     --argjson contract_review_ms "$PHASE_CONTRACT_REVIEW_MS" \
     --argjson pass_flip_ms "$PHASE_PASS_FLIP_MS" \
-    '{preflight_ms:$preflight_ms, verify_pre_ms:$verify_pre_ms, agent_ms:$agent_ms, verify_post_ms:$verify_post_ms, contract_review_ms:$contract_review_ms, pass_flip_ms:$pass_flip_ms}')"
+    '{preflight_ms:$preflight_ms, verify_pre_ms:$verify_pre_ms, agent_ms:$agent_ms, verify_post_ms:$verify_post_ms, story_verify_ms:$story_verify_ms, contract_review_ms:$contract_review_ms, pass_flip_ms:$pass_flip_ms}')"
   state_merge \
     --argjson last_phase_timings_ms "$phase_timings_json" \
     '.last_phase_timings_ms=$last_phase_timings_ms'

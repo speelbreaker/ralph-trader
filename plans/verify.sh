@@ -32,6 +32,10 @@
 
 set -euo pipefail
 
+# checkpoint-fingerprint-ignore: VERIFY_RUN_ID
+# checkpoint-fingerprint-ignore: VERIFY_ARTIFACTS_DIR
+# checkpoint-fingerprint-ignore: VERIFY_CHECKPOINT_TELEMETRY_FILE
+
 VERIFY_SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify.sh"
 if command -v sha256sum >/dev/null 2>&1; then
   VERIFY_SH_SHA="$(sha256sum "$VERIFY_SCRIPT_PATH" | awk '{print $1}')"
@@ -133,6 +137,17 @@ VERIFY_CHECKPOINT_FILE="${VERIFY_CHECKPOINT_FILE:-$ROOT/.ralph/verify_checkpoint
 VERIFY_CHECKPOINT_ROLLOUT_RAW="${VERIFY_CHECKPOINT_ROLLOUT:-}"
 VERIFY_CHECKPOINT_ROLLOUT="${VERIFY_CHECKPOINT_ROLLOUT_RAW:-off}" # off|dry_run|enforce
 VERIFY_CHECKPOINT_KILL_SWITCH="${VERIFY_CHECKPOINT_KILL_SWITCH:-}"
+VERIFY_CHECKPOINT_SKIP="${VERIFY_CHECKPOINT_SKIP:-0}"
+MIN_SPEC_VALIDATORS="${MIN_SPEC_VALIDATORS:-7}"
+VERIFY_CHECKPOINT_MAX_AGE_SECS="${VERIFY_CHECKPOINT_MAX_AGE_SECS:-86400}"
+VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS="${VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS:-10}"
+VERIFY_CHECKPOINT_FORCE_AFTER_SECS="${VERIFY_CHECKPOINT_FORCE_AFTER_SECS:-21600}"
+VERIFY_CHECKPOINT_HASH_TARGET_MS="${VERIFY_CHECKPOINT_HASH_TARGET_MS:-500}"   # target 500ms
+VERIFY_CHECKPOINT_HASH_BUDGET_MS="${VERIFY_CHECKPOINT_HASH_BUDGET_MS:-2000}" # hard ceiling 2.0s
+VERIFY_CHECKPOINT_TELEMETRY_DIR="${VERIFY_CHECKPOINT_TELEMETRY_DIR:-$ROOT/.ralph/verify_telemetry}"
+VERIFY_CHECKPOINT_TELEMETRY_MAX_FILES="${VERIFY_CHECKPOINT_TELEMETRY_MAX_FILES:-200}"
+VERIFY_CHECKPOINT_TELEMETRY_MAX_BYTES="${VERIFY_CHECKPOINT_TELEMETRY_MAX_BYTES:-20971520}" # 20MB
+VERIFY_CHECKPOINT_TELEMETRY_TTL_DAYS="${VERIFY_CHECKPOINT_TELEMETRY_TTL_DAYS:-}"
 VERIFY_CHECKPOINT_LOCK_TIMEOUT_SECS="${VERIFY_CHECKPOINT_LOCK_TIMEOUT_SECS:-5}"
 VERIFY_CHECKPOINT_LOCK_STALE_SECS="${VERIFY_CHECKPOINT_LOCK_STALE_SECS:-600}"
 VERIFY_CHECKPOINT_LOCK_FILE="${VERIFY_CHECKPOINT_LOCK_FILE:-$(dirname "$VERIFY_CHECKPOINT_FILE")/verify_checkpoint.lock}"
@@ -177,6 +192,7 @@ fi
 # -----------------------------------------------------------------------------
 source "$ROOT/plans/lib/verify_utils.sh"
 source "$ROOT/plans/lib/verify_checkpoint.sh"
+source "$ROOT/plans/lib/spec_validators_group.sh"
 
 if [[ "$CHECKPOINT_NON_TTY_DEFAULT_OFF" == "1" ]]; then
   warn "non_tty_default_off: VERIFY_CHECKPOINT_ROLLOUT unset in non-TTY context; forcing rollout=off"
@@ -187,6 +203,8 @@ CHECKPOINT_ELIGIBLE=0
 CHECKPOINT_WOULD_HIT=0
 CHECKPOINT_FINGERPRINT=""
 CHECKPOINT_PREV_FINGERPRINT=""
+CHECKPOINT_PREV_HEAD_SHA=""
+CHECKPOINT_PREV_HEAD_TREE=""
 CHECKPOINT_HEAD_SHA=""
 CHECKPOINT_HEAD_TREE=""
 CHECKPOINT_CHANGED_FILES_HASH=""
@@ -199,6 +217,15 @@ CHECKPOINT_LOCK_HELD=0
 CHECKPOINT_LOCK_FILE=""
 CHECKPOINT_LOCK_PROBE_DONE=0
 CHECKPOINT_LOCK_PROBE_OK=0
+CHECKPOINT_HASH_PHASE_MS=0
+CHECKPOINT_HASH_BUDGET_EXCEEDED=0
+CHECKPOINT_LAST_RUN_SKIPPED_GATE_COUNT=0
+CHECKPOINT_LAST_RUN_SCHEDULED_GATE_COUNT=0
+CHECKPOINT_LAST_RUN_SKIPPED_GATES=""
+CHECKPOINT_DRY_RUN_WOULD_SKIP_CONTRACT_COVERAGE=0
+CHECKPOINT_DRY_RUN_WOULD_SKIP_SPEC_VALIDATORS_GROUP=0
+CHECKPOINT_ENFORCE_SKIPPED_CONTRACT_COVERAGE=0
+CHECKPOINT_ENFORCE_SKIPPED_SPEC_VALIDATORS_GROUP=0
 
 sha256_string() {
   local payload="$1"
@@ -211,7 +238,26 @@ sha256_string() {
 
 # Single checkpoint skip-decision entrypoint.
 decide_skip_gate() {
-  checkpoint_decide_skip_gate "$@"
+  local gate="${1:-unknown_gate}"
+  checkpoint_decide_skip_gate "$gate"
+  local rc=$?
+  case "$gate" in
+    contract_coverage)
+      if [[ "$rc" -eq 0 && "${CHECKPOINT_DECISION_REASON:-}" == "checkpoint_cache_hit" ]]; then
+        CHECKPOINT_ENFORCE_SKIPPED_CONTRACT_COVERAGE=1
+      elif [[ "$rc" -ne 0 && "${CHECKPOINT_DECISION_REASON:-}" == "dry_run_would_skip" ]]; then
+        CHECKPOINT_DRY_RUN_WOULD_SKIP_CONTRACT_COVERAGE=1
+      fi
+      ;;
+    spec_validators_group)
+      if [[ "$rc" -eq 0 && "${CHECKPOINT_DECISION_REASON:-}" == "checkpoint_cache_hit" ]]; then
+        CHECKPOINT_ENFORCE_SKIPPED_SPEC_VALIDATORS_GROUP=1
+      elif [[ "$rc" -ne 0 && "${CHECKPOINT_DECISION_REASON:-}" == "dry_run_would_skip" ]]; then
+        CHECKPOINT_DRY_RUN_WOULD_SKIP_SPEC_VALIDATORS_GROUP=1
+      fi
+      ;;
+  esac
+  return "$rc"
 }
 
 emit_skip_artifacts() {
@@ -229,6 +275,15 @@ emit_skip_artifacts() {
     printf '[SKIP_DECISION] gate=%s action=skipped reason=%s\n' "$gate" "$reason"
     printf 'mode=%s verify_mode=%s rollout=%s\n' "$MODE" "${VERIFY_MODE:-none}" "${CHECKPOINT_ROLLOUT:-off}"
   } > "$logf"
+}
+
+emit_skip_artifacts_many() {
+  local reason="${1:-checkpoint}"
+  shift || true
+  local gate
+  for gate in "$@"; do
+    emit_skip_artifacts "$gate" "$reason"
+  done
 }
 
 checkpoint_counter_enabled() {
@@ -256,8 +311,9 @@ checkpoint_counter_load_prev() {
   else
     return 0
   fi
+  local checkpoint_prev_data
   set +e
-  CHECKPOINT_PREV_FINGERPRINT="$(VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" "$pybin" - <<'PY'
+  checkpoint_prev_data="$(VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" "$pybin" - <<'PY'
 import json
 import os
 
@@ -268,13 +324,20 @@ try:
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
     fp = data.get("last_success", {}).get("fingerprint", "")
-    if fp:
-        print(fp)
+    skip = data.get("skip_cache", {}) if isinstance(data.get("skip_cache"), dict) else {}
+    head_sha = skip.get("head_sha", "")
+    head_tree = skip.get("head_tree", "")
+    print(fp)
+    print(head_sha if isinstance(head_sha, str) else "")
+    print(head_tree if isinstance(head_tree, str) else "")
 except Exception:
     pass
 PY
   )"
   set -e
+  CHECKPOINT_PREV_FINGERPRINT="$(printf '%s\n' "$checkpoint_prev_data" | sed -n '1p')"
+  CHECKPOINT_PREV_HEAD_SHA="$(printf '%s\n' "$checkpoint_prev_data" | sed -n '2p')"
+  CHECKPOINT_PREV_HEAD_TREE="$(printf '%s\n' "$checkpoint_prev_data" | sed -n '3p')"
 }
 
 checkpoint_counter_init() {
@@ -283,12 +346,16 @@ checkpoint_counter_init() {
   CHECKPOINT_WOULD_HIT=0
   CHECKPOINT_FINGERPRINT=""
   CHECKPOINT_PREV_FINGERPRINT=""
+  CHECKPOINT_PREV_HEAD_SHA=""
+  CHECKPOINT_PREV_HEAD_TREE=""
   CHECKPOINT_HEAD_SHA=""
   CHECKPOINT_HEAD_TREE=""
   CHECKPOINT_CHANGED_FILES_HASH=""
   CHECKPOINT_INELIGIBLE_REASON=""
   CHECKPOINT_COUNTER_INELIGIBLE_REASON=""
   CHECKPOINT_DIRTY="0"
+  CHECKPOINT_HASH_PHASE_MS=0
+  CHECKPOINT_HASH_BUDGET_EXCEEDED=0
 
   if [[ "${CENSUS:-0}" == "1" ]]; then
     return 0
@@ -317,7 +384,24 @@ checkpoint_counter_init() {
 
   CHECKPOINT_HEAD_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
   CHECKPOINT_HEAD_TREE="$(git rev-parse HEAD^{tree} 2>/dev/null || true)"
+  local hash_phase_started_ms hash_phase_finished_ms
+  hash_phase_started_ms="$(checkpoint_now_millis)"
+
   CHECKPOINT_CHANGED_FILES_HASH="$(sha256_string "${CHANGED_FILES:-}")"
+  local override_fp tool_versions_json contract_hash spec_hash
+  override_fp="$(checkpoint_override_fingerprint || true)"
+  tool_versions_json="$(checkpoint_tool_versions_json || true)"
+  contract_hash=""
+  checkpoint_gate_input_hash "contract_coverage" contract_hash || true
+  spec_hash=""
+  checkpoint_gate_input_hash "spec_validators_group" spec_hash || true
+  if [[ -z "$override_fp" || -z "$tool_versions_json" || -z "$contract_hash" || -z "$spec_hash" ]]; then
+    if [[ -z "${CHECKPOINT_INELIGIBLE_REASON:-}" ]]; then
+      CHECKPOINT_INELIGIBLE_REASON="checkpoint_hash_inputs_unavailable"
+    fi
+    CHECKPOINT_ELIGIBLE=0
+    CHECKPOINT_COUNTER_INELIGIBLE_REASON="$CHECKPOINT_INELIGIBLE_REASON"
+  fi
 
   local verify_mode="${VERIFY_MODE:-none}"
   local fingerprint_payload
@@ -329,8 +413,34 @@ rollout=${CHECKPOINT_ROLLOUT:-off}
 head_sha=$CHECKPOINT_HEAD_SHA
 head_tree=$CHECKPOINT_HEAD_TREE
 change_detection_ok=${CHANGE_DETECTION_OK:-0}
-changed_files_hash=$CHECKPOINT_CHANGED_FILES_HASH"
+changed_files_hash=$CHECKPOINT_CHANGED_FILES_HASH
+override_fingerprint=$override_fp
+tool_versions_json=$tool_versions_json
+contract_coverage_input_hash=$contract_hash
+spec_validators_group_input_hash=$spec_hash"
   CHECKPOINT_FINGERPRINT="$(sha256_string "$fingerprint_payload")"
+
+  hash_phase_finished_ms="$(checkpoint_now_millis)"
+  if [[ "$hash_phase_started_ms" =~ ^[0-9]+$ && "$hash_phase_finished_ms" =~ ^[0-9]+$ && "$hash_phase_finished_ms" -ge "$hash_phase_started_ms" ]]; then
+    CHECKPOINT_HASH_PHASE_MS=$((hash_phase_finished_ms - hash_phase_started_ms))
+  else
+    CHECKPOINT_HASH_PHASE_MS=0
+  fi
+  if [[ ! "$VERIFY_CHECKPOINT_HASH_BUDGET_MS" =~ ^[0-9]+$ ]]; then
+    VERIFY_CHECKPOINT_HASH_BUDGET_MS=2000
+  fi
+  if (( CHECKPOINT_HASH_PHASE_MS > VERIFY_CHECKPOINT_HASH_BUDGET_MS )); then
+    CHECKPOINT_HASH_BUDGET_EXCEEDED=1
+    warn "checkpoint_hash_budget_exceeded: phase=${CHECKPOINT_HASH_PHASE_MS}ms budget=${VERIFY_CHECKPOINT_HASH_BUDGET_MS}ms"
+    CHECKPOINT_ELIGIBLE=0
+    CHECKPOINT_COUNTER_INELIGIBLE_REASON="checkpoint_hash_budget_exceeded"
+  elif (( CHECKPOINT_HASH_PHASE_MS > VERIFY_CHECKPOINT_HASH_TARGET_MS )); then
+    warn "checkpoint_hash_target_missed: phase=${CHECKPOINT_HASH_PHASE_MS}ms target=${VERIFY_CHECKPOINT_HASH_TARGET_MS}ms"
+  fi
+
+  if [[ "$CHECKPOINT_ELIGIBLE" != "1" ]]; then
+    return 0
+  fi
 
   checkpoint_counter_load_prev
   if [[ -n "$CHECKPOINT_PREV_FINGERPRINT" && "$CHECKPOINT_PREV_FINGERPRINT" == "$CHECKPOINT_FINGERPRINT" ]]; then
@@ -368,6 +478,17 @@ checkpoint_counter_record_success() {
   fi
 
   set +e
+  local gate_contract_scheduled=0
+  if should_run_contract_coverage; then
+    gate_contract_scheduled=1
+  fi
+  local gate_contract_hash gate_spec_hash override_fp tool_versions_json
+  gate_contract_hash=""
+  checkpoint_gate_input_hash "contract_coverage" gate_contract_hash || true
+  gate_spec_hash=""
+  checkpoint_gate_input_hash "spec_validators_group" gate_spec_hash || true
+  override_fp="$(checkpoint_override_fingerprint || true)"
+  tool_versions_json="$(checkpoint_tool_versions_json || true)"
   VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" \
     CHECKPOINT_WOULD_HIT="$would_hit" \
     CHECKPOINT_ELIGIBLE="$eligible" \
@@ -385,6 +506,16 @@ checkpoint_counter_record_success() {
     CHECKPOINT_KILL_SWITCH="${VERIFY_CHECKPOINT_KILL_SWITCH:-}" \
     CHECKPOINT_WRITER_CI="$([[ -n "${CI:-}" ]] && echo 1 || echo 0)" \
     CHECKPOINT_WRITER_MODE="$MODE" \
+    CHECKPOINT_LAST_RUN_SKIPPED_GATE_COUNT="${CHECKPOINT_LAST_RUN_SKIPPED_GATE_COUNT:-0}" \
+    CHECKPOINT_LAST_RUN_SCHEDULED_GATE_COUNT="${CHECKPOINT_LAST_RUN_SCHEDULED_GATE_COUNT:-0}" \
+    CHECKPOINT_HASH_PHASE_MS="${CHECKPOINT_HASH_PHASE_MS:-0}" \
+    CHECKPOINT_ARTIFACTS_DIR="$VERIFY_ARTIFACTS_DIR" \
+    CHECKPOINT_GATE_CONTRACT_COVERAGE_SCHEDULED="$gate_contract_scheduled" \
+    CHECKPOINT_GATE_SPEC_VALIDATORS_GROUP_SCHEDULED="1" \
+    CHECKPOINT_GATE_INPUT_HASH_CONTRACT_COVERAGE="$gate_contract_hash" \
+    CHECKPOINT_GATE_INPUT_HASH_SPEC_VALIDATORS_GROUP="$gate_spec_hash" \
+    CHECKPOINT_OVERRIDE_FINGERPRINT="$override_fp" \
+    CHECKPOINT_TOOL_VERSIONS_JSON="$tool_versions_json" \
     "$pybin" - <<'PY'
 import json
 import os
@@ -403,13 +534,100 @@ def _int_env(name, default=0):
     except Exception:
         return default
 
+def _to_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+def _to_float(value, default=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+def _gate_result(artifacts_dir, gate):
+    status_path = os.path.join(artifacts_dir, f"{gate}.status")
+    rc_path = os.path.join(artifacts_dir, f"{gate}.rc")
+    time_path = os.path.join(artifacts_dir, f"{gate}.time")
+    skipped = False
+    reason = ""
+    if os.path.exists(status_path):
+        try:
+            status_raw = open(status_path, "r", encoding="utf-8").read().strip()
+        except Exception:
+            status_raw = ""
+        if status_raw.startswith("skipped:"):
+            skipped = True
+            reason = status_raw.split(":", 1)[1] if ":" in status_raw else "checkpoint_skip"
+
+    rc = None
+    if os.path.exists(rc_path):
+        try:
+            rc = int(open(rc_path, "r", encoding="utf-8").read().strip())
+        except Exception:
+            rc = None
+
+    elapsed = 0.0
+    if os.path.exists(time_path):
+        try:
+            raw = open(time_path, "r", encoding="utf-8").read().strip()
+            elapsed = float(raw) if raw else 0.0
+        except Exception:
+            elapsed = 0.0
+    return skipped, reason, rc, elapsed
+
+def _update_gate(skip_cache, gate, scheduled, input_hash, artifacts_dir, now_ts):
+    gates = skip_cache.get("gates")
+    if not isinstance(gates, dict):
+        gates = {}
+    prev = gates.get(gate, {}) if isinstance(gates.get(gate, {}), dict) else {}
+
+    if not scheduled:
+        entry = dict(prev) if isinstance(prev, dict) else {}
+        if input_hash:
+            entry["input_hash"] = input_hash
+        if "input_hash" not in entry:
+            entry["input_hash"] = ""
+        entry["last_real_run_ts"] = _to_int(entry.get("last_real_run_ts", 0), 0)
+        entry["consecutive_skips"] = _to_int(entry.get("consecutive_skips", 0), 0)
+        entry["elapsed_s"] = _to_float(entry.get("elapsed_s", 0.0), 0.0)
+        entry["last_decision_reason"] = entry.get("last_decision_reason") or "unscheduled"
+        gates[gate] = entry
+        skip_cache["gates"] = gates
+        return
+
+    skipped, reason, rc, elapsed = _gate_result(artifacts_dir, gate)
+    entry = dict(prev) if isinstance(prev, dict) else {}
+    if input_hash:
+        entry["input_hash"] = input_hash
+    if "input_hash" not in entry:
+        entry["input_hash"] = ""
+    entry["elapsed_s"] = 0.0 if skipped else _to_float(elapsed, 0.0)
+    if skipped:
+        entry["consecutive_skips"] = _to_int(prev.get("consecutive_skips", 0), 0) + 1
+        entry["last_real_run_ts"] = _to_int(prev.get("last_real_run_ts", 0), 0)
+        entry["last_decision_reason"] = reason or "checkpoint_skip"
+    else:
+        # verify.sh reaches checkpoint write only on successful gate execution.
+        entry["consecutive_skips"] = 0
+        entry["last_real_run_ts"] = now_ts
+        entry["last_decision_reason"] = "ran"
+    gates[gate] = entry
+    skip_cache["gates"] = gates
+
 data = {
     "schema_version": 2,
     "success_runs": 0,
+    "full_success_runs": 0,
+    "partial_success_runs": 0,
     "eligible_success_runs": 0,
     "would_hit_success_runs": 0,
     "would_miss_success_runs": 0,
     "ineligible_success_runs": 0,
+    "last_run_skipped_gate_count": 0,
+    "last_run_scheduled_gate_count": 0,
+    "last_run_hash_phase_ms": 0,
     "last_success": {},
     "skip_cache": {
         "schema_version": 1,
@@ -442,6 +660,13 @@ if existing_schema > 2:
 data["schema_version"] = 2
 
 data["success_runs"] = int(data.get("success_runs", 0)) + 1
+data["last_run_skipped_gate_count"] = _int_env("CHECKPOINT_LAST_RUN_SKIPPED_GATE_COUNT", 0)
+data["last_run_scheduled_gate_count"] = _int_env("CHECKPOINT_LAST_RUN_SCHEDULED_GATE_COUNT", 0)
+data["last_run_hash_phase_ms"] = _int_env("CHECKPOINT_HASH_PHASE_MS", 0)
+if data["last_run_skipped_gate_count"] > 0:
+    data["partial_success_runs"] = int(data.get("partial_success_runs", 0)) + 1
+else:
+    data["full_success_runs"] = int(data.get("full_success_runs", 0)) + 1
 eligible = _int_env("CHECKPOINT_ELIGIBLE", 0)
 would_hit = _int_env("CHECKPOINT_WOULD_HIT", 0)
 if eligible == 1:
@@ -481,8 +706,45 @@ skip_cache["kill_switch_token"] = os.environ.get("CHECKPOINT_KILL_SWITCH", "")
 skip_cache["writer_ci"] = bool(_int_env("CHECKPOINT_WRITER_CI", 0))
 skip_cache["writer_mode"] = os.environ.get("CHECKPOINT_WRITER_MODE", "")
 skip_cache["written_by_verify_sh_sha"] = os.environ.get("CHECKPOINT_VERIFY_SH_SHA", "")
+skip_cache["verify_sh_sha"] = os.environ.get("CHECKPOINT_VERIFY_SH_SHA", "")
+skip_cache["base_ref"] = os.environ.get("CHECKPOINT_BASE_REF", "")
+skip_cache["head_sha"] = os.environ.get("CHECKPOINT_HEAD_SHA", "")
+skip_cache["head_tree"] = os.environ.get("CHECKPOINT_HEAD_TREE", "")
+skip_cache["mode"] = os.environ.get("CHECKPOINT_MODE", "")
+skip_cache["verify_mode"] = os.environ.get("CHECKPOINT_VERIFY_MODE", "")
+skip_cache["changed_files_hash"] = os.environ.get("CHECKPOINT_CHANGED_FILES_HASH", "")
+skip_cache["override_fingerprint"] = os.environ.get("CHECKPOINT_OVERRIDE_FINGERPRINT", "")
+tool_versions_raw = os.environ.get("CHECKPOINT_TOOL_VERSIONS_JSON", "")
+try:
+    tool_versions = json.loads(tool_versions_raw) if tool_versions_raw else {}
+except Exception:
+    tool_versions = {}
+if not isinstance(tool_versions, dict):
+    tool_versions = {}
+skip_cache["tool_versions"] = tool_versions
 if not isinstance(skip_cache.get("gates"), dict):
     skip_cache["gates"] = {}
+
+artifact_dir = os.environ.get("CHECKPOINT_ARTIFACTS_DIR", "")
+now_ts = int(time.time())
+contract_scheduled = _int_env("CHECKPOINT_GATE_CONTRACT_COVERAGE_SCHEDULED", 0) == 1
+spec_scheduled = _int_env("CHECKPOINT_GATE_SPEC_VALIDATORS_GROUP_SCHEDULED", 0) == 1
+_update_gate(
+    skip_cache,
+    "contract_coverage",
+    contract_scheduled,
+    os.environ.get("CHECKPOINT_GATE_INPUT_HASH_CONTRACT_COVERAGE", ""),
+    artifact_dir,
+    now_ts,
+)
+_update_gate(
+    skip_cache,
+    "spec_validators_group",
+    spec_scheduled,
+    os.environ.get("CHECKPOINT_GATE_INPUT_HASH_SPEC_VALIDATORS_GROUP", ""),
+    artifact_dir,
+    now_ts,
+)
 data["skip_cache"] = skip_cache
 
 tmp = path + ".tmp"
@@ -497,6 +759,266 @@ PY
   if [[ "$checkpoint_write_rc" -ne 0 ]]; then
     warn "checkpoint write failed (rc=$checkpoint_write_rc)"
   fi
+}
+
+checkpoint_collect_gate_run_stats() {
+  local scheduled_count=0
+  local skipped_count=0
+  local skipped_csv=""
+  local statusf gate status
+
+  if should_run_contract_coverage; then
+    scheduled_count=$((scheduled_count + 1))
+  fi
+  # Spec validators are always scheduled in the current pipeline.
+  scheduled_count=$((scheduled_count + 1))
+
+  for gate in contract_coverage spec_validators_group; do
+    statusf="${VERIFY_ARTIFACTS_DIR}/${gate}.status"
+    [[ -f "$statusf" ]] || continue
+    status="$(cat "$statusf" 2>/dev/null || true)"
+    if [[ "$status" == skipped:* ]]; then
+      skipped_count=$((skipped_count + 1))
+      if [[ -n "$skipped_csv" ]]; then
+        skipped_csv="${skipped_csv},${gate}"
+      else
+        skipped_csv="${gate}"
+      fi
+    fi
+  done
+
+  CHECKPOINT_LAST_RUN_SKIPPED_GATE_COUNT="$skipped_count"
+  CHECKPOINT_LAST_RUN_SCHEDULED_GATE_COUNT="$scheduled_count"
+  CHECKPOINT_LAST_RUN_SKIPPED_GATES="$skipped_csv"
+}
+
+checkpoint_telemetry_prune() {
+  local pybin=""
+  pybin="$(checkpoint_python_bin || true)"
+  [[ -n "$pybin" ]] || return 1
+
+  mkdir -p "$VERIFY_CHECKPOINT_TELEMETRY_DIR" 2>/dev/null || return 1
+  local now_epoch
+  now_epoch="$(checkpoint_now_epoch)"
+  [[ "$now_epoch" =~ ^[0-9]+$ ]] || now_epoch="$(date +%s)"
+
+  "$pybin" - "$VERIFY_CHECKPOINT_TELEMETRY_DIR" "$now_epoch" \
+    "$VERIFY_CHECKPOINT_TELEMETRY_MAX_FILES" \
+    "$VERIFY_CHECKPOINT_TELEMETRY_MAX_BYTES" \
+    "${VERIFY_CHECKPOINT_TELEMETRY_TTL_DAYS:-}" <<'PY'
+import json
+import os
+import sys
+
+telemetry_dir = sys.argv[1]
+now = int(sys.argv[2])
+max_files = int(sys.argv[3]) if sys.argv[3].isdigit() else 200
+max_bytes = int(sys.argv[4]) if sys.argv[4].isdigit() else 20 * 1024 * 1024
+ttl_override = sys.argv[5].strip()
+
+def _entry(path):
+    ts = int(os.path.getmtime(path))
+    mode = "off"
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            line = fh.readline().strip()
+        if line:
+            obj = json.loads(line)
+            mode = str(obj.get("rollout_mode", mode))
+            ts_val = obj.get("ts")
+            if isinstance(ts_val, int) and ts_val >= 0:
+                ts = ts_val
+    except Exception:
+        pass
+    return {"path": path, "ts": ts, "mode": mode, "size": os.path.getsize(path)}
+
+def _ttl_days(mode):
+    if ttl_override:
+        try:
+            parsed = int(ttl_override)
+            if parsed > 0:
+                return parsed
+        except Exception:
+            pass
+    return 30 if mode == "dry_run" else 7
+
+files = []
+for name in sorted(os.listdir(telemetry_dir)):
+    if not (name.startswith("skip_telemetry_") and name.endswith(".jsonl")):
+        continue
+    files.append(_entry(os.path.join(telemetry_dir, name)))
+
+# TTL prune first.
+kept = []
+for entry in files:
+    ttl_days = _ttl_days(entry["mode"])
+    if now - entry["ts"] > ttl_days * 86400:
+        try:
+            os.remove(entry["path"])
+        except Exception:
+            raise SystemExit(1)
+        continue
+    kept.append(entry)
+
+# Deterministic oldest-first prune for file-count and byte limits.
+kept.sort(key=lambda e: (e["ts"], e["path"]))
+total_bytes = sum(e["size"] for e in kept)
+while kept and (len(kept) > max_files or total_bytes > max_bytes):
+    entry = kept.pop(0)
+    try:
+        os.remove(entry["path"])
+    except Exception:
+        raise SystemExit(1)
+    total_bytes -= entry["size"]
+
+raise SystemExit(0)
+PY
+}
+
+checkpoint_write_opportunity_telemetry() {
+  local selftest="${VERIFY_CHECKPOINT_TELEMETRY_SELFTEST:-0}"
+  # Opportunity telemetry is local quick-mode only (unless selftest).
+  if [[ "$selftest" != "1" ]]; then
+    if [[ "$MODE" != "quick" || -n "${CI:-}" ]]; then
+      return 0
+    fi
+  fi
+
+  local pybin=""
+  pybin="$(checkpoint_python_bin || true)"
+  [[ -n "$pybin" ]] || return 0
+
+  local head_unchanged_since_last_run=0
+  local would_skip_contract_coverage=0
+  local would_skip_spec_validators_group=0
+  local writer_ci=0
+  local now_epoch
+
+  if [[ -n "${CHECKPOINT_PREV_HEAD_SHA:-}" && "$CHECKPOINT_PREV_HEAD_SHA" == "${CHECKPOINT_HEAD_SHA:-}" ]]; then
+    if [[ -z "${CHECKPOINT_PREV_HEAD_TREE:-}" || "$CHECKPOINT_PREV_HEAD_TREE" == "${CHECKPOINT_HEAD_TREE:-}" ]]; then
+      head_unchanged_since_last_run=1
+    fi
+  elif [[ "$CHECKPOINT_WOULD_HIT" == "1" ]]; then
+    # Backward-compatible fallback when prior checkpoint lacks explicit head metadata.
+    head_unchanged_since_last_run=1
+  fi
+  if [[ "${CHECKPOINT_DRY_RUN_WOULD_SKIP_CONTRACT_COVERAGE:-0}" == "1" || "${CHECKPOINT_ENFORCE_SKIPPED_CONTRACT_COVERAGE:-0}" == "1" ]]; then
+    would_skip_contract_coverage=1
+  fi
+  if [[ "${CHECKPOINT_DRY_RUN_WOULD_SKIP_SPEC_VALIDATORS_GROUP:-0}" == "1" || "${CHECKPOINT_ENFORCE_SKIPPED_SPEC_VALIDATORS_GROUP:-0}" == "1" ]]; then
+    would_skip_spec_validators_group=1
+  fi
+  if [[ "$would_skip_contract_coverage" == "0" && "$would_skip_spec_validators_group" == "0" && "$CHECKPOINT_ELIGIBLE" == "1" && "$head_unchanged_since_last_run" == "1" ]]; then
+    # Backward-compatible fallback for runs that do not invoke gate-level decisions.
+    if should_run_contract_coverage; then
+      would_skip_contract_coverage=1
+    fi
+    would_skip_spec_validators_group=1
+  fi
+
+  if [[ -n "${CI:-}" ]]; then
+    writer_ci=1
+  fi
+
+  now_epoch="$(checkpoint_now_epoch)"
+  [[ "$now_epoch" =~ ^[0-9]+$ ]] || now_epoch="$(date +%s)"
+
+  if ! checkpoint_telemetry_prune; then
+    warn "checkpoint telemetry prune failed; opportunity telemetry skipped for this run"
+    return 0
+  fi
+
+  mkdir -p "$VERIFY_CHECKPOINT_TELEMETRY_DIR" 2>/dev/null || {
+    warn "checkpoint telemetry directory unavailable: $VERIFY_CHECKPOINT_TELEMETRY_DIR"
+    return 0
+  }
+
+  local telemetry_file="$VERIFY_CHECKPOINT_TELEMETRY_DIR/skip_telemetry_${VERIFY_RUN_ID}.jsonl"
+  VERIFY_CHECKPOINT_TELEMETRY_FILE="$telemetry_file" \
+    CHECKPOINT_TELEMETRY_TS="$now_epoch" \
+    CHECKPOINT_TELEMETRY_RUN_ID="$VERIFY_RUN_ID" \
+    CHECKPOINT_TELEMETRY_MODE="$MODE" \
+    CHECKPOINT_TELEMETRY_VERIFY_MODE="${VERIFY_MODE:-none}" \
+    CHECKPOINT_TELEMETRY_ROLLOUT="${CHECKPOINT_ROLLOUT:-off}" \
+    CHECKPOINT_TELEMETRY_WRITER_CI="$writer_ci" \
+    CHECKPOINT_TELEMETRY_HEAD_SHA="${CHECKPOINT_HEAD_SHA:-}" \
+    CHECKPOINT_TELEMETRY_HEAD_TREE="${CHECKPOINT_HEAD_TREE:-}" \
+    CHECKPOINT_TELEMETRY_CHANGED_FILES_HASH="${CHECKPOINT_CHANGED_FILES_HASH:-}" \
+    CHECKPOINT_TELEMETRY_HEAD_UNCHANGED="$head_unchanged_since_last_run" \
+    CHECKPOINT_TELEMETRY_WOULD_SKIP_CONTRACT_COVERAGE="$would_skip_contract_coverage" \
+    CHECKPOINT_TELEMETRY_WOULD_SKIP_SPEC_VALIDATORS_GROUP="$would_skip_spec_validators_group" \
+    CHECKPOINT_TELEMETRY_SKIPPED_GATE_COUNT="${CHECKPOINT_LAST_RUN_SKIPPED_GATE_COUNT:-0}" \
+    CHECKPOINT_TELEMETRY_SCHEDULED_GATE_COUNT="${CHECKPOINT_LAST_RUN_SCHEDULED_GATE_COUNT:-0}" \
+    CHECKPOINT_TELEMETRY_SKIPPED_GATES="${CHECKPOINT_LAST_RUN_SKIPPED_GATES:-}" \
+    CHECKPOINT_TELEMETRY_REPORTER_ID="${VERIFY_CHECKPOINT_REPORTER_ID:-}" \
+    CHECKPOINT_TELEMETRY_WORKSTATION_HASH="${VERIFY_CHECKPOINT_WORKSTATION_ID_HASH:-}" \
+    "$pybin" - <<'PY'
+import json
+import os
+import sys
+
+out_path = os.environ.get("VERIFY_CHECKPOINT_TELEMETRY_FILE")
+if not out_path:
+    raise SystemExit(0)
+
+def _env_int(name, default=0):
+    try:
+        return int(os.environ.get(name, str(default)))
+    except Exception:
+        return default
+
+def _env_bool(name):
+    return _env_int(name, 0) == 1
+
+skipped_gates_raw = os.environ.get("CHECKPOINT_TELEMETRY_SKIPPED_GATES", "")
+skipped_gates = [g for g in skipped_gates_raw.split(",") if g]
+
+record = {
+    "ts": _env_int("CHECKPOINT_TELEMETRY_TS", 0),
+    "run_id": os.environ.get("CHECKPOINT_TELEMETRY_RUN_ID", ""),
+    "mode": os.environ.get("CHECKPOINT_TELEMETRY_MODE", ""),
+    "verify_mode": os.environ.get("CHECKPOINT_TELEMETRY_VERIFY_MODE", ""),
+    "rollout_mode": os.environ.get("CHECKPOINT_TELEMETRY_ROLLOUT", "off"),
+    "writer_ci": _env_bool("CHECKPOINT_TELEMETRY_WRITER_CI"),
+    "head_sha": os.environ.get("CHECKPOINT_TELEMETRY_HEAD_SHA", ""),
+    "head_tree": os.environ.get("CHECKPOINT_TELEMETRY_HEAD_TREE", ""),
+    "changed_files_hash": os.environ.get("CHECKPOINT_TELEMETRY_CHANGED_FILES_HASH", ""),
+    "head_unchanged_since_last_run": _env_bool("CHECKPOINT_TELEMETRY_HEAD_UNCHANGED"),
+    "would_skip": {
+        "contract_coverage": _env_bool("CHECKPOINT_TELEMETRY_WOULD_SKIP_CONTRACT_COVERAGE"),
+        "spec_validators_group": _env_bool("CHECKPOINT_TELEMETRY_WOULD_SKIP_SPEC_VALIDATORS_GROUP"),
+    },
+    "skipped_gate_count": _env_int("CHECKPOINT_TELEMETRY_SKIPPED_GATE_COUNT", 0),
+    "scheduled_gate_count": _env_int("CHECKPOINT_TELEMETRY_SCHEDULED_GATE_COUNT", 0),
+    "skipped_gates": skipped_gates,
+}
+
+reporter_id = os.environ.get("CHECKPOINT_TELEMETRY_REPORTER_ID", "")
+if reporter_id:
+    record["reporter_id"] = reporter_id
+workstation_hash = os.environ.get("CHECKPOINT_TELEMETRY_WORKSTATION_HASH", "")
+if workstation_hash:
+    record["workstation_id_hash"] = workstation_hash
+
+with open(out_path, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(record, separators=(",", ":")))
+    fh.write("\n")
+PY
+}
+
+checkpoint_run_telemetry_selftest() {
+  local dirty_flag=0
+  if command -v git >/dev/null 2>&1; then
+    if [[ -n "$(git status --porcelain 2>/dev/null || true)" ]]; then
+      dirty_flag=1
+    fi
+  fi
+  init_change_detection
+  checkpoint_resolve_rollout
+  checkpoint_capture_snapshot "$dirty_flag" "${CHANGE_DETECTION_OK:-0}" "$MODE" "${VERIFY_MODE:-none}" "$([[ -n "${CI:-}" ]] && echo 1 || echo 0)"
+  checkpoint_counter_init
+  checkpoint_collect_gate_run_stats
+  checkpoint_write_opportunity_telemetry
 }
 
 CENSUS_ENTRIES=()
@@ -1294,6 +1816,9 @@ if [[ -z "$NODE_PM" && -f package-lock.json ]]; then NODE_PM="npm"; fi
 if [[ -z "$NODE_PM" && -f yarn.lock ]]; then NODE_PM="yarn"; fi
 
 if [[ "$CENSUS" == "1" ]]; then
+  if [[ "${VERIFY_CHECKPOINT_TELEMETRY_SELFTEST:-0}" == "1" ]]; then
+    checkpoint_run_telemetry_selftest
+  fi
   run_verify_census
   exit 0
 fi
@@ -1431,18 +1956,9 @@ ensure_python
 [[ -f "specs/flows/RECONCILIATION_MATRIX.md" ]] || fail "Missing specs/flows/RECONCILIATION_MATRIX.md"
 [[ -f "specs/TRACE.yaml" ]] || fail "Missing specs/TRACE.yaml"
 
-# Build spec validator array (format: "name|timeout|command args")
-SPEC_VALIDATOR_SPECS=(
-  "contract_crossrefs|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_contract_crossrefs.py --contract $CONTRACT_FILE --strict --check-at --include-bare-section-refs"
-  "arch_flows|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_arch_flows.py --contract $CONTRACT_FILE --flows $ARCH_FLOWS_FILE --strict"
-  "state_machines|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_state_machines.py --dir specs/state_machines --strict --contract $CONTRACT_FILE --flows $ARCH_FLOWS_FILE --invariants $GLOBAL_INVARIANTS_FILE"
-  "global_invariants|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_global_invariants.py --file $GLOBAL_INVARIANTS_FILE --contract $CONTRACT_FILE"
-  "time_freshness|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_time_freshness.py --contract $CONTRACT_FILE --spec specs/flows/TIME_FRESHNESS.yaml --strict"
-  "crash_matrix|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_crash_matrix.py --contract $CONTRACT_FILE --matrix specs/flows/CRASH_MATRIX.md"
-  "crash_replay_idempotency|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_crash_replay_idempotency.py --contract $CONTRACT_FILE --spec specs/flows/CRASH_REPLAY_IDEMPOTENCY.yaml --strict"
-  "reconciliation_matrix|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_reconciliation_matrix.py --matrix specs/flows/RECONCILIATION_MATRIX.md --contract $CONTRACT_FILE --strict"
-  "csp_trace|$SPEC_LINT_TIMEOUT|$PYTHON_BIN scripts/check_csp_trace.py --contract $CONTRACT_FILE --trace specs/TRACE.yaml"
-)
+if ! spec_validators_group_build_specs; then
+  fail "spec_validators_group_build_specs failed (validator list invalid)"
+fi
 
 # Auto-detect CPU cores, cap at 4 to avoid CI thrashing
 SPEC_LINT_JOBS=$(detect_cpus)
@@ -1451,6 +1967,7 @@ SPEC_LINT_JOBS=$(detect_cpus)
 # Run validators in parallel
 if decide_skip_gate "spec_validators_group"; then
   emit_skip_artifacts "spec_validators_group" "${CHECKPOINT_DECISION_REASON:-checkpoint_skip}"
+  emit_skip_artifacts_many "${CHECKPOINT_DECISION_REASON:-checkpoint_skip}" "${SPEC_VALIDATOR_NAMES[@]}"
   echo "info: spec_validators_group skipped (${CHECKPOINT_DECISION_REASON:-checkpoint_skip})"
 else
   run_parallel_group SPEC_VALIDATOR_SPECS "$SPEC_LINT_JOBS"
@@ -1732,6 +2249,10 @@ fi
 
 if should_run_workflow_acceptance; then
   WORKFLOW_ACCEPTANCE_MODE="$(workflow_acceptance_mode)"
+  # Quick mode gets 5-minute timeout; full keeps the 30m default
+  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "quick" && "$WORKFLOW_ACCEPTANCE_TIMEOUT" == "30m" ]]; then
+    WORKFLOW_ACCEPTANCE_TIMEOUT="5m"
+  fi
   log "6) Workflow acceptance (${WORKFLOW_ACCEPTANCE_MODE})"
   # VERIFY_WA_PARALLEL_INTEGRATION: full mode uses parallel acceptance runner when available
   if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "full" && -x ./plans/workflow_acceptance_parallel.sh ]]; then
@@ -1758,8 +2279,18 @@ for f in "${VERIFY_ARTIFACTS_DIR}"/*.time; do
   [[ -f "$f" ]] || continue  # handles no-match case (glob returns literal)
   name="$(basename "$f" .time)"
   elapsed="$(cat "$f")"
+  statusf="${VERIFY_ARTIFACTS_DIR}/${name}.status"
+  if [[ -f "$statusf" ]]; then
+    status_val="$(cat "$statusf" 2>/dev/null || true)"
+    if [[ "$status_val" == skipped:* ]]; then
+      echo "  $name: ${elapsed}s (skipped)"
+      continue
+    fi
+  fi
   echo "  $name: ${elapsed}s"
 done
 
+checkpoint_collect_gate_run_stats
 checkpoint_counter_record_success
+checkpoint_write_opportunity_telemetry
 log "VERIFY OK (mode=$MODE)"

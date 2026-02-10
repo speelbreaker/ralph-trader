@@ -9,6 +9,7 @@ docs/contract_kernel.json
 docs/validation_rules.md
 plans/autofix.sh
 plans/check_checkpoint_fingerprint_manifest.sh
+plans/check_sample_mix.sh
 plans/check_skip_entrypoint.sh
 plans/checkpoint_dependency_manifest.json
 plans/checkpoint_fingerprint_env_manifest.txt
@@ -21,6 +22,7 @@ plans/lib/change_detection.sh
 plans/lib/node_gates.sh
 plans/lib/python_gates.sh
 plans/lib/rust_gates.sh
+plans/lib/spec_validators_group.sh
 plans/lib/verify_checkpoint.sh
 plans/lib/verify_utils.sh
 plans/prd_audit_check.sh
@@ -33,6 +35,7 @@ plans/prd_preflight.sh
 plans/preflight.sh
 plans/ralph.sh
 plans/ralph_day.sh
+plans/reset_verify_checkpoint.sh
 plans/schemas/verify_checkpoint.schema.json
 plans/ssot_lint.sh
 plans/story_verify_allowlist.txt
@@ -46,6 +49,7 @@ plans/tests/test_workflow_acceptance_fallback.sh
 plans/tests/test_workflow_allowlist_coverage.sh
 plans/verify.sh
 plans/verify_day.sh
+plans/verify_skip_status.sh
 plans/workflow_acceptance.sh
 plans/workflow_acceptance_parallel.sh
 plans/workflow_contract_gate.sh
