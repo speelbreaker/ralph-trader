@@ -244,7 +244,9 @@ pub fn build_order_intent(
     let context = match context {
         Some(context) => context,
         None => {
-            return Err(reject_with_error(BuildOrderIntentRejectReason::MissingContext));
+            return Err(reject_with_error(
+                BuildOrderIntentRejectReason::MissingContext,
+            ));
         }
     };
 
@@ -275,9 +277,9 @@ pub fn build_order_intent(
     if context.classification == IntentClassification::Open
         && combined_risk_state != RiskState::Healthy
     {
-        return Err(reject_with_error(BuildOrderIntentRejectReason::DispatchAuth(
-            combined_risk_state,
-        )));
+        return Err(reject_with_error(
+            BuildOrderIntentRejectReason::DispatchAuth(combined_risk_state),
+        ));
     }
 
     record_gate_step(GateStep::LiquidityGate);
@@ -292,9 +294,9 @@ pub fn build_order_intent(
         match evaluate_liquidity_gate(&liquidity_intent, context.liquidity_config) {
             Ok(outcome) => outcome,
             Err(err) => {
-                return Err(reject_with_error(BuildOrderIntentRejectReason::LiquidityGate(
-                    err.reason,
-                )));
+                return Err(reject_with_error(
+                    BuildOrderIntentRejectReason::LiquidityGate(err.reason),
+                ));
             }
         };
 

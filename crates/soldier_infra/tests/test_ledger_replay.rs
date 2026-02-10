@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use soldier_infra::store::{Ledger, LedgerConfig, LedgerError, LedgerRecord, ReplayOutcome, Side};
 

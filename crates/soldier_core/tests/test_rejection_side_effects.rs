@@ -6,8 +6,7 @@ use soldier_core::execution::{
     IntentClassification, L2BookLevel, L2BookSnapshot, LinkedOrderType, LiquidityGateConfig,
     OrderIntent, OrderType, OrderTypeGuardConfig, OrderTypeRejectReason, QuantizeRejectReason,
     RecordIntentOutcome, Side, build_order_intent, take_build_order_intent_outcome,
-    take_dispatch_trace,
-    with_build_order_intent_context,
+    take_dispatch_trace, with_build_order_intent_context,
 };
 use soldier_core::risk::{FeeModelSnapshot, FeeStalenessConfig, RiskState};
 use soldier_core::venue::InstrumentKind;
@@ -194,7 +193,10 @@ fn test_build_order_intent_fail_closed_error_prevents_dispatch_attempt() {
         result
     });
 
-    assert!(!dispatch_attempted, "caller should not dispatch on rejection");
+    assert!(
+        !dispatch_attempted,
+        "caller should not dispatch on rejection"
+    );
     assert_eq!(
         result,
         Err(BuildOrderIntentError::Rejected(

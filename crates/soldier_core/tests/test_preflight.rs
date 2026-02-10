@@ -90,7 +90,10 @@ fn build_order_intent_runs_preflight() {
         .expect_err("expected preflight reject");
     match err {
         BuildOrderIntentError::Preflight(reject) => {
-            assert_eq!(reject.reason, OrderTypeRejectReason::OrderTypeMarketForbidden);
+            assert_eq!(
+                reject.reason,
+                OrderTypeRejectReason::OrderTypeMarketForbidden
+            );
         }
         other => panic!("expected preflight error, got {other:?}"),
     }

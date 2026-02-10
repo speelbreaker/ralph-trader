@@ -1,8 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use soldier_core::execution::{
-    Tlsm, TlsmError, TlsmEvent, TlsmIntent, TlsmLedger, TlsmLedgerEntry, TlsmLedgerError,
-    TlsmSide, TlsmState,
+    Tlsm, TlsmError, TlsmEvent, TlsmIntent, TlsmLedger, TlsmLedgerEntry, TlsmLedgerError, TlsmSide,
+    TlsmState,
 };
 
 #[derive(Clone, Default)]
