@@ -1,4 +1,6 @@
-use soldier_core::venue::{DeribitInstrumentKind, DeribitSettlementPeriod, InstrumentKind};
+use soldier_core::venue::{
+    DeribitInstrumentKind, DeribitSettlementPeriod, InstrumentKind, InstrumentMetadata,
+};
 
 #[test]
 fn derives_linear_future_from_usdc_perpetual() {
@@ -40,4 +42,23 @@ fn maps_option_and_futures_kinds() {
         "USDC",
     );
     assert_eq!(linear_future_kind, InstrumentKind::LinearFuture);
+}
+
+#[test]
+fn test_instrument_metadata_uses_get_instruments() {
+    let metadata = InstrumentMetadata::from_deribit(
+        DeribitInstrumentKind::Future,
+        DeribitSettlementPeriod::Perpetual,
+        "USDC",
+        0.25,
+        0.1,
+        0.01,
+        10.0,
+    );
+
+    assert_eq!(metadata.instrument_kind, InstrumentKind::LinearFuture);
+    assert_eq!(metadata.tick_size, 0.25);
+    assert_eq!(metadata.amount_step, 0.1);
+    assert_eq!(metadata.min_amount, 0.01);
+    assert_eq!(metadata.contract_multiplier, 10.0);
 }

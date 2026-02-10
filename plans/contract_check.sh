@@ -239,7 +239,7 @@ evidence_required=()
 
 if [[ -n "$story_json" ]]; then
   contract_refs_checked_json="$(story_jq_c '(.contract_refs // [])' 2>/dev/null || echo '[]')"
-  read_lines touch_patterns < <(story_jq_r '.scope.touch[]?' 2>/dev/null || true)
+  read_lines touch_patterns < <(story_jq_r '((.scope.touch // []) + (.scope.create // []))[]?' 2>/dev/null || true)
   read_lines avoid_patterns < <(story_jq_r '.scope.avoid[]?' 2>/dev/null || true)
   read_lines evidence_required < <(story_jq_r '.evidence[]?' 2>/dev/null || true)
 fi
@@ -252,24 +252,36 @@ if [[ "$contract_ref_count" -lt 1 ]]; then
   add_violation "MAJOR" "PRD" "story has empty contract_refs" "plans/prd.json" "NEEDS_HUMAN"
 fi
 
-touch_count="$(story_jq_r '(.scope.touch // []) | length' 2>/dev/null || echo "0")"
+touch_count="$(story_jq_r '((.scope.touch // []) + (.scope.create // [])) | length' 2>/dev/null || echo "0")"
 if ! [[ "$touch_count" =~ ^[0-9]+$ ]]; then
   touch_count=0
 fi
 if [[ "$touch_count" -lt 1 ]]; then
-  add_violation "MAJOR" "PRD" "story has empty scope.touch" "plans/prd.json" "NEEDS_HUMAN"
+  add_violation "MAJOR" "PRD" "story has empty scope (no touch or create paths)" "plans/prd.json" "NEEDS_HUMAN"
 fi
 
 if [[ ! -f "$contract_file" ]]; then
   add_violation "CRITICAL" "CONTRACT_FILE" "missing contract file: $contract_file" "$contract_file" "NEEDS_HUMAN"
 fi
 
+normalize_text() {
+  # Shared normalization: lowercase, strip markdown chars, collapse spaces,
+  # remove spaces around punctuation (colon, braces, parens, brackets)
+  sed 's/\\//g' \
+    | sed 's/[*`_]/ /g' \
+    | sed 's/[[:space:]][[:space:]]*/ /g' \
+    | sed 's/ :/:/g; s/: /:/g' \
+    | sed 's/ {/{/g; s/{ /{/g' \
+    | sed 's/ }/}/g; s/} /}/g' \
+    | sed 's/ (/(/g; s/( /(/g' \
+    | sed 's/ )/)/g; s/) /)/g' \
+    | sed 's/^ //; s/ $//'
+}
+
 contract_text_lc=""
 if [[ -f "$contract_file" ]]; then
   contract_text_lc="$(
-    tr '[:upper:]' '[:lower:]' < "$contract_file" \
-      | sed 's/[*`_]/ /g' \
-      | sed 's/[[:space:]]\+/ /g'
+    tr '[:upper:]' '[:lower:]' < "$contract_file" | normalize_text
   )"
 fi
 
@@ -279,7 +291,7 @@ normalize_ref() {
   r="${r#CONTRACT.md }"
   r="${r#CONTRACT.md}"
   r="${r//$'\xc2\xa7'/}"
-  echo "$r" | sed 's/[[:space:]]\+/ /g' | sed 's/^ //; s/ $//'
+  echo "$r" | tr '[:upper:]' '[:lower:]' | normalize_text
 }
 
 contract_contains_lc() {
@@ -323,11 +335,26 @@ ref_ok() {
     contract_contains_lc "$num" && return 0
   fi
 
-  if [[ "${#r_lc}" -ge 8 ]]; then
+  # General grep: lower floor to 3 chars to catch short anchors like AT-021
+  if [[ "${#r_lc}" -ge 3 ]]; then
     contract_contains_lc "$r_lc" && return 0
   fi
 
   return 1
+}
+
+# Classify a missing ref: returns "hard" for full text refs, "soft" for
+# standalone anchor-pattern refs (Anchor-XXX, VR-XXX) that may be planned
+# but don't yet exist in CONTRACT.md.
+classify_missing_ref() {
+  local ref="$1"
+  local r; r="$(normalize_ref "$ref")"
+  # Anchor-NNN, VR-NNN patterns (case-insensitive)
+  if echo "$r" | grep -Eqi '^(anchor|vr)-[0-9]+[a-z]?$'; then
+    echo "soft"
+  else
+    echo "hard"
+  fi
 }
 
 if [[ -n "$story_json" && -n "$contract_text_lc" ]]; then
@@ -339,8 +366,21 @@ if [[ -n "$story_json" && -n "$contract_text_lc" ]]; then
   done
 fi
 
-if [[ "${#missing_refs[@]}" -gt 0 ]]; then
-  add_violation "MAJOR" "CONTRACT_REFS" "missing/weak contract refs: $(printf '%s; ' "${missing_refs[@]}")" "$contract_file" "PATCH_CONTRACT"
+hard_missing=()
+soft_missing=()
+for mref in "${missing_refs[@]+${missing_refs[@]}}"; do
+  if [[ "$(classify_missing_ref "$mref")" == "soft" ]]; then
+    soft_missing+=("$mref")
+  else
+    hard_missing+=("$mref")
+  fi
+done
+
+if [[ "${#hard_missing[@]}" -gt 0 ]]; then
+  add_violation "MAJOR" "CONTRACT_REFS" "missing/weak contract refs: $(printf '%s; ' "${hard_missing[@]}")" "$contract_file" "PATCH_CONTRACT"
+fi
+if [[ "${#soft_missing[@]}" -gt 0 ]]; then
+  add_rationale "soft anchor refs not in CONTRACT.md (informational): $(printf '%s; ' "${soft_missing[@]}")"
 fi
 
 head_before=""
@@ -407,6 +447,12 @@ matches_any() {
     if [[ "$path" == $pat ]]; then
       return 0
     fi
+    # Auto-expand bare directory patterns (no wildcards) as prefixes
+    if [[ "$pat" != *"*"* && "$pat" != *"?"* ]]; then
+      if [[ "$path" == ${pat}/* ]]; then
+        return 0
+      fi
+    fi
   done
   return 1
 }
@@ -415,6 +461,7 @@ is_ignored_file() {
   case "$1" in
     plans/progress.txt|plans/progress_archive.txt) return 0 ;;
     .ralph/*|plans/logs/*) return 0 ;;
+    reviews/postmortems/*) return 0 ;;
   esac
   return 1
 }

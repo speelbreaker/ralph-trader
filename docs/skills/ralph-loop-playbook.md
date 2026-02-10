@@ -12,6 +12,7 @@ Quickstart
 Failure Recovery
 - Stale lock: if no active run but `.ralph/lock/` exists, remove it and retry.
 - Interrupted run: state files are unlocked on exit; if they remain read-only, `chmod u+w .ralph/state.json plans/prd.json`.
+- BLOCKED_RALPH_DIR_MODIFIED: `.ralph/*.json` changed during agent run (often caused by workflow acceptance worktrees under `.ralph/` when `CI=1`). Fix by rerunning with `CI=` for local runs and avoid changing workflow files during a story iteration.
 
 Metrics Rotation
 - Metrics are written to `.ralph/metrics.jsonl`.

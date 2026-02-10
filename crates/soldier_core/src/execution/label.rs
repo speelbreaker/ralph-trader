@@ -1,11 +1,9 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use crate::risk::RiskState;
 
 const LABEL_PREFIX: &str = "s4";
 const MAX_LABEL_LEN: usize = 64;
 const SID_LEN: usize = 8;
 const GID_LEN: usize = 12;
-
-static LABEL_TRUNCATED_TOTAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactLabelParts {
@@ -22,12 +20,23 @@ pub enum LabelDecodeError {
     InvalidLegIdx,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LabelRejectReason {
+    LabelTooLong,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LabelEncodeReject {
+    pub risk_state: RiskState,
+    pub reason: LabelRejectReason,
+}
+
 pub fn encode_compact_label(
     strat_id: &str,
     group_id: &str,
     leg_idx: u8,
     intent_hash: u64,
-) -> String {
+) -> Result<String, LabelEncodeReject> {
     let sid_full = hash_hex64(strat_id.as_bytes());
     let sid8 = &sid_full[..SID_LEN.min(sid_full.len())];
     let gid12 = compact_group_id(group_id);
@@ -35,29 +44,25 @@ pub fn encode_compact_label(
     encode_compact_label_with_hashes(sid8, &gid12, leg_idx, &ih16)
 }
 
-pub fn encode_compact_label_with_hashes(sid: &str, gid12: &str, leg_idx: u8, ih: &str) -> String {
+pub fn encode_compact_label_with_hashes(
+    sid: &str,
+    gid12: &str,
+    leg_idx: u8,
+    ih: &str,
+) -> Result<String, LabelEncodeReject> {
     let leg_str = leg_idx.to_string();
-    let mut sid_use = sid;
-    let mut ih_use = ih;
-    let total_len = label_len(sid_use, gid12, &leg_str, ih_use);
+    let total_len = label_len(sid, gid12, &leg_str, ih);
     if total_len > MAX_LABEL_LEN {
-        let fixed = LABEL_PREFIX.len() + 4 + gid12.len() + leg_str.len();
-        if fixed >= MAX_LABEL_LEN {
-            sid_use = "";
-            ih_use = "";
-        } else {
-            let remaining = MAX_LABEL_LEN - fixed;
-            let (sid_len, ih_len) = allocate_hash_lengths(sid_use.len(), ih_use.len(), remaining);
-            sid_use = &sid_use[..sid_len];
-            ih_use = &ih_use[..ih_len];
-        }
-        LABEL_TRUNCATED_TOTAL.fetch_add(1, Ordering::Relaxed);
+        return Err(LabelEncodeReject {
+            risk_state: RiskState::Degraded,
+            reason: LabelRejectReason::LabelTooLong,
+        });
     }
 
-    format!(
+    Ok(format!(
         "{}:{}:{}:{}:{}",
-        LABEL_PREFIX, sid_use, gid12, leg_str, ih_use
-    )
+        LABEL_PREFIX, sid, gid12, leg_str, ih
+    ))
 }
 
 pub fn decode_compact_label(label: &str) -> Result<CompactLabelParts, LabelDecodeError> {
@@ -86,10 +91,6 @@ pub fn decode_compact_label(label: &str) -> Result<CompactLabelParts, LabelDecod
     })
 }
 
-pub fn label_truncated_total() -> u64 {
-    LABEL_TRUNCATED_TOTAL.load(Ordering::Relaxed)
-}
-
 fn compact_group_id(group_id: &str) -> String {
     let mut buf = String::with_capacity(GID_LEN);
     for ch in group_id.chars() {
@@ -106,21 +107,6 @@ fn compact_group_id(group_id: &str) -> String {
 
 fn label_len(sid: &str, gid12: &str, leg_idx: &str, ih: &str) -> usize {
     LABEL_PREFIX.len() + 4 + sid.len() + gid12.len() + leg_idx.len() + ih.len()
-}
-
-fn allocate_hash_lengths(sid_len: usize, ih_len: usize, remaining: usize) -> (usize, usize) {
-    if remaining == 0 {
-        return (0, 0);
-    }
-    if remaining == 1 {
-        return (0, ih_len.min(1));
-    }
-    let ih_keep = ih_len.min(remaining - 1);
-    let sid_keep = sid_len.min(remaining - ih_keep);
-    if sid_keep == 0 {
-        return (0, ih_len.min(remaining));
-    }
-    (sid_keep, ih_keep)
 }
 
 fn hash_hex64(input: &[u8]) -> String {

@@ -1082,13 +1082,13 @@
       "id": "WF-12.1",
       "title": "Workflow Contract Acceptance Tests (checklist)",
       "enforcement": [
-        "plans/workflow_acceptance.sh (--mode smoke|full)"
+        "plans/workflow_acceptance.sh (--mode quick|full)"
       ],
       "artifacts": [
         "plans/workflow_acceptance.sh"
       ],
       "tests": [
-        "plans/workflow_acceptance.sh (smoke suite + full suite)"
+        "plans/workflow_acceptance.sh (quick suite + full suite)"
       ]
     },
     {

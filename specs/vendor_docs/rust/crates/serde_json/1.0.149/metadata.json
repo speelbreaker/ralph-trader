@@ -1,0 +1,9 @@
+{
+  "crate": "serde_json",
+  "version": "1.0.149",
+  "retrieved_at_utc": "2026-02-09T04:30:00Z",
+  "cargo_lock_sha256": "aa4ac97513b80235db0a7a6e1e2bcab9d7e390730ea7af51a6c4ee7b1ecc3601",
+  "resolved_features_sha256": "42729aec13cc5b5c4794e29c483730049302ca67dcdf667b79ea4312605d6f00",
+  "topics": ["value", "streaming", "errors"],
+  "source": "docsrs"
+}

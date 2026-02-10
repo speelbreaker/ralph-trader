@@ -1,0 +1,8 @@
+# Sample Rejection Log (P1-D)
+# Generated: 2026-02-09T09:00:00Z
+# Expected intent_id: intent-p1d-001
+
+preflight_reject_total intent_id=intent-p1d-001 run_id=run-p1d-001 reason=LinkedOrderTypeForbidden
+gate_sequence_total intent_id=intent-p1d-001 run_id=run-p1d-001 result=rejected
+
+# VERIFIED: intent_id=intent-p1d-001 present in all log lines

@@ -43,7 +43,7 @@ Usage: ./plans/workflow_acceptance.sh [options]
 Options:
   --list                 List tests and exit
   --fast                 Run fast prechecks only
-  --mode <full|smoke>     Run full suite or fast smoke subset
+  --mode <full|quick>     Run full suite or fast quick subset (smoke accepted as deprecated alias)
   --only <id>            Run a single test id (overrides other selectors)
   --only-set <ids>       Run multiple test ids (comma-separated, e.g., "0e,0f,1")
   --from <id>            Start running at id (inclusive)
@@ -176,7 +176,7 @@ parse_args() {
       --mode)
         WORKFLOW_ACCEPTANCE_MODE="${2:-}"
         if [[ -z "$WORKFLOW_ACCEPTANCE_MODE" ]]; then
-          echo "FAIL: --mode requires a value (full|smoke)" >&2
+          echo "FAIL: --mode requires a value (full|quick)" >&2
           exit 1
         fi
         shift 2
@@ -254,11 +254,16 @@ parse_args "$@"
 
 case "$WORKFLOW_ACCEPTANCE_MODE" in
   full) ;;
+  quick)
+    FAST=1
+    ;;
   smoke)
+    # Deprecated alias for quick
+    WORKFLOW_ACCEPTANCE_MODE="quick"
     FAST=1
     ;;
   *)
-    echo "FAIL: unknown workflow acceptance mode: $WORKFLOW_ACCEPTANCE_MODE (expected full|smoke)" >&2
+    echo "FAIL: unknown workflow acceptance mode: $WORKFLOW_ACCEPTANCE_MODE (expected full|quick)" >&2
     exit 1
     ;;
 esac
@@ -360,8 +365,8 @@ elif [[ -n "$ONLY_SET" ]]; then
 else
   # FAST only applies when not using --only or --only-set
   # Distinguish between --mode smoke (explicit) and --fast (flag)
-  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "smoke" ]]; then
-    mode_parts+=("smoke")
+  if [[ "$WORKFLOW_ACCEPTANCE_MODE" == "quick" ]]; then
+    mode_parts+=("quick")
   elif (( FAST == 1 )); then
     mode_parts+=("fast")
   fi
@@ -1340,8 +1345,8 @@ fi
     exit 1
   fi
 
-  if ! run_in_worktree grep -q "bash -n" "plans/preflight.sh"; then
-    echo "FAIL: preflight must run bash -n for shell syntax checks" >&2
+  if ! run_in_worktree grep -Fq "bash -n plans/*.sh" "plans/preflight.sh"; then
+    echo "FAIL: preflight must run bash -n plans/*.sh for fast syntax checks" >&2
     exit 1
   fi
 
@@ -1840,6 +1845,14 @@ if ! grep -q "phase_timings_ms" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must record phase_timings_ms in metrics" >&2
   exit 1
 fi
+if ! grep -q "story_verify_ms" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph must record story_verify_ms in phase timings" >&2
+  exit 1
+fi
+if ! grep -q "recovery_suggestions" "$WORKTREE/plans/ralph.sh"; then
+  echo "FAIL: ralph blocked artifacts must include recovery_suggestions" >&2
+  exit 1
+fi
 if ! grep -q "RPH_TEST_COCHANGE_STRICT" "$WORKTREE/plans/ralph.sh"; then
   echo "FAIL: ralph must define RPH_TEST_COCHANGE_STRICT default" >&2
   exit 1
@@ -1951,9 +1964,16 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
 
     # 2. Arrays are defined and used (whitespace tolerant for runner call)
     for array in SPEC_VALIDATOR_SPECS STATUS_FIXTURE_SPECS; do
-      if ! grep -q "${array}=(" "$verify"; then
-        echo "FAIL: ${array} array not found" >&2
-        exit 1
+      if [[ "$array" == "SPEC_VALIDATOR_SPECS" ]]; then
+        if ! grep -q "${array}=(" "$verify" && ! grep -q "${array}=(" "plans/lib/spec_validators_group.sh"; then
+          echo "FAIL: ${array} array not found" >&2
+          exit 1
+        fi
+      else
+        if ! grep -q "${array}=(" "$verify"; then
+          echo "FAIL: ${array} array not found" >&2
+          exit 1
+        fi
       fi
 
       if ! grep -Eq "run_parallel_group[[:space:]]+${array}" "$verify"; then
@@ -1961,6 +1981,11 @@ if test_start "0k.8" "verify.sh parallel primitives structure" 1; then
         exit 1
       fi
     done
+
+    if ! grep -q "spec_validators_group_build_specs" "$verify"; then
+      echo "FAIL: verify must call spec_validators_group_build_specs" >&2
+      exit 1
+    fi
 
     # 3. Timing artifacts (E-RE, ordering tolerant)
     if ! grep -Eq '\''\.time.*VERIFY_ARTIFACTS_DIR|VERIFY_ARTIFACTS_DIR.*\.time'\'' "$verify" && \
@@ -2196,6 +2221,15 @@ if test_start "0k.19" "preflight census passthrough" 1; then
     echo "$out_json" | grep -q "\"census\":true"
   '
   test_pass "0k.19"
+fi
+
+if test_start "0k.20" "PRD includes S1-012 F1 cert tooling" 1; then
+  run_in_worktree bash -c '
+    set -euo pipefail
+    jq -e ".items[] | select(.id==\"S1-012\" and .slice==1)" plans/prd.json >/dev/null
+    grep -q "S1.12 — F1 cert tooling" specs/IMPLEMENTATION_PLAN.md
+  '
+  test_pass "0k.20"
 fi
 if test_start "0l" "--list prints test ids"; then
   list_output="$("$ROOT/plans/workflow_acceptance.sh" --list)"
@@ -2790,6 +2824,73 @@ echo "<mark_pass>${id}</mark_pass>"
 EOF
 chmod +x "$STUB_DIR/agent_mark_pass_with_commit.sh"
 
+cat > "$STUB_DIR/agent_mark_pass_with_postmortem.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
+postmortem_file="${ACCEPTANCE_POSTMORTEM_FILE:-reviews/postmortems/acceptance_scope_postmortem.md}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mark pass with postmortem (scope ignore) to satisfy progress gate length requirements
+Commands: echo >> ${touch_file}; git add; git commit (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+EOT
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+mkdir -p "$(dirname "$postmortem_file")"
+cat > "$postmortem_file" <<EOT
+# Postmortem: acceptance scope ignore
+
+- Summary: acceptance stub postmortem for scope ignore test
+- Governing contract: workflow
+- Outcome: fixture
+EOT
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file" "$postmortem_file"
+else
+  git add "$touch_file" "$progress" "$postmortem_file"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: touch + postmortem" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_mark_pass_with_postmortem.sh"
+
+cat > "$STUB_DIR/agent_mark_pass_postmortem_only.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+postmortem_file="${ACCEPTANCE_POSTMORTEM_FILE:-reviews/postmortems/acceptance_scope_postmortem_only.md}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance mark pass with postmortem only to validate meta-only guard
+Commands: write postmortem and progress (placeholder text to meet minimum command length requirements)
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+EOT
+mkdir -p "$(dirname "$postmortem_file")"
+cat > "$postmortem_file" <<EOT
+# Postmortem: acceptance scope ignore (meta-only)
+
+- Summary: acceptance stub postmortem only for meta-only guard
+- Governing contract: workflow
+- Outcome: fixture
+EOT
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$postmortem_file"
+else
+  git add "$progress" "$postmortem_file"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: postmortem only" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_mark_pass_postmortem_only.sh"
+
 cat > "$STUB_DIR/agent_mark_pass_meta_only.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -2905,6 +3006,39 @@ cat > .ralph/state.json <<'JSON'
 JSON
 EOF
 chmod +x "$STUB_DIR/agent_modify_ralph_state.sh"
+
+cat > "$STUB_DIR/agent_touch_ralph_verify_json.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+id="${SELECTED_ID:-S1-001}"
+progress="${PROGRESS_FILE:-plans/progress.txt}"
+touch_file="${ACCEPTANCE_TOUCH_FILE:-plans/fixtures/acceptance_touch.txt}"
+ts="$(date +%Y-%m-%d)"
+cat >> "$progress" <<EOT
+${ts} - ${id}
+Summary: acceptance touch plus ralph verify artifacts to exercise ralph_dir_modified ignore list
+Commands: write .ralph/verify/test.json and .ralph/workflow_acceptance_dummy/test.json; touch ${touch_file}; git add; git commit
+Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
+Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+EOT
+mkdir -p .ralph/verify .ralph/workflow_acceptance_dummy
+cat > .ralph/verify/test.json <<'JSON'
+{"stub":"verify","ts":0}
+JSON
+cat > .ralph/workflow_acceptance_dummy/test.json <<'JSON'
+{"stub":"acceptance","ts":0}
+JSON
+mkdir -p "$(dirname "$touch_file")"
+echo "tick $(date +%s)" >> "$touch_file"
+if [[ "$progress" == .ralph/* || "$progress" == */.ralph/* ]]; then
+  git add "$touch_file"
+else
+  git add "$touch_file" "$progress"
+fi
+git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: touch" >/dev/null 2>&1
+echo "<mark_pass>${id}</mark_pass>"
+EOF
+chmod +x "$STUB_DIR/agent_touch_ralph_verify_json.sh"
 
 write_contract_check_stub() {
   local decision="${1:-PASS}"
@@ -3868,6 +4002,45 @@ fi
   test_pass "2g"
 fi
 
+if test_start "2h" "ralph verify artifacts ignored by ralph_dir_modified guard"; then
+reset_state
+valid_prd_2h="$WORKTREE/.ralph/valid_prd_2h.json"
+write_valid_prd "$valid_prd_2h" "S1-023"
+before_blocked="$(count_blocked)"
+set +e
+test2h_log="$WORKTREE/.ralph/test2h.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_2h" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_touch_ralph_verify_json.sh" \
+  SELECTED_ID="S1-023" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  ./plans/ralph.sh 1 >"$test2h_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: expected zero exit when verify artifacts are ignored" >&2
+  echo "Ralph log tail:" >&2
+  tail -n 120 "$test2h_log" >&2 || true
+  exit 1
+fi
+after_blocked="$(count_blocked)"
+if [[ "$after_blocked" -gt "$before_blocked" ]]; then
+  latest_block="$(latest_blocked_with_reason "ralph_dir_modified")"
+  if [[ -n "$latest_block" ]]; then
+    echo "FAIL: expected ralph_dir_modified to ignore verify artifacts" >&2
+    tail -n 120 "$test2h_log" >&2 || true
+    exit 1
+  fi
+fi
+  test_pass "2h"
+fi
+
 if test_start "3" "COMPLETE printed early blocks with blocked_incomplete artifact"; then
 reset_state
 valid_prd_3="$WORKTREE/.ralph/valid_prd_3.json"
@@ -4476,6 +4649,48 @@ fi
   test_pass "10"
 fi
 
+if test_start "10e" "postmortem-only changes do not bypass pass flip guard"; then
+reset_state
+valid_prd_10e="$WORKTREE/.ralph/valid_prd_10e.json"
+write_valid_prd "$valid_prd_10e" "S1-009"
+write_contract_check_stub "PASS" "ALLOW" "true" '["verify_post.log"]' '["verify_post.log"]' '[]'
+set +e
+test10e_log="$WORKTREE/.ralph/test10e.log"
+run_ralph env \
+  PRD_FILE="$valid_prd_10e" \
+  PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
+  PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
+  VERIFY_SH="$STUB_DIR/verify_pass.sh" \
+  RPH_AGENT_CMD="$STUB_DIR/agent_mark_pass_postmortem_only.sh" \
+  SELECTED_ID="S1-009" \
+  RPH_VERIFY_MODE="promotion" \
+  RPH_PROMOTION_VERIFY_MODE="promotion" \
+  RPH_PROMPT_FLAG="" \
+  RPH_AGENT_ARGS="" \
+  RPH_RATE_LIMIT_ENABLED=0 \
+  RPH_SELECTION_MODE=harness \
+  RPH_SELF_HEAL=0 \
+  GIT_AUTHOR_NAME="workflow-acceptance" \
+  GIT_AUTHOR_EMAIL="workflow@local" \
+  GIT_COMMITTER_NAME="workflow-acceptance" \
+  GIT_COMMITTER_EMAIL="workflow@local" \
+  ./plans/ralph.sh 1 >"$test10e_log" 2>&1
+rc=$?
+set -e
+if [[ "$rc" -eq 0 ]]; then
+  echo "FAIL: expected non-zero exit for postmortem-only pass flip" >&2
+  tail -n 120 "$test10e_log" >&2 || true
+  exit 1
+fi
+latest_block="$(latest_blocked_with_reason "pass_flip_no_touch" || true)"
+if [[ -z "$latest_block" ]]; then
+  echo "FAIL: expected blocked artifact for pass_flip_no_touch" >&2
+  tail -n 120 "$test10e_log" >&2 || true
+  exit 1
+fi
+  test_pass "10e"
+fi
+
 if test_start "10b" "final verify uses RPH_FINAL_VERIFY_MODE"; then
 reset_state
 valid_prd_10b="$WORKTREE/.ralph/valid_prd_10b.json"
@@ -4796,18 +5011,25 @@ run_in_worktree ./plans/contract_review_validate.sh "$valid_review" >/dev/null 2
   test_pass "11"
 fi
 
-if test_start "12" "workflow contract traceability gate" 1; then
+if test_start "12" "workflow contract traceability gate" 0; then
 tmp_cache=$(mktemp -d)
 cleanup_tmp_cache() {
   rm -rf "$tmp_cache"
 }
+set +e
 run_in_worktree env WORKFLOW_CONTRACT_GATE_CACHE_DIR="$tmp_cache" ./plans/workflow_contract_gate.sh >/dev/null 2>&1
-if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .enforcement[] | select(test("smoke") and test("full"))' plans/workflow_contract_map.json >/dev/null; then
-  echo "FAIL: WF-12.1 enforcement must document smoke+full modes" >&2
+rc=$?
+set -e
+if [[ "$rc" -ne 0 ]]; then
+  echo "FAIL: workflow_contract_gate failed in Test 12 (rc=$rc)" >&2
   cleanup_tmp_cache; exit 1
 fi
-if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .tests[] | select(test("smoke suite"))' plans/workflow_contract_map.json >/dev/null; then
-  echo "FAIL: WF-12.1 tests must reference smoke suite coverage" >&2
+if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .enforcement[] | select(test("quick") and test("full"))' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.1 enforcement must document quick+full modes" >&2
+  cleanup_tmp_cache; exit 1
+fi
+if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.1") | .tests[] | select(test("quick suite"))' plans/workflow_contract_map.json >/dev/null; then
+  echo "FAIL: WF-12.1 tests must reference quick suite coverage" >&2
   cleanup_tmp_cache; exit 1
 fi
 if ! run_in_worktree jq -e '.rules[] | select(.id=="WF-12.8") | .tests[] | select(test("Test 12"))' plans/workflow_contract_map.json >/dev/null; then
@@ -4846,6 +5068,10 @@ rc=$?
 set -e
 if [[ "$rc" -eq 0 ]]; then
   echo "FAIL: expected workflow_contract_gate to fail on unknown test id" >&2
+  cleanup_tmp_cache; exit 1
+fi
+if ls "$tmp_cache"/.*.tmp.* >/dev/null 2>&1; then
+  echo "FAIL: leftover tmp cache file(s) in $tmp_cache" >&2
   cleanup_tmp_cache; exit 1
 fi
 cleanup_tmp_cache
@@ -4897,7 +5123,7 @@ if test_start "12c" "missing required workflow artifact fails fast"; then
   test_pass "12c"
 fi
 
-if test_start "12d" "workflow contract gate validates enforcement existence" 1; then
+if test_start "12d" "workflow contract gate validates enforcement existence" 0; then
   tmp_map=$(mktemp)
   tmp_cache=$(mktemp -d)
   tmp_spec=""
@@ -5224,6 +5450,8 @@ if run_in_worktree test -f Cargo.toml; then
 fi
 set +e
 run_ralph env \
+  BASE_REF="$start_sha" \
+  POSTMORTEM_GATE=1 \
   PRD_FILE="$valid_prd_14c" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
@@ -5325,8 +5553,11 @@ EOF
 ' _ "$postmortem_14d"
 run_in_worktree git add "$postmortem_14d" >/dev/null 2>&1
 run_in_worktree git -c user.name="workflow-acceptance" -c user.email="workflow@local" commit -m "acceptance: seed postmortem bootstrap 14d" >/dev/null 2>&1
+base_ref_14d="$(run_in_worktree git rev-parse HEAD)"
 set +e
 run_ralph env \
+  BASE_REF="$base_ref_14d" \
+  POSTMORTEM_GATE=1 \
   PRD_FILE="$valid_prd_14d" \
   PROGRESS_FILE="$WORKTREE/.ralph/progress.txt" \
   PRD_PREFLIGHT_SH="$STUB_DIR/prd_preflight_pass.sh" \
@@ -6447,39 +6678,282 @@ JSON
   test_pass "30.3"
 fi
 
-if test_start "30.4" "enforce mode currently returns not-implemented reason" 1; then
+if test_start "30.4" "enforce mode uses cache-hit skip and dry_run reports would-skip" 1; then
   run_in_worktree bash -c '
   set -euo pipefail
   ROOT="$(pwd)"
   source plans/lib/verify_utils.sh
   source plans/lib/verify_checkpoint.sh
 
-  checkpoint_capture_snapshot 0 1 quick none 0
-  VERIFY_CHECKPOINT_ROLLOUT="enforce"
-  VERIFY_CHECKPOINT_KILL_SWITCH="ks-test"
-  checkpoint_resolve_rollout
+  mkdir -p .ralph
+  VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
+  VERIFY_SH_SHA="test-verify-sha"
+  BASE_REF="origin/main"
+  CHECKPOINT_HEAD_SHA="head-sha"
+  CHECKPOINT_HEAD_TREE="head-tree"
+  CHECKPOINT_CHANGED_FILES_HASH="changed-hash"
+  CHECKPOINT_SNAPSHOT_MODE="quick"
+  CHECKPOINT_SNAPSHOT_VERIFY_MODE="none"
+  CHECKPOINT_LOCK_PROBE_DONE=1
+  CHECKPOINT_LOCK_PROBE_OK=1
 
+  checkpoint_capture_snapshot 0 1 quick none 0
+  input_hash="$(checkpoint_gate_input_hash contract_coverage)"
+  override_fp="$(checkpoint_override_fingerprint)"
+  tool_versions_json="$(checkpoint_tool_versions_json)"
+  now_epoch="$(checkpoint_now_epoch)"
+
+  VERIFY_CHECKPOINT_FILE="$VERIFY_CHECKPOINT_FILE" \
+  VERIFY_SH_SHA="$VERIFY_SH_SHA" \
+  BASE_REF="$BASE_REF" \
+  CHECKPOINT_HEAD_SHA="$CHECKPOINT_HEAD_SHA" \
+  CHECKPOINT_HEAD_TREE="$CHECKPOINT_HEAD_TREE" \
+  CHECKPOINT_CHANGED_FILES_HASH="$CHECKPOINT_CHANGED_FILES_HASH" \
+  TOOL_VERSIONS_JSON="$tool_versions_json" \
+  INPUT_HASH="$input_hash" \
+  OVERRIDE_FP="$override_fp" \
+  NOW_EPOCH="$now_epoch" \
+  python3 - <<'"'"'PY'"'"'
+import json
+import os
+
+path = os.environ["VERIFY_CHECKPOINT_FILE"]
+data = {
+    "schema_version": 2,
+    "success_runs": 1,
+    "full_success_runs": 1,
+    "partial_success_runs": 0,
+    "eligible_success_runs": 1,
+    "would_hit_success_runs": 0,
+    "would_miss_success_runs": 1,
+    "ineligible_success_runs": 0,
+    "last_success": {},
+    "skip_cache": {
+        "schema_version": 1,
+        "ts": int(os.environ["NOW_EPOCH"]),
+        "rollout": "enforce",
+        "kill_switch_token": "ks-test",
+        "written_by_verify_sh_sha": os.environ["VERIFY_SH_SHA"],
+        "verify_sh_sha": os.environ["VERIFY_SH_SHA"],
+        "base_ref": os.environ["BASE_REF"],
+        "head_sha": os.environ["CHECKPOINT_HEAD_SHA"],
+        "head_tree": os.environ["CHECKPOINT_HEAD_TREE"],
+        "mode": "quick",
+        "verify_mode": "none",
+        "changed_files_hash": os.environ["CHECKPOINT_CHANGED_FILES_HASH"],
+        "override_fingerprint": os.environ["OVERRIDE_FP"],
+        "tool_versions": json.loads(os.environ["TOOL_VERSIONS_JSON"]),
+        "writer_ci": False,
+        "writer_mode": "quick",
+        "gates": {
+            "contract_coverage": {
+                "input_hash": os.environ["INPUT_HASH"],
+                "last_real_run_ts": int(os.environ["NOW_EPOCH"]),
+                "consecutive_skips": 0,
+                "elapsed_s": 1.23,
+                "last_decision_reason": "ran"
+            }
+        }
+    }
+}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, separators=(",", ":"))
+PY
+
+  VERIFY_CHECKPOINT_SKIP=1
+  VERIFY_CHECKPOINT_MAX_AGE_SECS=999999
+  VERIFY_CHECKPOINT_MAX_CONSEC_SKIPS=10
+  VERIFY_CHECKPOINT_FORCE_AFTER_SECS=21600
+  VERIFY_CHECKPOINT_HASH_BUDGET_MS=10000
+  VERIFY_CHECKPOINT_KILL_SWITCH="ks-test"
+
+  VERIFY_CHECKPOINT_ROLLOUT="enforce"
+  checkpoint_resolve_rollout
   set +e
   checkpoint_decide_skip_gate "contract_coverage"
-  rc=$?
+  rc="$?"
   set -e
-  if [[ "$rc" -eq 0 ]]; then
-    echo "FAIL: enforce scaffold should not allow skip yet" >&2
+  [[ "$rc" -eq 0 ]] || {
+    echo "FAIL: enforce mode should skip on checkpoint cache hit (rc=$rc, reason=${CHECKPOINT_DECISION_REASON:-<unset>})" >&2
     exit 1
-  fi
-  [[ "${CHECKPOINT_DECISION_REASON:-}" == "enforce_skip_not_implemented" ]] || {
-    echo "FAIL: expected enforce_skip_not_implemented reason, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
+  }
+  [[ "${CHECKPOINT_DECISION_REASON:-}" == "checkpoint_cache_hit" ]] || {
+    echo "FAIL: expected checkpoint_cache_hit in enforce mode, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
+    exit 1
+  }
+
+  VERIFY_CHECKPOINT_ROLLOUT="dry_run"
+  checkpoint_resolve_rollout
+  set +e
+  checkpoint_decide_skip_gate "contract_coverage"
+  rc="$?"
+  set -e
+  [[ "$rc" -ne 0 ]] || {
+    echo "FAIL: dry_run must not skip gate execution" >&2
+    exit 1
+  }
+  [[ "${CHECKPOINT_DECISION_REASON:-}" == "dry_run_would_skip" ]] || {
+    echo "FAIL: expected dry_run_would_skip reason, got ${CHECKPOINT_DECISION_REASON:-<unset>}" >&2
     exit 1
   }
 '
   test_pass "30.4"
 fi
 
+if test_start "30.4b" "gate input hash cache persists within shell" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  tmpdir=".ralph/checkpoint_hash_cache"
+  rm -rf "$tmpdir"
+  mkdir -p "$tmpdir"
+  cp plans/checkpoint_dependency_manifest.json "$tmpdir/manifest.json"
+  CHECKPOINT_DEPENDENCY_MANIFEST_FILE="$ROOT/$tmpdir/manifest.json"
+  unset CHECKPOINT_INPUT_HASH_CONTRACT_COVERAGE
+
+  first=""
+  checkpoint_gate_input_hash "contract_coverage" first
+  if [[ -z "$first" ]]; then
+    echo "FAIL: expected contract_coverage hash" >&2
+    exit 1
+  fi
+
+  printf "bad" > "$tmpdir/manifest.json"
+  second=""
+  checkpoint_gate_input_hash "contract_coverage" second
+  if [[ "$second" != "$first" ]]; then
+    echo "FAIL: expected cached gate hash to persist within shell" >&2
+    exit 1
+  fi
+
+  unset CHECKPOINT_DEPENDENCY_MANIFEST_FILE CHECKPOINT_INPUT_HASH_CONTRACT_COVERAGE
+  rm -rf "$tmpdir"
+  '
+  test_pass "30.4b"
+fi
+
+if test_start "30.4c" "override fingerprint ignores run-id artifacts" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  export VERIFY_RUN_ID="run-a"
+  export VERIFY_ARTIFACTS_DIR="$ROOT/artifacts/verify/run-a"
+  export VERIFY_CHECKPOINT_TELEMETRY_FILE="$ROOT/.ralph/verify_telemetry/skip_telemetry_run-a.jsonl"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  first="$(checkpoint_override_fingerprint)"
+  if [[ -z "$first" ]]; then
+    echo "FAIL: expected override fingerprint" >&2
+    exit 1
+  fi
+
+  export VERIFY_RUN_ID="run-b"
+  export VERIFY_ARTIFACTS_DIR="$ROOT/artifacts/verify/run-b"
+  export VERIFY_CHECKPOINT_TELEMETRY_FILE="$ROOT/.ralph/verify_telemetry/skip_telemetry_run-b.jsonl"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  second="$(checkpoint_override_fingerprint)"
+  if [[ "$second" != "$first" ]]; then
+    echo "FAIL: override fingerprint changed with run-id artifacts" >&2
+    exit 1
+  fi
+
+  unset VERIFY_RUN_ID VERIFY_ARTIFACTS_DIR VERIFY_CHECKPOINT_TELEMETRY_FILE CHECKPOINT_OVERRIDE_FINGERPRINT
+  '
+  test_pass "30.4c"
+fi
+
+if test_start "30.4d" "spec validator hash covers core inputs" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  python3 - <<'"'"'PY'"'"'
+import json
+import sys
+
+required = [
+    "specs/CONTRACT.md",
+    "specs/flows/ARCH_FLOWS.yaml",
+    "specs/invariants/GLOBAL_INVARIANTS.md",
+]
+with open("plans/checkpoint_dependency_manifest.json", "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+gates = data.get("gates")
+if not isinstance(gates, dict):
+    print("FAIL: invalid gates manifest", file=sys.stderr)
+    raise SystemExit(1)
+spec = gates.get("spec_validators_group")
+if not isinstance(spec, list):
+    print("FAIL: missing spec_validators_group list", file=sys.stderr)
+    raise SystemExit(1)
+missing = [item for item in required if item not in spec]
+if missing:
+    print(f"FAIL: spec_validators_group missing {missing}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  '
+  test_pass "30.4d"
+fi
+
+if test_start "30.4e" "checkpoint tool versions use PYTHON_BIN" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  tmpdir=".ralph/checkpoint_tool_versions"
+  rm -rf "$tmpdir"
+  mkdir -p "$tmpdir"
+  stub="$tmpdir/python-stub"
+  cat > "$stub" <<'"'"'SH'"'"'
+#!/usr/bin/env bash
+echo "Python 7.77"
+SH
+  chmod +x "$stub"
+
+  export PYTHON_BIN="$ROOT/$stub"
+  unset CHECKPOINT_TOOL_VERSIONS_JSON
+  out="$(checkpoint_tool_versions_json)"
+  echo "$out" | grep -q "\"python\":\"7.77\"" || {
+    echo "FAIL: expected PYTHON_BIN version in tool versions" >&2
+    echo "$out" >&2
+    exit 1
+  }
+
+  unset PYTHON_BIN CHECKPOINT_TOOL_VERSIONS_JSON
+  rm -rf "$tmpdir"
+  '
+  test_pass "30.4e"
+fi
+
+if test_start "30.4f" "override fingerprint tracks GLOBAL_INVARIANTS_FILE" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_checkpoint.sh
+
+  export GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.md"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  first="$(checkpoint_override_fingerprint)"
+  export GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.override"
+  unset CHECKPOINT_OVERRIDE_FINGERPRINT
+  second="$(checkpoint_override_fingerprint)"
+  if [[ "$first" == "$second" ]]; then
+    echo "FAIL: expected GLOBAL_INVARIANTS_FILE to affect override fingerprint" >&2
+    exit 1
+  fi
+
+  unset GLOBAL_INVARIANTS_FILE CHECKPOINT_OVERRIDE_FINGERPRINT
+  '
+  test_pass "30.4f"
+fi
+
 if test_start "30.5" "local full verify requires approval" 1; then
   run_in_worktree bash -c '
   set -euo pipefail
   set +e
-  out="$(./plans/verify.sh full 2>&1)"
+  out="$(env -u VERIFY_ALLOW_LOCAL_FULL -u CI ./plans/verify.sh full 2>&1)"
   rc=$?
   set -e
   if [[ "$rc" -eq 0 ]]; then
@@ -6513,7 +6987,7 @@ SH
   main_line="refs/heads/local $(git rev-parse HEAD) refs/heads/main 0000000000000000000000000000000000000000"
 
   : > "$calls"
-  printf "%s\n" "$main_line" | CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
+  printf "%s\n" "$main_line" | env -u CI -u VERIFY_ALLOW_LOCAL_FULL CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
   if ! grep -Fxq "quick" "$calls"; then
     echo "FAIL: expected pre-push to run quick without local full approval" >&2
     echo "Calls: $(cat "$calls" 2>/dev/null || true)" >&2
@@ -6521,7 +6995,7 @@ SH
   fi
 
   : > "$calls"
-  printf "%s\n" "$main_line" | CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_ALLOW_LOCAL_FULL=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
+  printf "%s\n" "$main_line" | env -u CI CALLS="$calls" RPH_ALLOW_WIP_PUSH=1 VERIFY_ALLOW_LOCAL_FULL=1 VERIFY_SH_PATH="$stub" ./.githooks/pre-push
   if ! grep -Fxq "full" "$calls"; then
     echo "FAIL: expected pre-push to run full when local full approval set" >&2
     echo "Calls: $(cat "$calls" 2>/dev/null || true)" >&2
@@ -6606,7 +7080,7 @@ if test_start "30.8" "lock_and_policy fail-closed checks" 1; then
   mkdir -p .ralph
   VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
   cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
-{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":true,"writer_mode":"quick","gates":{}}}
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","verify_sh_sha":"","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":true,"writer_mode":"quick","gates":{}}}
 JSON
   CHECKPOINT_LOCK_PROBE_DONE=0
   CHECKPOINT_LOCK_PROBE_OK=0
@@ -6620,7 +7094,7 @@ JSON
   }
 
   cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
-{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","writer_ci":false,"writer_mode":"quick","gates":{}}}
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","verify_sh_sha":"","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":false,"writer_mode":"quick","gates":{}}}
 JSON
   VERIFY_CHECKPOINT_LOCK_FILE="$ROOT/.ralph/verify_checkpoint.lock"
   printf "pid=%s\nstart_epoch=%s\n" "$$" "$(date +%s)" > "$VERIFY_CHECKPOINT_LOCK_FILE"
@@ -6660,6 +7134,247 @@ JSON
   }
 '
   test_pass "30.8"
+fi
+
+if test_start "30.9" "reset_verify_checkpoint enforces lock policy and force override" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/reset_verify_checkpoint.sh || {
+    echo "FAIL: missing executable plans/reset_verify_checkpoint.sh" >&2
+    exit 1
+  }
+  rg -n "reset_verify_checkpoint.sh" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing reset_verify_checkpoint.sh" >&2
+    exit 1
+  }
+
+  tmpdir=".ralph/reset_checkpoint_test"
+  mkdir -p "$tmpdir"
+  ckpt="$tmpdir/verify_checkpoint.json"
+  lock="$tmpdir/verify_checkpoint.lock"
+  printf "{\"schema_version\":2}\n" > "$ckpt"
+  printf "pid=%s\nstart_epoch=%s\n" "$$" "$(date +%s)" > "$lock"
+
+  set +e
+  out="$(VERIFY_CHECKPOINT_FILE="$ckpt" VERIFY_CHECKPOINT_LOCK_FILE="$lock" ./plans/reset_verify_checkpoint.sh 2>&1)"
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "FAIL: reset should fail when active lock exists without --force" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+  echo "$out" | grep -q "active lock detected" || {
+    echo "FAIL: expected active lock error message" >&2
+    echo "$out" >&2
+    exit 1
+  }
+
+  VERIFY_CHECKPOINT_FILE="$ckpt" VERIFY_CHECKPOINT_LOCK_FILE="$lock" ./plans/reset_verify_checkpoint.sh --force --quiet
+  if [[ -f "$ckpt" ]]; then
+    echo "FAIL: checkpoint file should be removed by reset script" >&2
+    exit 1
+  fi
+  if [[ -f "$lock" ]]; then
+    echo "FAIL: lock file should be removed by reset script" >&2
+    exit 1
+  fi
+  bak_count="$(ls "$tmpdir"/verify_checkpoint.json.bak.* 2>/dev/null | wc -l | tr -d " ")"
+  if [[ "$bak_count" -lt 1 ]]; then
+    echo "FAIL: reset script should create backup checkpoint file" >&2
+    exit 1
+  fi
+'
+  test_pass "30.9"
+fi
+
+if test_start "30.10" "checkpoint age and hash-budget guards fail closed" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/verify_utils.sh
+  source plans/lib/verify_checkpoint.sh
+
+  mkdir -p .ralph
+  VERIFY_CHECKPOINT_FILE="$ROOT/.ralph/verify_checkpoint.json"
+  cat > "$VERIFY_CHECKPOINT_FILE" <<'"'"'JSON'"'"'
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{},"skip_cache":{"schema_version":1,"ts":100,"rollout":"off","kill_switch_token":"","written_by_verify_sh_sha":"","verify_sh_sha":"","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":false,"writer_mode":"quick","gates":{}}}
+JSON
+
+  checkpoint_capture_snapshot 0 1 quick none 0
+  VERIFY_CHECKPOINT_ROLLOUT="off"
+  checkpoint_resolve_rollout
+  CHECKPOINT_LOCK_PROBE_DONE=1
+  CHECKPOINT_LOCK_PROBE_OK=1
+  VERIFY_CHECKPOINT_MAX_AGE_SECS=10
+  VERIFY_CHECKPOINT_NOW_EPOCH=1000
+  CHECKPOINT_HASH_BUDGET_EXCEEDED=0
+  if is_cache_eligible; then
+    echo "FAIL: stale checkpoint should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_age_exceeded" ]] || {
+    echo "FAIL: expected checkpoint_age_exceeded reason" >&2
+    exit 1
+  }
+
+  VERIFY_CHECKPOINT_NOW_EPOCH=100
+  CHECKPOINT_HASH_BUDGET_EXCEEDED=1
+  if is_cache_eligible; then
+    echo "FAIL: hash budget exceeded should fail closed" >&2
+    exit 1
+  fi
+  [[ "$CHECKPOINT_INELIGIBLE_REASON" == "checkpoint_hash_budget_exceeded" ]] || {
+    echo "FAIL: expected checkpoint_hash_budget_exceeded reason" >&2
+    exit 1
+  }
+'
+  test_pass "30.10"
+fi
+
+if test_start "30.11" "opportunity telemetry writes jsonl and prunes deterministically" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  telemetry_dir=".ralph/verify_telemetry"
+  mkdir -p "$telemetry_dir"
+  cat > "$telemetry_dir/skip_telemetry_old.jsonl" <<'"'"'JSON'"'"'
+{"ts":1,"rollout_mode":"dry_run","would_skip":{"contract_coverage":false,"spec_validators_group":false}}
+JSON
+
+  VERIFY_CHECKPOINT_TELEMETRY_SELFTEST=1 \
+  VERIFY_CHECKPOINT_ROLLOUT=dry_run \
+  VERIFY_CHECKPOINT_TELEMETRY_DIR="$telemetry_dir" \
+  VERIFY_CHECKPOINT_TELEMETRY_MAX_FILES=1 \
+  VERIFY_CHECKPOINT_TELEMETRY_MAX_BYTES=4096 \
+  VERIFY_CHECKPOINT_NOW_EPOCH=9999999999 \
+  ./plans/verify.sh --census >/dev/null
+
+  count="$(ls "$telemetry_dir"/skip_telemetry_*.jsonl 2>/dev/null | wc -l | tr -d " ")"
+  if [[ "$count" != "1" ]]; then
+    echo "FAIL: expected telemetry prune to keep exactly one jsonl file, got $count" >&2
+    ls -la "$telemetry_dir" >&2 || true
+    exit 1
+  fi
+
+  latest="$(ls -t "$telemetry_dir"/skip_telemetry_*.jsonl | head -n 1)"
+  grep -q "\"head_unchanged_since_last_run\"" "$latest" || {
+    echo "FAIL: telemetry record missing head_unchanged_since_last_run" >&2
+    cat "$latest" >&2
+    exit 1
+  }
+  grep -q "\"would_skip\"" "$latest" || {
+    echo "FAIL: telemetry record missing would_skip object" >&2
+    cat "$latest" >&2
+    exit 1
+  }
+'
+  test_pass "30.11"
+fi
+
+if test_start "30.12" "verify_skip_status helper reports effective policy and checkpoint fields" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/verify_skip_status.sh || {
+    echo "FAIL: missing executable plans/verify_skip_status.sh" >&2
+    exit 1
+  }
+  rg -n "verify_skip_status.sh" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing verify_skip_status.sh" >&2
+    exit 1
+  }
+
+  mkdir -p .ralph
+  cat > .ralph/verify_checkpoint.json <<'"'"'JSON'"'"'
+{"schema_version":2,"success_runs":1,"eligible_success_runs":1,"would_hit_success_runs":0,"would_miss_success_runs":1,"ineligible_success_runs":0,"last_success":{"ineligible_reason":"none"},"skip_cache":{"schema_version":1,"ts":12345,"rollout":"dry_run","kill_switch_token":"","written_by_verify_sh_sha":"abc","verify_sh_sha":"abc","base_ref":"origin/main","head_sha":"h","head_tree":"t","mode":"quick","verify_mode":"none","changed_files_hash":"c","override_fingerprint":"o","tool_versions":{"python":"3.11.0","jq":"1.7","rg":"13.0.0"},"writer_ci":false,"writer_mode":"quick","gates":{}}}
+JSON
+
+  out="$(VERIFY_CHECKPOINT_ROLLOUT=dry_run VERIFY_CHECKPOINT_SKIP=1 ./plans/verify_skip_status.sh)"
+  echo "$out" | grep -q "^rollout_effective=dry_run$" || {
+    echo "FAIL: expected rollout_effective in verify_skip_status output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  echo "$out" | grep -q "^checkpoint_exists=1$" || {
+    echo "FAIL: expected checkpoint_exists=1 in verify_skip_status output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  echo "$out" | grep -q "^skip_cache_rollout=dry_run$" || {
+    echo "FAIL: expected skip_cache_rollout in verify_skip_status output" >&2
+    echo "$out" >&2
+    exit 1
+  }
+'
+  test_pass "30.12"
+fi
+
+if test_start "30.13" "check_sample_mix helper parses telemetry diagnostics" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  test -x plans/check_sample_mix.sh || {
+    echo "FAIL: missing executable plans/check_sample_mix.sh" >&2
+    exit 1
+  }
+  rg -n "check_sample_mix.sh" plans/workflow_files_allowlist.txt >/dev/null || {
+    echo "FAIL: workflow allowlist missing check_sample_mix.sh" >&2
+    exit 1
+  }
+
+  tdir=".ralph/verify_telemetry"
+  mkdir -p "$tdir"
+  cat > "$tdir/skip_telemetry_test.jsonl" <<'"'"'JSON'"'"'
+{"ts":1700000000,"run_id":"r1","mode":"quick","verify_mode":"none","rollout_mode":"dry_run","writer_ci":false,"head_sha":"a","head_tree":"b","changed_files_hash":"c","head_unchanged_since_last_run":true,"would_skip":{"contract_coverage":true,"spec_validators_group":false},"skipped_gate_count":0,"scheduled_gate_count":2,"skipped_gates":[]}
+JSON
+
+  out="$(./plans/check_sample_mix.sh --dir "$tdir" --min-runs 1 --min-days 1)"
+  echo "$out" | grep -q "^status=ok$" || {
+    echo "FAIL: expected status=ok from check_sample_mix" >&2
+    echo "$out" >&2
+    exit 1
+  }
+  echo "$out" | grep -q "^would_skip_contract_coverage=1$" || {
+    echo "FAIL: expected would_skip_contract_coverage metric" >&2
+    echo "$out" >&2
+    exit 1
+  }
+'
+  test_pass "30.13"
+fi
+
+if test_start "30.14" "spec validators group fails closed on malformed or too-short list" 1; then
+  run_in_worktree bash -c '
+  set -euo pipefail
+  ROOT="$(pwd)"
+  source plans/lib/spec_validators_group.sh
+
+  MIN_SPEC_VALIDATORS=7
+  SPEC_LINT_TIMEOUT="2m"
+  PYTHON_BIN="python3"
+  CONTRACT_FILE="specs/CONTRACT.md"
+  ARCH_FLOWS_FILE="specs/flows/ARCH_FLOWS.yaml"
+  GLOBAL_INVARIANTS_FILE="specs/invariants/GLOBAL_INVARIANTS.md"
+
+  spec_validators_group_specs_raw() {
+    cat <<'"'"'EOF'"'"'
+bad_line_without_separators
+EOF
+  }
+  if spec_validators_group_build_specs; then
+    echo "FAIL: malformed validator spec line should fail closed" >&2
+    exit 1
+  fi
+
+  spec_validators_group_specs_raw() {
+    cat <<'"'"'EOF'"'"'
+contract_crossrefs|2m|python3 scripts/check_contract_crossrefs.py --contract specs/CONTRACT.md --strict --check-at --include-bare-section-refs
+EOF
+  }
+  if spec_validators_group_build_specs; then
+    echo "FAIL: too-short validator list should fail closed" >&2
+    exit 1
+  fi
+'
+  test_pass "30.14"
 fi
 
 echo "Workflow acceptance tests passed"

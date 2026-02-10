@@ -6,6 +6,15 @@ pub enum InstrumentKind {
     Perpetual,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InstrumentMetadata {
+    pub instrument_kind: InstrumentKind,
+    pub tick_size: f64,
+    pub amount_step: f64,
+    pub min_amount: f64,
+    pub contract_multiplier: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeribitInstrumentKind {
     Option,
@@ -45,6 +54,26 @@ impl InstrumentKind {
                     }
                 }
             },
+        }
+    }
+}
+
+impl InstrumentMetadata {
+    pub fn from_deribit(
+        kind: DeribitInstrumentKind,
+        settlement_period: DeribitSettlementPeriod,
+        quote_currency: &str,
+        tick_size: f64,
+        amount_step: f64,
+        min_amount: f64,
+        contract_multiplier: f64,
+    ) -> Self {
+        Self {
+            instrument_kind: InstrumentKind::from_deribit(kind, settlement_period, quote_currency),
+            tick_size,
+            amount_step,
+            min_amount,
+            contract_multiplier,
         }
     }
 }
