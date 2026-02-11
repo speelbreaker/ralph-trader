@@ -159,6 +159,7 @@ fn reset_trace() {
     GATE_SEQUENCE_TRACE.with(|trace| trace.borrow_mut().clear());
     DISPATCH_TRACE.with(|trace| trace.borrow_mut().clear());
     LAST_OUTCOME.with(|cell| cell.borrow_mut().take());
+    super::clear_execution_metric_lines();
 }
 
 fn record_gate_step(step: GateStep) {
@@ -173,11 +174,11 @@ fn finish_outcome(outcome: BuildOrderIntentOutcome) {
     match outcome {
         BuildOrderIntentOutcome::Allowed => {
             GATE_SEQUENCE_ALLOWED_TOTAL.fetch_add(1, Ordering::Relaxed);
-            eprintln!("gate_sequence_total result=allowed");
+            super::emit_execution_metric_line("gate_sequence_total", "result=allowed");
         }
         BuildOrderIntentOutcome::Rejected(_) => {
             GATE_SEQUENCE_REJECTED_TOTAL.fetch_add(1, Ordering::Relaxed);
-            eprintln!("gate_sequence_total result=rejected");
+            super::emit_execution_metric_line("gate_sequence_total", "result=rejected");
         }
     }
     LAST_OUTCOME.with(|cell| {

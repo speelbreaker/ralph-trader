@@ -35,6 +35,7 @@ pub enum Side {
 pub enum QuantizeRejectReason {
     TooSmallAfterQuantization,
     InstrumentMetadataMissing,
+    InvalidInput,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,6 +103,7 @@ pub fn quantize_steps(
     meta: &InstrumentQuantization,
 ) -> Result<QuantizedSteps, QuantizeReject> {
     validate_metadata(meta)?;
+    validate_raw_inputs(raw_qty, raw_limit_price, meta)?;
 
     let qty_steps = steps_floor(raw_qty, meta.amount_step);
     let qty_q = qty_steps as f64 * meta.amount_step;
@@ -137,6 +139,29 @@ fn validate_metadata(meta: &InstrumentQuantization) -> Result<(), QuantizeReject
     {
         return Err(QuantizeReject {
             reason: QuantizeRejectReason::InstrumentMetadataMissing,
+        });
+    }
+    Ok(())
+}
+
+fn validate_raw_inputs(
+    raw_qty: f64,
+    raw_limit_price: f64,
+    meta: &InstrumentQuantization,
+) -> Result<(), QuantizeReject> {
+    if !raw_qty.is_finite()
+        || !raw_limit_price.is_finite()
+        || raw_qty <= 0.0
+        || raw_limit_price <= 0.0
+    {
+        return Err(QuantizeReject {
+            reason: QuantizeRejectReason::InvalidInput,
+        });
+    }
+    if !(raw_qty / meta.amount_step).is_finite() || !(raw_limit_price / meta.tick_size).is_finite()
+    {
+        return Err(QuantizeReject {
+            reason: QuantizeRejectReason::InvalidInput,
         });
     }
     Ok(())

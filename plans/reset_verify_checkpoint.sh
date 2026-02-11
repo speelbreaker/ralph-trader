@@ -92,11 +92,11 @@ is_lock_active() {
   else
     age=$(( now - start ))
   fi
-  if (( age >= LOCK_STALE_SECS )); then
-    return 1
-  fi
   if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
     return 0
+  fi
+  if (( age >= LOCK_STALE_SECS )); then
+    return 1
   fi
   return 1
 }

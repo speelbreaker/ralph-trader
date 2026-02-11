@@ -65,3 +65,25 @@ fn test_missing_metadata_rejects_open() {
         .expect_err("missing tick size should reject");
     assert_eq!(err.reason, QuantizeRejectReason::InstrumentMetadataMissing);
 }
+
+#[test]
+fn test_non_finite_raw_inputs_reject_fail_closed() {
+    let meta = InstrumentQuantization {
+        tick_size: 0.5,
+        amount_step: 0.1,
+        min_amount: 0.2,
+    };
+
+    let bad_inputs = [
+        (f64::NAN, 100.0),
+        (f64::INFINITY, 100.0),
+        (1.0, f64::NAN),
+        (1.0, f64::INFINITY),
+    ];
+    for (raw_qty, raw_limit_price) in bad_inputs {
+        let err = meta
+            .quantize(Side::Buy, raw_qty, raw_limit_price)
+            .expect_err("non-finite input should reject");
+        assert_eq!(err.reason, QuantizeRejectReason::InvalidInput);
+    }
+}

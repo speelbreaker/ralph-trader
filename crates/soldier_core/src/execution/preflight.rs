@@ -105,6 +105,7 @@ pub fn build_order_intent(
 
 fn reject_with_metrics(reason: OrderTypeRejectReason) -> PreflightReject {
     PREFLIGHT_METRICS.bump(reason);
-    eprintln!("preflight_reject_total reason={:?}", reason);
+    let tail = format!("reason={:?}", reason);
+    super::emit_execution_metric_line("preflight_reject_total", &tail);
     PreflightReject { reason }
 }
