@@ -16,7 +16,7 @@
       "priority": 200,
       "phase": 0,
       "slice": 0,
-      "slice_ref": "Slice 0 — Phase 0 Launch Policy & Ops Baseline",
+      "slice_ref": "Slice 0 \u2014 Phase 0 Launch Policy & Ops Baseline",
       "story_ref": "P0-A Launch Policy Baseline",
       "category": "policy",
       "description": "Create launch policy doc with explicit constraints (instruments, position limits, order rate, environments).",
@@ -24,7 +24,7 @@
         "P0-A Launch Policy Baseline"
       ],
       "plan_refs": [
-        "Global Non‑Negotiables (apply to ALL stories)"
+        "Global Non\u2011Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
@@ -85,7 +85,7 @@
       "priority": 199,
       "phase": 0,
       "slice": 0,
-      "slice_ref": "Slice 0 — Phase 0 Launch Policy & Ops Baseline",
+      "slice_ref": "Slice 0 \u2014 Phase 0 Launch Policy & Ops Baseline",
       "story_ref": "P0-B Environment Isolation",
       "category": "policy",
       "description": "Document environment isolation (separate keys/configs per env, no cross-env leakage).",
@@ -93,7 +93,7 @@
         "P0-B Environment Isolation"
       ],
       "plan_refs": [
-        "Global Non‑Negotiables (apply to ALL stories)"
+        "Global Non\u2011Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
@@ -151,7 +151,7 @@
       "priority": 198,
       "phase": 0,
       "slice": 0,
-      "slice_ref": "Slice 0 — Phase 0 Launch Policy & Ops Baseline",
+      "slice_ref": "Slice 0 \u2014 Phase 0 Launch Policy & Ops Baseline",
       "story_ref": "P0-C Keys & Secrets Baseline",
       "category": "policy",
       "description": "Document key creation rules, rotation plan, and prove least-privilege with JSON scope probe.",
@@ -159,7 +159,7 @@
         "P0-C Keys & Secrets Baseline"
       ],
       "plan_refs": [
-        "Global Non‑Negotiables (apply to ALL stories)"
+        "Global Non\u2011Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
@@ -232,7 +232,7 @@
       "priority": 197,
       "phase": 0,
       "slice": 0,
-      "slice_ref": "Slice 0 — Phase 0 Launch Policy & Ops Baseline",
+      "slice_ref": "Slice 0 \u2014 Phase 0 Launch Policy & Ops Baseline",
       "story_ref": "P0-D Break-Glass Runbook + Drill",
       "category": "policy",
       "description": "Create break-glass runbook and execute a recorded drill proving halt capability.",
@@ -240,7 +240,7 @@
         "P0-D Break-Glass Runbook"
       ],
       "plan_refs": [
-        "Global Non‑Negotiables (apply to ALL stories)"
+        "Global Non\u2011Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
@@ -333,7 +333,7 @@
       "priority": 196,
       "phase": 0,
       "slice": 0,
-      "slice_ref": "Slice 0 — Phase 0 Launch Policy & Ops Baseline",
+      "slice_ref": "Slice 0 \u2014 Phase 0 Launch Policy & Ops Baseline",
       "story_ref": "P0-E Health Endpoint",
       "category": "infra",
       "description": "Implement health endpoint returning ok/build_id/contract_version.",
@@ -343,7 +343,7 @@
         "VR-024"
       ],
       "plan_refs": [
-        "Global Non‑Negotiables (apply to ALL stories)"
+        "Global Non\u2011Negotiables (apply to ALL stories)"
       ],
       "scope": {
         "touch": [
@@ -410,7 +410,7 @@
       "priority": 88,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.0 Appendix A config defaults",
       "category": "infra",
       "description": "Apply Appendix A safety-critical defaults in infra config and verify missing-value behavior.",
@@ -443,7 +443,7 @@
         "VR-023"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.0 — Repo verification harness (plans/verify.sh) + safety-critical config defaults (Appendix A)"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.0 \u2014 Repo verification harness (plans/verify.sh) + safety-critical config defaults (Appendix A)"
       ],
       "scope": {
         "touch": [
@@ -486,7 +486,10 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-040",
+        "AT-341"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -514,7 +517,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.0 Workspace scaffolding",
       "category": "infra",
       "description": "Initialize the Rust workspace with soldier_core and soldier_infra crates.",
@@ -565,7 +568,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-905"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -584,7 +589,7 @@
       "priority": 65,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Deribit instrument structs",
       "category": "infra",
       "description": "Define Deribit public instrument structs for metadata mapping.",
@@ -592,7 +597,7 @@
         "CONTRACT.md AT-333"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.1 — InstrumentKind derivation + instrument cache TTL"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -632,7 +637,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-333"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -651,7 +658,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 InstrumentKind and RiskState",
       "category": "execution",
       "description": "Implement InstrumentKind derivation and RiskState enum per contract definitions.",
@@ -659,7 +666,7 @@
         "CONTRACT.md AT-333"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.1 — InstrumentKind derivation + instrument cache TTL"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -685,7 +692,7 @@
       "steps": [
         "Define the RiskState enum in crates/soldier_core/src/risk/state.rs with the contract variants.",
         "Define the InstrumentKind enum in crates/soldier_core/src/venue/types.rs with contract values.",
-        "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual → linear_future and metadata field passthrough.",
+        "Implement conversion logic from Deribit instrument metadata to InstrumentKind, including linear perpetual \u2192 linear_future and metadata field passthrough.",
         "Add unit tests in crates/soldier_core/tests/test_instrument_kind_mapping.rs for mapping behavior and metadata passthrough (test_instrument_metadata_uses_get_instruments).",
         "Wire any required imports so the new enums are accessible where used."
       ],
@@ -735,17 +742,17 @@
       "priority": 70,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL",
       "category": "risk",
       "description": "Enforce InstrumentCache TTL and degrade RiskState on stale metadata.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
         "CONTRACT.md AT-104",
         "VR-013"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.1 — InstrumentKind derivation + instrument cache TTL"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -792,9 +799,9 @@
       "passes": true,
       "contract_must_evidence": [
         {
-          "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-          "location": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-          "anchor": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
+          "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "location": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "anchor": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement"
         }
       ],
       "enforcing_contract_ats": [
@@ -837,16 +844,16 @@
       "priority": 65,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.1 Instrument cache TTL observability",
       "category": "risk",
       "description": "Add required TTL observability hooks for instrument cache freshness.",
       "contract_refs": [
-        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
+        "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
         "VR-013"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.1 — InstrumentKind derivation + instrument cache TTL"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.1 \u2014 InstrumentKind derivation + instrument cache TTL"
       ],
       "scope": {
         "touch": [
@@ -894,9 +901,9 @@
       "passes": true,
       "contract_must_evidence": [
         {
-          "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-          "location": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement",
-          "anchor": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) — MUST implement"
+          "quote": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "location": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement",
+          "anchor": "CONTRACT.md 1.0.X Instrument Metadata Freshness (Instrument Cache TTL) \u2014 MUST implement"
         }
       ],
       "enforcing_contract_ats": [
@@ -943,7 +950,7 @@
       "priority": 60,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize canonical sizing",
       "category": "execution",
       "description": "Implement OrderSize canonical sizing with deterministic notional_usd using the discovery report.",
@@ -952,7 +959,7 @@
         "CONTRACT.md 1.0 Instrument Units & Notional Invariants (Deribit Quantity Contract)"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.2 — OrderSize canonical sizing + notional invariant"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.2 \u2014 OrderSize canonical sizing + notional invariant"
       ],
       "scope": {
         "touch": [
@@ -1036,7 +1043,7 @@
       "priority": 50,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher amount mapping",
       "category": "execution",
       "description": "Map OrderSize to Deribit request amounts using the discovery report.",
@@ -1044,7 +1051,7 @@
         "CONTRACT.md Dispatcher Rules (Deribit request mapping):"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.3 — Dispatcher amount mapping + mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping + mismatch reject\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -1121,7 +1128,7 @@
       "priority": 55,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mismatch rejection",
       "category": "execution",
       "description": "Reject contract/amount mismatches and emit mismatch metrics.",
@@ -1129,7 +1136,7 @@
         "CONTRACT.md AT-920"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.3 — Dispatcher amount mapping + mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping + mismatch reject\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -1216,7 +1223,7 @@
       "priority": 95,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.2 OrderSize discovery",
       "category": "qa",
       "description": "Discover current OrderSize logic and document gaps vs contract before implementation.",
@@ -1227,7 +1234,7 @@
         "VR-024"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.2 — OrderSize canonical sizing + notional invariant"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.2 \u2014 OrderSize canonical sizing + notional invariant"
       ],
       "scope": {
         "touch": [
@@ -1261,7 +1268,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-218",
+        "AT-219",
+        "AT-343",
+        "AT-216"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1280,7 +1292,7 @@
       "priority": 85,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.3 Dispatcher mapping discovery",
       "category": "qa",
       "description": "Discover current dispatcher mapping logic and document gaps vs contract before implementation.",
@@ -1290,7 +1302,7 @@
         "VR-024"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.3 — Dispatcher amount mapping + mismatch reject→Degraded"
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.3 \u2014 Dispatcher amount mapping + mismatch reject\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -1327,7 +1339,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-218",
+        "AT-219",
+        "AT-343",
+        "AT-216"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1346,7 +1363,7 @@
       "priority": 97,
       "phase": 1,
       "slice": 1,
-      "slice_ref": "Slice 1 — Instrument Units \\+ Dispatcher Invariants",
+      "slice_ref": "Slice 1 \u2014 Instrument Units \\+ Dispatcher Invariants",
       "story_ref": "S1.12 F1 cert tooling",
       "category": "tooling",
       "description": "Implement f1_certify tooling and F1_CERT artifacts required for promotion verify.",
@@ -1357,8 +1374,8 @@
         "CONTRACT.md artifacts/F1_CERT.json MUST include (minimum): { status, generated_ts_ms, build_id, runtime_config_hash, contract_version }"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md PL-10 — f1_certify CLI + F1_CERT schema completeness (contract)",
-        "IMPLEMENTATION_PLAN.md Slice 1 — Instrument Units + Dispatcher Invariants / S1.12 — F1 cert tooling (moved from PL-10; Slice 1 exception)"
+        "IMPLEMENTATION_PLAN.md PL-10 \u2014 f1_certify CLI + F1_CERT schema completeness (contract)",
+        "IMPLEMENTATION_PLAN.md Slice 1 \u2014 Instrument Units + Dispatcher Invariants / S1.12 \u2014 F1 cert tooling (moved from PL-10; Slice 1 exception)"
       ],
       "scope": {
         "touch": [
@@ -1398,7 +1415,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-003",
+        "AT-412",
+        "AT-113",
+        "AT-012"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1438,7 +1460,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.1 Quantization rounding",
       "category": "execution",
       "description": "Implement deterministic quantization for qty and limit price with safe rounding.",
@@ -1448,7 +1470,7 @@
         "AT-020"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.1 — Integer tick/step quantization (safer direction)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.1 \u2014 Integer tick/step quantization (safer direction)"
       ],
       "scope": {
         "touch": [
@@ -1528,7 +1550,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.2 Intent hash from quantized fields",
       "category": "durability",
       "description": "Compute intent_hash from quantized fields only and exclude timestamps.",
@@ -1540,7 +1562,7 @@
         "VR-017"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.2 — Intent hash from quantized fields only"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.2 \u2014 Intent hash from quantized fields only"
       ],
       "scope": {
         "touch": [
@@ -1612,17 +1634,17 @@
       "priority": 80,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.3 Compact label schema",
       "category": "durability",
       "description": "Implement compact label encode/decode with 64-character limit enforcement.",
       "contract_refs": [
-        "CONTRACT.md §1.1 Labeling & Idempotency Contract",
+        "CONTRACT.md \u00a71.1 Labeling & Idempotency Contract",
         "AT-216",
         "AT-217"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.3 — Compact label schema encode/decode (≤64 chars)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.3 \u2014 Compact label schema encode/decode (\u226464 chars)"
       ],
       "scope": {
         "touch": [
@@ -1635,13 +1657,13 @@
         ]
       },
       "acceptance": [
-        "GIVEN strat_id, group_id, leg_idx, and intent_hash WHEN encoding THEN the label matches s4:{sid8}:{gid12}:{li}:{ih16} and is ≤ 64 chars.",
+        "GIVEN strat_id, group_id, leg_idx, and intent_hash WHEN encoding THEN the label matches s4:{sid8}:{gid12}:{li}:{ih16} and is \u2264 64 chars.",
         "GIVEN a compact label WHEN decoding THEN sid8, gid12, leg_idx, and ih16 are parsed correctly.",
         "GIVEN a computed s4 label would exceed 64 chars WHEN encoding THEN the intent is rejected with Rejected(LabelTooLong), RiskState::Degraded is set, and no dispatch occurs (no truncation)."
       ],
       "steps": [
         "Implement label encoding in crates/soldier_core/src/execution/label.rs to produce sid8, gid12, and ih16.",
-        "Enforce the ≤64 character limit; if the computed label would exceed 64 chars, reject with LabelTooLong and set RiskState::Degraded (no truncation).",
+        "Enforce the \u226464 character limit; if the computed label would exceed 64 chars, reject with LabelTooLong and set RiskState::Degraded (no truncation).",
         "Implement label decoding to parse sid8, gid12, leg_idx, and ih16.",
         "Add unit tests in crates/soldier_core/tests/test_label.rs for length limits and parsing.",
         "Ensure encode/decode round-trips for valid inputs."
@@ -1663,8 +1685,8 @@
       "passes": true,
       "contract_must_evidence": [
         {
-          "quote": "CONTRACT.md §1.1 Labeling & Idempotency Contract",
-          "location": "CONTRACT.md §1.1 Labeling & Idempotency Contract",
+          "quote": "CONTRACT.md \u00a71.1 Labeling & Idempotency Contract",
+          "location": "CONTRACT.md \u00a71.1 Labeling & Idempotency Contract",
           "anchor": "AT-216"
         }
       ],
@@ -1699,7 +1721,7 @@
       "priority": 70,
       "phase": 1,
       "slice": 2,
-      "slice_ref": "Slice 2 — Quantization \\+ Labeling \\+ Idempotency",
+      "slice_ref": "Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency",
       "story_ref": "S2.4 Label match disambiguation",
       "category": "risk",
       "description": "Disambiguate label matches deterministically and degrade on ambiguity.",
@@ -1712,7 +1734,7 @@
         "VR-022"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 2 — Quantization \\+ Labeling \\+ Idempotency / S2.4 — Label match disambiguation; ambiguity→Degraded"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 2 \u2014 Quantization \\+ Labeling \\+ Idempotency / S2.4 \u2014 Label match disambiguation; ambiguity\u2192Degraded"
       ],
       "scope": {
         "touch": [
@@ -1797,7 +1819,7 @@
       "priority": 100,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed)",
       "story_ref": "S3.1 Preflight guard",
       "category": "execution",
       "description": "Implement order-type preflight rules for market/stop/linked orders across instruments.",
@@ -1824,7 +1846,7 @@
         "VR-027"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.1 — Preflight guard (market/stop/linked rules)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed) / S3.1 \u2014 Preflight guard (market/stop/linked rules)"
       ],
       "scope": {
         "touch": [
@@ -1917,7 +1939,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed)",
       "story_ref": "S3.2 Post-only crossing guard",
       "category": "execution",
       "description": "Reject post-only orders that would cross the book deterministically.",
@@ -1926,7 +1948,7 @@
         "AT-916"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.2 — Post‑only crossing guard"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed) / S3.2 \u2014 Post\u2011only crossing guard"
       ],
       "scope": {
         "touch": [
@@ -2007,7 +2029,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 3,
-      "slice_ref": "Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed)",
+      "slice_ref": "Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed)",
       "story_ref": "S3.3 Capabilities matrix + feature flags",
       "category": "execution",
       "description": "Implement venue capabilities to gate linked/OCO orders behind explicit flags.",
@@ -2022,7 +2044,7 @@
         "VR-028"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 3 — Order‑Type Preflight \\+ Venue Capabilities (artifact‑backed) / S3.3 — Capabilities matrix \\+ feature flags"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 3 \u2014 Order\u2011Type Preflight \\+ Venue Capabilities (artifact\u2011backed) / S3.3 \u2014 Capabilities matrix \\+ feature flags"
       ],
       "scope": {
         "touch": [
@@ -2100,13 +2122,13 @@
       "priority": 100,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.1 WAL append + replay no-resend",
       "category": "durability",
       "description": "Persist intents to a durable WAL and replay without resending after crash.",
       "contract_refs": [
         "CONTRACT.md 2.4 Durable Intent Ledger (WAL Truth Source)",
-        "CONTRACT.md §2.4.1 WAL Writer Isolation (Hot Loop Protection)",
+        "CONTRACT.md \u00a72.4.1 WAL Writer Isolation (Hot Loop Protection)",
         "AT-935",
         "AT-906",
         "AT-233",
@@ -2118,7 +2140,7 @@
         "VR-014"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.1 — WAL append \\+ replay no-resend"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.1 \u2014 WAL append \\+ replay no-resend"
       ],
       "scope": {
         "touch": [
@@ -2202,7 +2224,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.2 TLSM out-of-order events",
       "category": "execution",
       "description": "Handle fill-before-ack and out-of-order TLSM events without panic.",
@@ -2214,7 +2236,7 @@
         "Anchor-011"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.2 — TLSM out‑of‑order events (fill-before-ack)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.2 \u2014 TLSM out\u2011of\u2011order events (fill-before-ack)"
       ],
       "scope": {
         "touch": [
@@ -2294,7 +2316,7 @@
       "priority": 80,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.3 Trade-ID registry dedupe",
       "category": "durability",
       "description": "Persist processed trade IDs to prevent duplicate processing.",
@@ -2306,7 +2328,7 @@
         "VR-022"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.3 — Trade‑ID registry dedupe"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.3 \u2014 Trade\u2011ID registry dedupe"
       ],
       "scope": {
         "touch": [
@@ -2385,13 +2407,13 @@
       "priority": 70,
       "phase": 1,
       "slice": 4,
-      "slice_ref": "Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry",
+      "slice_ref": "Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry",
       "story_ref": "S4.4 Dispatch requires durable WAL barrier",
       "category": "durability",
       "description": "Block dispatch until WAL durability marker when configured.",
       "contract_refs": [
-        "CONTRACT.md §2.4.1 WAL Writer Isolation (Hot Loop Protection)",
-        "CONTRACT.md §2.4 Durable Intent Ledger",
+        "CONTRACT.md \u00a72.4.1 WAL Writer Isolation (Hot Loop Protection)",
+        "CONTRACT.md \u00a72.4 Durable Intent Ledger",
         "AT-935",
         "AT-906",
         "AT-233",
@@ -2400,7 +2422,7 @@
         "VR-014"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md §Slice 4 — Durable WAL \\+ TLSM \\+ Trade‑ID Registry / S4.4 — Dispatch requires durable WAL barrier (when configured)"
+        "IMPLEMENTATION_PLAN.md \u00a7Slice 4 \u2014 Durable WAL \\+ TLSM \\+ Trade\u2011ID Registry / S4.4 \u2014 Dispatch requires durable WAL barrier (when configured)"
       ],
       "scope": {
         "touch": [
@@ -2443,7 +2465,7 @@
       "contract_must_evidence": [
         {
           "quote": "RecordedBeforeDispatch is mandatory. DurableBeforeDispatch is required when the durability barrier flag is enabled.",
-          "location": "CONTRACT.md §2.4 Durable Intent Ledger",
+          "location": "CONTRACT.md \u00a72.4 Durable Intent Ledger",
           "anchor": "AT-935"
         }
       ],
@@ -2490,12 +2512,12 @@
       "priority": 100,
       "phase": 1,
       "slice": 5,
-      "slice_ref": "Slice 5 — Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
+      "slice_ref": "Slice 5 \u2014 Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
       "story_ref": "S5.1 Liquidity Gate (book-walk WAP, reject sweep)",
       "category": "execution",
       "description": "Implement Liquidity Gate book-walk slippage checks and L2 staleness rejects for OPEN intents.",
       "contract_refs": [
-        "CONTRACT.md §1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)",
+        "CONTRACT.md \u00a71.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)",
         "CONTRACT.md Rejections due to missing/unparseable/stale L2 MUST use Rejected(LiquidityGateNoL2).",
         "CONTRACT.md AT-222",
         "CONTRACT.md AT-344",
@@ -2504,7 +2526,7 @@
         "VR-011"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 5 — Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.1 — Liquidity Gate (book-walk WAP, reject sweep)"
+        "IMPLEMENTATION_PLAN.md Slice 5 \u2014 Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.1 \u2014 Liquidity Gate (book-walk WAP, reject sweep)"
       ],
       "scope": {
         "touch": [
@@ -2549,8 +2571,8 @@
       "contract_must_evidence": [
         {
           "quote": "Reject if slippage_bps > max_slippage_bps (default 10bps).",
-          "location": "CONTRACT.md §1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)",
-          "anchor": "CONTRACT.md §1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)"
+          "location": "CONTRACT.md \u00a71.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)",
+          "anchor": "CONTRACT.md \u00a71.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)"
         }
       ],
       "enforcing_contract_ats": [
@@ -2597,12 +2619,12 @@
       "priority": 90,
       "phase": 1,
       "slice": 5,
-      "slice_ref": "Slice 5 — Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
+      "slice_ref": "Slice 5 \u2014 Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
       "story_ref": "S5.2 Fee cache staleness (soft buffer / hard ReduceOnly latch)",
       "category": "risk",
       "description": "Apply fee model cache staleness rules with soft buffering and hard-stale RiskState::Degraded blocks.",
       "contract_refs": [
-        "CONTRACT.md §4.2 Fee-Aware Execution",
+        "CONTRACT.md \u00a74.2 Fee-Aware Execution",
         "CONTRACT.md Fee Cache Staleness (Fail-Closed)",
         "CONTRACT.md AT-031",
         "CONTRACT.md AT-032",
@@ -2613,7 +2635,7 @@
         "VR-007"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 5 — Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.2 — Fee cache staleness (soft buffer / hard ReduceOnly latch)"
+        "IMPLEMENTATION_PLAN.md Slice 5 \u2014 Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.2 \u2014 Fee cache staleness (soft buffer / hard ReduceOnly latch)"
       ],
       "scope": {
         "touch": [
@@ -2664,8 +2686,8 @@
       "contract_must_evidence": [
         {
           "quote": "Hard stale (age > fee_cache_hard_s): set RiskState::Degraded.",
-          "location": "CONTRACT.md §4.2 Fee-Aware Execution",
-          "anchor": "CONTRACT.md §4.2 Fee-Aware Execution"
+          "location": "CONTRACT.md \u00a74.2 Fee-Aware Execution",
+          "anchor": "CONTRACT.md \u00a74.2 Fee-Aware Execution"
         }
       ],
       "enforcing_contract_ats": [
@@ -2713,12 +2735,12 @@
       "priority": 80,
       "phase": 1,
       "slice": 5,
-      "slice_ref": "Slice 5 — Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
+      "slice_ref": "Slice 5 \u2014 Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
       "story_ref": "S5.3 NetEdge gate",
       "category": "execution",
       "description": "Reject OPEN intents when net edge after fees and slippage falls below min_edge_usd.",
       "contract_refs": [
-        "CONTRACT.md §1.4.1 Net Edge Gate (Fees + Expected Slippage)",
+        "CONTRACT.md \u00a71.4.1 Net Edge Gate (Fees + Expected Slippage)",
         "CONTRACT.md net_edge_usd = gross_edge_usd - fee_usd - expected_slippage_usd",
         "CONTRACT.md AT-015",
         "CONTRACT.md AT-932",
@@ -2729,7 +2751,7 @@
         "VR-020"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 5 — Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.3 — NetEdge gate"
+        "IMPLEMENTATION_PLAN.md Slice 5 \u2014 Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.3 \u2014 NetEdge gate"
       ],
       "scope": {
         "touch": [
@@ -2774,8 +2796,8 @@
       "contract_must_evidence": [
         {
           "quote": "net_edge_usd = gross_edge_usd - fee_usd - expected_slippage_usd.",
-          "location": "CONTRACT.md §1.4.1 Net Edge Gate (Fees + Expected Slippage)",
-          "anchor": "CONTRACT.md §1.4.1 Net Edge Gate (Fees + Expected Slippage)"
+          "location": "CONTRACT.md \u00a71.4.1 Net Edge Gate (Fees + Expected Slippage)",
+          "anchor": "CONTRACT.md \u00a71.4.1 Net Edge Gate (Fees + Expected Slippage)"
         }
       ],
       "enforcing_contract_ats": [
@@ -2814,16 +2836,16 @@
       "priority": 70,
       "phase": 1,
       "slice": 5,
-      "slice_ref": "Slice 5 — Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
+      "slice_ref": "Slice 5 \u2014 Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
       "story_ref": "S5.4 IOC limit pricer clamp (guarantee min edge at limit)",
       "category": "execution",
       "description": "Clamp IOC limit prices to guarantee min-edge bounds using the fee-aware pricer.",
       "contract_refs": [
-        "CONTRACT.md §1.4 Fee-Aware IOC Limit Pricer (No Market Orders)",
+        "CONTRACT.md \u00a71.4 Fee-Aware IOC Limit Pricer (No Market Orders)",
         "CONTRACT.md AT-223"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 5 — Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.4 — IOC limit pricer clamp (guarantee min edge at limit)"
+        "IMPLEMENTATION_PLAN.md Slice 5 \u2014 Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.4 \u2014 IOC limit pricer clamp (guarantee min edge at limit)"
       ],
       "scope": {
         "touch": [
@@ -2868,8 +2890,8 @@
       "contract_must_evidence": [
         {
           "quote": "Final limit clamped to guarantee min edge at the limit price.",
-          "location": "CONTRACT.md §1.4 Fee-Aware IOC Limit Pricer (No Market Orders)",
-          "anchor": "CONTRACT.md §1.4 Fee-Aware IOC Limit Pricer (No Market Orders)"
+          "location": "CONTRACT.md \u00a71.4 Fee-Aware IOC Limit Pricer (No Market Orders)",
+          "anchor": "CONTRACT.md \u00a71.4 Fee-Aware IOC Limit Pricer (No Market Orders)"
         }
       ],
       "enforcing_contract_ats": [
@@ -2904,18 +2926,18 @@
       "priority": 60,
       "phase": 1,
       "slice": 5,
-      "slice_ref": "Slice 5 — Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
+      "slice_ref": "Slice 5 \u2014 Liquidity Gate \\+ Fee Model \\+ Net Edge \\+ Gate Ordering \\+ Pricer",
       "story_ref": "S5.5 Enforce single chokepoint build_order_intent() (gate ordering)",
       "category": "execution",
       "description": "Route all dispatch through build_order_intent() and enforce deterministic gate ordering at the chokepoint.",
       "contract_refs": [
-        "CONTRACT.md §1.4.1 Net Edge Gate (Fees + Expected Slippage)",
-        "CONTRACT.md §1.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)",
+        "CONTRACT.md \u00a71.4.1 Net Edge Gate (Fees + Expected Slippage)",
+        "CONTRACT.md \u00a71.3 Pre-Trade Liquidity Gate (Do Not Sweep the Book)",
         "CONTRACT.md RecordedBeforeDispatch",
         "CONTRACT.md CSP.5.2 Enforcement Rules"
       ],
       "plan_refs": [
-        "IMPLEMENTATION_PLAN.md Slice 5 — Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.5 — Enforce single chokepoint build_order_intent() (gate ordering)"
+        "IMPLEMENTATION_PLAN.md Slice 5 \u2014 Liquidity Gate + Fee Model + Net Edge + Gate Ordering + Pricer / S5.5 \u2014 Enforce single chokepoint build_order_intent() (gate ordering)"
       ],
       "scope": {
         "touch": [
@@ -2964,8 +2986,8 @@
       "contract_must_evidence": [
         {
           "quote": "This gate MUST run before any OrderIntent is eligible for dispatch.",
-          "location": "CONTRACT.md §1.4.1 Net Edge Gate (Fees + Expected Slippage)",
-          "anchor": "CONTRACT.md §1.4.1 Net Edge Gate (Fees + Expected Slippage)"
+          "location": "CONTRACT.md \u00a71.4.1 Net Edge Gate (Fees + Expected Slippage)",
+          "anchor": "CONTRACT.md \u00a71.4.1 Net Edge Gate (Fees + Expected Slippage)"
         }
       ],
       "enforcing_contract_ats": [
@@ -3003,7 +3025,7 @@
       "priority": 95,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-A Single Dispatch Chokepoint Proof",
       "category": "hardening",
       "description": "Implement CI tests proving exactly one module/function may dispatch exchange orders with no bypass paths.",
@@ -3015,7 +3037,7 @@
         "1. Execution Architecture: The \"Atomic Group\" (Real-Time Repair)"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [
@@ -3056,7 +3078,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-935"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3077,7 +3101,7 @@
       "priority": 94,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-B Determinism Snapshot Test",
       "category": "hardening",
       "description": "Implement CI test proving identical inputs produce identical intent bytes/hashes across runs and restarts.",
@@ -3086,7 +3110,7 @@
         "1.1.1 Canonical Quantization (Pre-Hash & Pre-Dispatch)"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [
@@ -3126,7 +3150,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-218",
+        "AT-343",
+        "AT-219",
+        "AT-216"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3147,7 +3176,7 @@
       "priority": 93,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-C No Partial Side Effects on Rejection",
       "category": "hardening",
       "description": "Implement CI test proving rejected intents leave no persistent state changes except counters/logs.",
@@ -3158,7 +3187,7 @@
         "1.2 Atomic Group Executor"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [
@@ -3199,7 +3228,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-201"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3220,7 +3251,7 @@
       "priority": 92,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-D intent_id/run_id Propagation Contract",
       "category": "hardening",
       "description": "Implement CI test proving every intent-handling log/metric includes the same intent_id and run_id.",
@@ -3228,7 +3259,7 @@
         "0.Z.7.4 Observability Requirement"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [
@@ -3266,7 +3297,11 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-024",
+        "AT-025",
+        "AT-026"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3296,7 +3331,7 @@
       "priority": 91,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-E Gate Ordering Constraints",
       "category": "hardening",
       "description": "Implement CI test and doc proving gate ordering invariants: reject before persist, WAL before dispatch.",
@@ -3307,7 +3342,7 @@
         "VR-014"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [
@@ -3347,7 +3382,11 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-010",
+        "AT-1055",
+        "AT-338"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3368,7 +3407,7 @@
       "priority": 90,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-F Fail-Closed Defaults for Missing Config",
       "category": "hardening",
       "description": "Implement CI test proving missing critical config causes fail-closed rejection with enumerated reason code.",
@@ -3377,7 +3416,7 @@
         "Appendix A: Configuration Defaults (Safety-Critical Thresholds)"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [
@@ -3418,7 +3457,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-110"
+      ],
       "reason_codes": {
         "type": "RejectReason",
         "values": [
@@ -3441,17 +3482,17 @@
       "priority": 89,
       "phase": 1,
       "slice": 6,
-      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
       "story_ref": "P1-G Minimal Crash-Mid-Intent Proof",
       "category": "hardening",
       "description": "Implement CI test or drill proving crash mid-intent before dispatch causes no duplicate dispatch on restart.",
       "contract_refs": [
         "AT-935",
         "AT-233",
-        "2.4 — WAL / intent ledger (RecordedBeforeDispatch)"
+        "2.4 \u2014 WAL / intent ledger (RecordedBeforeDispatch)"
       ],
       "plan_refs": [
-        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
       ],
       "scope": {
         "touch": [],
@@ -3492,7 +3533,10 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-233",
+        "AT-935"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
