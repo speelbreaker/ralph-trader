@@ -6,8 +6,8 @@ mod atomic_group_executor;
 #[path = "../src/execution/group.rs"]
 mod group;
 
-use atomic_group_executor::AtomicGroupExecutor;
-use group::{AtomicGroup, GroupFailure, GroupState, LegOutcome};
+use atomic_group_executor::{AtomicGroupExecutor, RescueAction};
+use group::{AtomicGroup, GroupFailure, GroupState, LegOutcome, LegState};
 
 #[test]
 fn test_atomic_group_mixed_failed_then_flattened() {
@@ -49,4 +49,35 @@ fn test_mixed_failed_blocks_opens_until_neutral() {
     exec.start_containment(&mut group).unwrap();
     exec.mark_flattened(&mut group).unwrap();
     assert!(exec.open_allowed(&group));
+}
+
+#[test]
+fn test_atomic_rescue_attempts_limited_to_two() {
+    let mut group = AtomicGroup::new("group-3");
+    let exec = AtomicGroupExecutor::new(1e-9);
+
+    exec.on_intent_persisted(&mut group).unwrap();
+
+    let legs = vec![
+        LegOutcome::new(1.0, 0.6, LegState::Filled),
+        LegOutcome::new(1.0, 0.0, LegState::Filled),
+    ];
+    exec.evaluate(&mut group, &legs).unwrap();
+    assert_eq!(group.state(), GroupState::MixedFailed);
+    assert_eq!(exec.rescue_attempts(&group), 0);
+
+    let outcome = exec.record_rescue_failure(&mut group).unwrap();
+    assert_eq!(outcome, RescueAction::Retry);
+    assert_eq!(exec.rescue_attempts(&group), 1);
+    assert_eq!(group.state(), GroupState::MixedFailed);
+
+    let outcome = exec.record_rescue_failure(&mut group).unwrap();
+    assert_eq!(outcome, RescueAction::Flatten);
+    assert_eq!(exec.rescue_attempts(&group), 2);
+    assert_eq!(group.state(), GroupState::Flattening);
+
+    let outcome = exec.record_rescue_failure(&mut group).unwrap();
+    assert_eq!(outcome, RescueAction::Noop);
+    assert_eq!(exec.rescue_attempts(&group), 2);
+    assert_eq!(group.state(), GroupState::Flattening);
 }

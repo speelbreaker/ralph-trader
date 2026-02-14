@@ -273,3 +273,9 @@ Summary: Implemented atomic group state machine + executor with first-fail latch
 Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_atomic_group.
 Evidence: crates/soldier_core/src/execution/group.rs; crates/soldier_core/src/execution/atomic_group_executor.rs; crates/soldier_core/tests/test_atomic_group.rs; docs/plans/2026-02-14-s7-000-atomic-group-design.md; cargo test output.
 Next: Commit changes and rerun ./plans/verify.sh quick on a clean tree.
+Story: S7-001
+Date: 2026-02-14
+Summary: Acknowledged AGENTS.md and plans/progress.txt; capped rescue attempts at 2 with flatten fallback and atomic_rescue_attempts histogram; added AT-117 test for rescue cap/no-chase behavior.
+Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_atomic_group.
+Evidence: crates/soldier_core/src/execution/atomic_group_executor.rs; crates/soldier_core/tests/test_atomic_group.rs; cargo test output (test_atomic_group).
+Next: Commit changes and rerun ./plans/verify.sh quick.

@@ -1,15 +1,28 @@
 use super::group::{
     AtomicGroup, GroupFailure, GroupState, GroupTransitionError, LegOutcome, LegState,
 };
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+const MAX_RESCUE_ATTEMPTS: u8 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RescueAction {
+    Retry,
+    Flatten,
+    Noop,
+}
 
 pub struct AtomicGroupExecutor {
     epsilon: f64,
+    rescue_attempts: Mutex<HashMap<String, u8>>,
 }
 
 impl AtomicGroupExecutor {
     pub fn new(epsilon: f64) -> Self {
         Self {
             epsilon: epsilon.abs(),
+            rescue_attempts: Mutex::new(HashMap::new()),
         }
     }
 
@@ -31,7 +44,9 @@ impl AtomicGroupExecutor {
 
         if let Some(failure) = detect_failure(legs, self.epsilon) {
             group.seed_first_failure(failure);
-            return group.transition_to(GroupState::MixedFailed);
+            group.transition_to(GroupState::MixedFailed)?;
+            self.clear_rescue_attempts(group);
+            return Ok(());
         }
 
         if !legs.iter().all(LegOutcome::is_terminal) {
@@ -39,7 +54,9 @@ impl AtomicGroupExecutor {
         }
 
         if is_safe_complete(legs, self.epsilon) {
-            return group.transition_to(GroupState::Complete);
+            group.transition_to(GroupState::Complete)?;
+            self.clear_rescue_attempts(group);
+            return Ok(());
         }
 
         Ok(())
@@ -50,12 +67,61 @@ impl AtomicGroupExecutor {
     }
 
     pub fn mark_flattened(&self, group: &mut AtomicGroup) -> Result<(), GroupTransitionError> {
-        group.transition_to(GroupState::Flattened)
+        group.transition_to(GroupState::Flattened)?;
+        self.clear_rescue_attempts(group);
+        Ok(())
     }
 
     pub fn open_allowed(&self, group: &AtomicGroup) -> bool {
         group.state().allows_open()
     }
+
+    pub fn rescue_attempts(&self, group: &AtomicGroup) -> u8 {
+        self.lookup_rescue_attempts(group)
+    }
+
+    pub fn record_rescue_failure(
+        &self,
+        group: &mut AtomicGroup,
+    ) -> Result<RescueAction, GroupTransitionError> {
+        if group.state() != GroupState::MixedFailed {
+            return Ok(RescueAction::Noop);
+        }
+
+        let attempt = self.bump_rescue_attempts(group);
+        record_rescue_attempt_metric(attempt);
+
+        if attempt >= MAX_RESCUE_ATTEMPTS {
+            self.start_containment(group)?;
+            return Ok(RescueAction::Flatten);
+        }
+
+        Ok(RescueAction::Retry)
+    }
+
+    fn lookup_rescue_attempts(&self, group: &AtomicGroup) -> u8 {
+        let map = self.rescue_attempts.lock().expect("rescue_attempts lock");
+        map.get(group.group_id()).copied().unwrap_or(0)
+    }
+
+    fn bump_rescue_attempts(&self, group: &AtomicGroup) -> u8 {
+        let mut map = self.rescue_attempts.lock().expect("rescue_attempts lock");
+        let entry = map.entry(group.group_id().to_string()).or_insert(0);
+        if *entry < MAX_RESCUE_ATTEMPTS {
+            *entry += 1;
+        }
+        *entry
+    }
+
+    fn clear_rescue_attempts(&self, group: &AtomicGroup) {
+        let mut map = self.rescue_attempts.lock().expect("rescue_attempts lock");
+        map.remove(group.group_id());
+    }
+}
+
+fn record_rescue_attempt_metric(attempt: u8) {
+    let tail = format!("value={attempt}");
+    super::emit_execution_metric_line("atomic_rescue_attempts", &tail);
 }
 
 fn detect_failure(legs: &[LegOutcome], epsilon: f64) -> Option<GroupFailure> {
