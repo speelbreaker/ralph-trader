@@ -3863,11 +3863,12 @@
         "IMPLEMENTATION_PLAN.md Slice 7 / S7.4"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/src/execution/sequencer.rs",
-          "crates/soldier_core/tests/test_sequencer.rs"
+          "crates/soldier_core/tests/test_sequencer.rs",
+          "crates/soldier_core/src/execution/mod.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -3898,7 +3899,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md \u00a71.1.4 Order Sequencer - Atomic Group Submit",
