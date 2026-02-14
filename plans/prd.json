@@ -3495,11 +3495,11 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "evidence/phase1/crash_mid_intent/drill.md",
           "crates/soldier_infra/tests/test_crash_mid_intent.rs"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -3569,12 +3569,11 @@
         "IMPLEMENTATION_PLAN.md Slice 7 — Atomic Group Executor + Emergency Close / S7.1"
       ],
       "scope": {
-        "touch": [
-          "crates/soldier_core/src/execution/group.rs"
-        ],
+        "touch": [],
         "create": [
           "crates/soldier_core/src/execution/atomic_group_executor.rs",
-          "crates/soldier_core/tests/test_atomic_group.rs"
+          "crates/soldier_core/tests/test_atomic_group.rs",
+          "crates/soldier_core/src/execution/group.rs"
         ],
         "avoid": []
       },
