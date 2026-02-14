@@ -285,3 +285,9 @@ Summary: Implemented emergency close algorithm (CONTRACT.md §3.1) with 3 IOC cl
 Commands: cargo test -p soldier_core --test test_emergency_close; cargo fmt; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/execution/emergency_close.rs; crates/soldier_core/tests/test_emergency_close.rs; cargo test output (12/12 passed); verify quick passed.
 Next: Mark S7-002 as passing.
+Story: S7-003
+Date: 2026-02-14
+Summary: Implemented sequencer with close→confirm→hedge ordering; repair flattens via emergency_close before hedge; blocks exposure increase when RiskState != Healthy; added 8 tests covering all acceptance criteria; registered module in execution/mod.rs; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_sequencer; cargo fmt; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/execution/sequencer.rs; crates/soldier_core/tests/test_sequencer.rs; crates/soldier_core/src/execution/mod.rs; cargo test output (8/8 passed).
+Next: Commit and rerun verify quick on clean tree.

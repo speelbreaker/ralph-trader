@@ -14,6 +14,7 @@ pub mod post_only_guard;
 mod preflight;
 pub mod pricer;
 pub mod quantize;
+pub mod sequencer;
 pub mod state;
 pub mod tlsm;
 
@@ -62,6 +63,7 @@ pub use quantize::{
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
     Side, quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
 };
+pub use sequencer::{ExecutionStep, IntentKind, RiskState, SequenceError, Sequencer};
 pub use state::{TlsmEvent, TlsmIntent, TlsmLedgerEntry, TlsmSide, TlsmState};
 pub use tlsm::{
     Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition, tlsm_out_of_order_total,
