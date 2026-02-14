@@ -212,7 +212,10 @@ fn preflight_trigger_field_matrix() {
     };
     let option_err = preflight_intent(&option_trigger, OrderTypeGuardConfig::default())
         .expect_err("option trigger field should reject");
-    assert_eq!(option_err.reason, OrderTypeRejectReason::OrderTypeStopForbidden);
+    assert_eq!(
+        option_err.reason,
+        OrderTypeRejectReason::OrderTypeStopForbidden
+    );
 
     let non_option_kinds = [
         InstrumentKind::Perpetual,

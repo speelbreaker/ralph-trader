@@ -153,8 +153,20 @@ fn test_liquidity_gate_no_l2_matrix() {
     );
 
     let intents = [
-        base_intent(IntentClassification::Open, Side::Buy, 1.0, Some(&stale), 2_500),
-        base_intent(IntentClassification::Open, Side::Buy, 1.0, Some(&future), 2_000),
+        base_intent(
+            IntentClassification::Open,
+            Side::Buy,
+            1.0,
+            Some(&stale),
+            2_500,
+        ),
+        base_intent(
+            IntentClassification::Open,
+            Side::Buy,
+            1.0,
+            Some(&future),
+            2_000,
+        ),
         base_intent(
             IntentClassification::Open,
             Side::Buy,
@@ -169,7 +181,13 @@ fn test_liquidity_gate_no_l2_matrix() {
             Some(&empty_asks),
             1_500,
         ),
-        base_intent(IntentClassification::Open, Side::Buy, 1.0, Some(&thin), 1_500),
+        base_intent(
+            IntentClassification::Open,
+            Side::Buy,
+            1.0,
+            Some(&thin),
+            1_500,
+        ),
     ];
 
     for intent in intents {
@@ -253,8 +271,20 @@ fn test_liquidity_gate_non_open_paths_skip_slippage_when_l2_fresh() {
             qty: 1.0,
         }],
     );
-    let close_intent = base_intent(IntentClassification::Close, Side::Buy, 10.0, Some(&book), 1_200);
-    let hedge_intent = base_intent(IntentClassification::Hedge, Side::Sell, 10.0, Some(&book), 1_200);
+    let close_intent = base_intent(
+        IntentClassification::Close,
+        Side::Buy,
+        10.0,
+        Some(&book),
+        1_200,
+    );
+    let hedge_intent = base_intent(
+        IntentClassification::Hedge,
+        Side::Sell,
+        10.0,
+        Some(&book),
+        1_200,
+    );
 
     let close = evaluate_liquidity_gate(&close_intent, LiquidityGateConfig::default())
         .expect("close path should skip slippage gate");

@@ -185,9 +185,11 @@ fn test_gate_reject_matrix_stops_before_dispatch() {
         Case {
             name: "quantize_missing_metadata",
             mutate: with_invalid_quantization,
-            expected_outcome: BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::Quantize(
-                QuantizeRejectReason::InstrumentMetadataMissing,
-            )),
+            expected_outcome: BuildOrderIntentOutcome::Rejected(
+                BuildOrderIntentRejectReason::Quantize(
+                    QuantizeRejectReason::InstrumentMetadataMissing,
+                ),
+            ),
             expected_trace: vec![GateStep::Preflight, GateStep::Quantize],
         },
         Case {
@@ -208,9 +210,9 @@ fn test_gate_reject_matrix_stops_before_dispatch() {
         Case {
             name: "net_edge_input_missing",
             mutate: with_missing_net_edge_input,
-            expected_outcome: BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::NetEdge(
-                NetEdgeRejectReason::NetEdgeInputMissing,
-            )),
+            expected_outcome: BuildOrderIntentOutcome::Rejected(
+                BuildOrderIntentRejectReason::NetEdge(NetEdgeRejectReason::NetEdgeInputMissing),
+            ),
             expected_trace: vec![
                 GateStep::Preflight,
                 GateStep::Quantize,
