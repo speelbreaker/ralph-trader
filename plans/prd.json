@@ -3960,11 +3960,12 @@
         "IMPLEMENTATION_PLAN.md Slice 7 / S7.5"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/src/risk/churn_breaker.rs",
-          "crates/soldier_core/tests/test_churn_breaker.rs"
+          "crates/soldier_core/tests/test_churn_breaker.rs",
+          "crates/soldier_core/src/risk/mod.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -3993,7 +3994,7 @@
       "est_size": "S",
       "risk": "low",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md \u00a71.2.1 Churn Breaker - Flip-Flop Backoff",
