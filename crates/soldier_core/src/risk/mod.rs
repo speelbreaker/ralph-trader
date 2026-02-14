@@ -1,6 +1,8 @@
+pub mod churn_breaker;
 pub mod fees;
 pub mod state;
 
+pub use churn_breaker::{ChurnBreaker, ChurnBreakerDecision, ChurnKey};
 pub use fees::{
     FEE_CACHE_HARD_S_DEFAULT, FEE_CACHE_SOFT_S_DEFAULT, FEE_MODEL_POLL_INTERVAL_MS,
     FEE_MODEL_POLL_INTERVAL_S, FEE_STALE_BUFFER_DEFAULT, FeeModelCache, FeeModelSnapshot,

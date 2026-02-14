@@ -291,3 +291,9 @@ Summary: Implemented sequencer with close→confirm→hedge ordering; repair fla
 Commands: cargo test -p soldier_core --test test_sequencer; cargo fmt; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/execution/sequencer.rs; crates/soldier_core/tests/test_sequencer.rs; crates/soldier_core/src/execution/mod.rs; cargo test output (8/8 passed).
 Next: Commit and rerun verify quick on clean tree.
+Story: S7-004
+Date: 2026-02-14
+Summary: Implemented churn breaker (CONTRACT.md §1.2.2): >2 flattens/5m => 15m blacklist blocks opens for that key; added churn_breaker.rs with ChurnKey tracking, record_flatten/evaluate_open API, and trip_counter metric; created 7 integration tests covering AT-221 (blacklist after 3 flattens, TTL enforcement), allow/block behavior, pruning, isolation, and counter; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_churn_breaker; cargo fmt; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/risk/churn_breaker.rs; crates/soldier_core/tests/test_churn_breaker.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (7/7 passed).
+Next: Commit and rerun verify quick on clean tree.
