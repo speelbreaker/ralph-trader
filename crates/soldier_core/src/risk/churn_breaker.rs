@@ -165,17 +165,18 @@ mod tests {
 
         breaker.record_flatten(key.clone(), now);
         breaker.record_flatten(key.clone(), now + Duration::from_secs(60));
+        // Third flatten at 2m triggers the blacklist (blocked_until = 2m + 15m = 17m)
         breaker.record_flatten(key.clone(), now + Duration::from_secs(120));
 
-        // WHEN: evaluating within blacklist period (14m later)
-        let decision_within = breaker.evaluate_open(&key, now + Duration::from_secs(14 * 60));
+        // WHEN: evaluating at 16m (within blacklist, which expires at 17m)
+        let decision_within = breaker.evaluate_open(&key, now + Duration::from_secs(16 * 60));
         assert!(matches!(
             decision_within,
             ChurnBreakerDecision::Reject { .. }
         ));
 
-        // WHEN: evaluating after blacklist expires (16m later)
-        let decision_after = breaker.evaluate_open(&key, now + Duration::from_secs(16 * 60));
+        // WHEN: evaluating at 18m (after blacklist expires at 17m)
+        let decision_after = breaker.evaluate_open(&key, now + Duration::from_secs(18 * 60));
 
         // THEN: blacklist is cleared, opens allowed
         assert_eq!(decision_after, ChurnBreakerDecision::Allow);
