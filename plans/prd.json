@@ -4057,11 +4057,12 @@
         "IMPLEMENTATION_PLAN.md Slice 7 / S7.6"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/src/risk/self_impact_guard.rs",
-          "crates/soldier_core/tests/test_self_impact.rs"
+          "crates/soldier_core/tests/test_self_impact.rs",
+          "crates/soldier_core/src/risk/mod.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -4091,7 +4092,7 @@
       "est_size": "S",
       "risk": "med",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md \u00a71.2.3 Self-Impact Feedback Loop Guard - Trade Feed Freshness",
