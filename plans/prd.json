@@ -3951,7 +3951,7 @@
       "category": "risk",
       "description": "Implement churn breaker: >2 flattens/5m => 15m blacklist blocks opens for that key.",
       "contract_refs": [
-        "CONTRACT.md §3 Churn Breaker"
+        "CONTRACT.md §1.2.2 Atomic Churn Circuit Breaker (Flatten Storm Guard)"
       ],
       "plan_refs": [
         "IMPLEMENTATION_PLAN.md Slice 7 / S7.5"
