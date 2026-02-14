@@ -80,6 +80,10 @@ You will see context like `.ralph/iter_N_*/selected_item.json` or explicit instr
 - Work only the selected PRD item.
 - Fail closed on PRD ambiguity; set needs_human_decision=true and stop.
 - Follow the PRD scope (scope.touch, scope.create) strictly.
+- **AUTONOMOUS OPERATION**: Ralph is non-interactive. Do NOT ask questions or wait for approval.
+  - Skills requiring Q&A (brainstorming, writing-plans): Make design decisions autonomously, document in design doc, implement directly.
+  - Create design docs if in scope without interactive approval loops.
+  - Use your judgment to resolve design choices based on contract requirements.
 
 ### When asked to implement PENDING PRD stories OUTSIDE Ralph
 **FORBIDDEN**: Do NOT manually implement stories with `passes=false`.
