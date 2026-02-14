@@ -1,5 +1,5 @@
 {
-  "generated": "2026-02-10T14:40:11Z",
+  "generated": "2026-02-14T00:10:28Z",
   "test": "test_missing_config_fails_closed",
   "results": {
     "INSTRUMENT_TICK_SIZE": {

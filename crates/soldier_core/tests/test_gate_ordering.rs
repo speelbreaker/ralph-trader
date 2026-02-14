@@ -3,8 +3,9 @@ use std::sync::atomic::Ordering;
 use soldier_core::execution::{
     BuildOrderIntentContext, BuildOrderIntentObservers, BuildOrderIntentOutcome,
     BuildOrderIntentRejectReason, DispatchStep, GateStep, InstrumentQuantization,
-    IntentClassification, L2BookLevel, L2BookSnapshot, LiquidityGateConfig, OrderIntent, OrderType,
-    OrderTypeGuardConfig, RecordIntentOutcome, Side, build_order_intent,
+    IntentClassification, L2BookLevel, L2BookSnapshot, LiquidityGateConfig,
+    LiquidityGateRejectReason, NetEdgeRejectReason, OrderIntent, OrderType, OrderTypeGuardConfig,
+    QuantizeRejectReason, RecordIntentOutcome, Side, build_order_intent,
     take_build_order_intent_outcome, take_dispatch_trace, take_gate_sequence_trace,
     with_build_order_intent_context,
 };
@@ -154,4 +155,117 @@ fn test_gate_ordering_constraints() {
     );
     assert_eq!(observers.recorded_total.load(Ordering::Relaxed), 1);
     assert_eq!(observers.dispatch_total.load(Ordering::Relaxed), 0);
+}
+
+fn with_invalid_quantization(mut context: BuildOrderIntentContext) -> BuildOrderIntentContext {
+    context.quantization.tick_size = 0.0;
+    context
+}
+
+fn with_missing_l2(mut context: BuildOrderIntentContext) -> BuildOrderIntentContext {
+    context.l2_snapshot = None;
+    context
+}
+
+fn with_missing_net_edge_input(mut context: BuildOrderIntentContext) -> BuildOrderIntentContext {
+    context.min_edge_usd = f64::NAN;
+    context
+}
+
+#[test]
+fn test_gate_reject_matrix_stops_before_dispatch() {
+    struct Case {
+        name: &'static str,
+        mutate: fn(BuildOrderIntentContext) -> BuildOrderIntentContext,
+        expected_outcome: BuildOrderIntentOutcome,
+        expected_trace: Vec<GateStep>,
+    }
+
+    let cases = [
+        Case {
+            name: "quantize_missing_metadata",
+            mutate: with_invalid_quantization,
+            expected_outcome: BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::Quantize(
+                QuantizeRejectReason::InstrumentMetadataMissing,
+            )),
+            expected_trace: vec![GateStep::Preflight, GateStep::Quantize],
+        },
+        Case {
+            name: "liquidity_no_l2",
+            mutate: with_missing_l2,
+            expected_outcome: BuildOrderIntentOutcome::Rejected(
+                BuildOrderIntentRejectReason::LiquidityGate(
+                    LiquidityGateRejectReason::LiquidityGateNoL2,
+                ),
+            ),
+            expected_trace: vec![
+                GateStep::Preflight,
+                GateStep::Quantize,
+                GateStep::FeeCache,
+                GateStep::LiquidityGate,
+            ],
+        },
+        Case {
+            name: "net_edge_input_missing",
+            mutate: with_missing_net_edge_input,
+            expected_outcome: BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::NetEdge(
+                NetEdgeRejectReason::NetEdgeInputMissing,
+            )),
+            expected_trace: vec![
+                GateStep::Preflight,
+                GateStep::Quantize,
+                GateStep::FeeCache,
+                GateStep::LiquidityGate,
+                GateStep::NetEdgeGate,
+            ],
+        },
+    ];
+
+    for case in cases {
+        let observers = BuildOrderIntentObservers::new();
+        let context = (case.mutate)(context_for_open(observers.clone()));
+        let result = with_build_order_intent_context(context, || {
+            build_order_intent(base_intent(), OrderTypeGuardConfig::default())
+        });
+        assert!(result.is_err(), "{} should reject", case.name);
+
+        let outcome = take_build_order_intent_outcome().expect("expected outcome");
+        assert_eq!(outcome, case.expected_outcome, "{}", case.name);
+        assert_eq!(
+            take_gate_sequence_trace(),
+            case.expected_trace,
+            "{} trace mismatch",
+            case.name
+        );
+        assert!(
+            take_dispatch_trace().is_empty(),
+            "{} should not record/dispatch",
+            case.name
+        );
+        assert_eq!(
+            observers.recorded_total.load(Ordering::Relaxed),
+            0,
+            "{} should not record intent",
+            case.name
+        );
+        assert_eq!(
+            observers.dispatch_total.load(Ordering::Relaxed),
+            0,
+            "{} should not dispatch intent",
+            case.name
+        );
+    }
+}
+
+#[test]
+fn test_missing_context_rejects_after_preflight_only() {
+    let result = build_order_intent(base_intent(), OrderTypeGuardConfig::default());
+    assert!(result.is_err(), "missing context should reject");
+    let outcome = take_build_order_intent_outcome().expect("expected missing-context outcome");
+    assert_eq!(
+        outcome,
+        BuildOrderIntentOutcome::Rejected(BuildOrderIntentRejectReason::MissingContext)
+    );
+    assert_eq!(take_gate_sequence_trace(), vec![GateStep::Preflight]);
+    assert!(take_dispatch_trace().is_empty());
 }

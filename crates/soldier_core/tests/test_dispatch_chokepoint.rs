@@ -3,6 +3,17 @@ use std::path::{Path, PathBuf};
 
 const CHOKEPOINT_RELATIVE_PATH: &str = "src/execution/build_order_intent.rs";
 const EXCHANGE_CLIENT_MARKER: &str = "DispatchStep::DispatchAttempt";
+const DISPATCH_BOUNDARY_ALLOWED_FILES: [&str; 3] = [
+    "execution/build_order_intent.rs",
+    "execution/dispatch_map.rs",
+    "execution/mod.rs",
+];
+const FORBIDDEN_DISPATCH_BOUNDARY_SYMBOLS: [&str; 4] = [
+    "map_order_size_to_deribit_amount(",
+    "map_order_size_to_deribit_amount_with_metrics(",
+    "DeribitOrderAmount",
+    "DispatchRejectReason",
+];
 
 fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     for entry in fs::read_dir(dir)? {
@@ -87,4 +98,47 @@ fn test_dispatch_visibility_is_restricted() {
             "dispatch helper visibility too wide; expected pub(crate) or narrower, got: {signature}"
         );
     }
+}
+
+#[test]
+fn test_dispatch_boundary_symbols_remain_scoped() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let src_dir = manifest_dir.join("src");
+
+    let mut rs_files = Vec::new();
+    collect_rs_files(&src_dir, &mut rs_files).expect("failed to list source files");
+
+    let mut offenders = Vec::new();
+    for file in rs_files {
+        let canonical = file
+            .canonicalize()
+            .unwrap_or_else(|err| panic!("failed to canonicalize {}: {err}", file.display()));
+        let relative = rel_path(&canonical, &src_dir);
+        if DISPATCH_BOUNDARY_ALLOWED_FILES.contains(&relative.as_str()) {
+            continue;
+        }
+
+        let contents = fs::read_to_string(&canonical)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", canonical.display()));
+        for (line_num, line) in contents.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") || trimmed.starts_with("///") {
+                continue;
+            }
+            for symbol in FORBIDDEN_DISPATCH_BOUNDARY_SYMBOLS {
+                if line.contains(symbol) {
+                    offenders.push(format!(
+                        "{relative}:{}: dispatch boundary symbol `{symbol}` is only allowed in build_order_intent.rs, dispatch_map.rs, or mod.rs",
+                        line_num + 1
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "dispatch boundary symbols leaked outside allowed modules:\n{}",
+        offenders.join("\n")
+    );
 }
