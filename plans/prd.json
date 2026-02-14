@@ -3570,11 +3570,12 @@
       ],
       "scope": {
         "touch": [
+          "crates/soldier_core/src/execution/group.rs"
+        ],
+        "create": [
           "crates/soldier_core/src/execution/atomic_group_executor.rs",
-          "crates/soldier_core/src/execution/group.rs",
           "crates/soldier_core/tests/test_atomic_group.rs"
         ],
-        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -3609,7 +3610,9 @@
       ],
       "reason_codes": {
         "type": "ModeReasonCode",
-        "values": []
+        "values": [
+          "REDUCEONLY_ATOMIC_NAKED"
+        ]
       },
       "enforcement_point": "AtomicGroupExecutor",
       "failure_mode": [
@@ -3650,11 +3653,11 @@
         "IMPLEMENTATION_PLAN.md Slice 7 / S7.2"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/src/execution/atomic_group_executor.rs",
           "crates/soldier_core/tests/test_atomic_group.rs"
         ],
-        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -3695,7 +3698,9 @@
       ],
       "reason_codes": {
         "type": "RejectReason",
-        "values": []
+        "values": [
+          "RejectReason::MaxRetriesExceeded"
+        ]
       },
       "enforcement_point": "AtomicGroupExecutor",
       "failure_mode": [
@@ -3902,7 +3907,9 @@
       ],
       "reason_codes": {
         "type": "RejectReason",
-        "values": []
+        "values": [
+          "RejectReason::RiskStateNotHealthy"
+        ]
       },
       "enforcement_point": "AtomicGroupExecutor",
       "failure_mode": [
