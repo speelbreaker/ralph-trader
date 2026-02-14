@@ -3756,11 +3756,11 @@
         "IMPLEMENTATION_PLAN.md Slice 7 / S7.3"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/src/execution/emergency_close.rs",
           "crates/soldier_core/tests/test_emergency_close.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -3794,7 +3794,7 @@
       "est_size": "S",
       "risk": "high",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [
         {
           "quote": "CONTRACT.md \u00a71.1.3 Emergency Close - Naked Inventory Reduction",
