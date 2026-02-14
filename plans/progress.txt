@@ -267,3 +267,9 @@ Summary: Completed RALPH-SUG-008 by expanding focused edge-case matrix density i
 Commands: cargo test -p soldier_core --test test_gate_ordering --test test_preflight --test test_quantize --test test_liquidity_gate.
 Evidence: crates/soldier_core/tests/test_gate_ordering.rs; crates/soldier_core/tests/test_preflight.rs; crates/soldier_core/tests/test_quantize.rs; crates/soldier_core/tests/test_liquidity_gate.rs.
 Next: Refresh focused compare report when latest parity snapshot is needed.
+Story: S7-000
+Date: 2026-02-14
+Summary: Implemented atomic group state machine + executor with first-fail latch and MixedFailed open blocking; added atomic group tests; confirmed design doc with ENABLE_ATOMIC_GROUPS flag; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_atomic_group.
+Evidence: crates/soldier_core/src/execution/group.rs; crates/soldier_core/src/execution/atomic_group_executor.rs; crates/soldier_core/tests/test_atomic_group.rs; docs/plans/2026-02-14-s7-000-atomic-group-design.md; cargo test output.
+Next: Commit changes and rerun ./plans/verify.sh quick on a clean tree.
