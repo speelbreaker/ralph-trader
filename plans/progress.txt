@@ -297,3 +297,9 @@ Summary: Implemented churn breaker (CONTRACT.md §1.2.2): >2 flattens/5m => 15m 
 Commands: cargo test -p soldier_core --test test_churn_breaker; cargo fmt; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/risk/churn_breaker.rs; crates/soldier_core/tests/test_churn_breaker.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (7/7 passed).
 Next: Commit and rerun verify quick on clean tree.
+Story: S7-005
+Date: 2026-02-14
+Summary: Implemented self-impact feedback loop guard (CONTRACT.md §1.2.3): stale/missing trade feed sets RiskState::Degraded + WS_TRADES_GAP_RECONCILE_REQUIRED latch blocking opens; fresh feed with self_fraction/notional trip rejects with FeedbackLoopGuardActive + cooldown; below threshold allows opens; added 7 tests covering AT-953/955/956/957; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_self_impact; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/risk/self_impact_guard.rs; crates/soldier_core/tests/test_self_impact.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_post.log; VERIFY OK (mode=quick).
+Next: Mark S7-005 as passing.
