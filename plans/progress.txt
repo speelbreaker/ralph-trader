@@ -279,3 +279,9 @@ Summary: Acknowledged AGENTS.md and plans/progress.txt; capped rescue attempts a
 Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_atomic_group.
 Evidence: crates/soldier_core/src/execution/atomic_group_executor.rs; crates/soldier_core/tests/test_atomic_group.rs; cargo test output (test_atomic_group).
 Next: Commit changes and rerun ./plans/verify.sh quick.
+Story: S7-002
+Date: 2026-02-14
+Summary: Implemented emergency close algorithm (CONTRACT.md §3.1) with 3 IOC close attempts using doubling buffer (5→10→20 ticks), reduce-only delta hedge fallback, AtomicNakedEvent logging, and gate bypass; added comprehensive tests for AT-338/339/340/346/347/013; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_emergency_close; cargo fmt; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/execution/emergency_close.rs; crates/soldier_core/tests/test_emergency_close.rs; cargo test output (12/12 passed); verify quick passed.
+Next: Mark S7-002 as passing.
