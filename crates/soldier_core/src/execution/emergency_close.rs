@@ -52,11 +52,7 @@ impl EmergencyClose {
 
     /// Execute emergency close algorithm (CONTRACT.md §3.1)
     /// Returns (attempts, hedge_used, time_ms)
-    pub fn execute(
-        &self,
-        _group_id: &str,
-        initial_exposure: f64,
-    ) -> EmergencyCloseResult {
+    pub fn execute(&self, _group_id: &str, initial_exposure: f64) -> EmergencyCloseResult {
         let start = Instant::now();
         let mut attempts = Vec::new();
         let mut remaining = initial_exposure.abs();
@@ -199,9 +195,9 @@ mod tests {
     #[test]
     fn test_emergency_close_buffer_doubling_sequence() {
         let buffers = vec![
-            INITIAL_BUFFER_TICKS * 1,  // 5
-            INITIAL_BUFFER_TICKS * 2,  // 10
-            INITIAL_BUFFER_TICKS * 4,  // 20
+            INITIAL_BUFFER_TICKS * 1, // 5
+            INITIAL_BUFFER_TICKS * 2, // 10
+            INITIAL_BUFFER_TICKS * 4, // 20
         ];
 
         for (idx, expected) in buffers.iter().enumerate() {
@@ -216,16 +212,13 @@ mod tests {
         let ec = EmergencyClose::new(0.001);
         let result = ec.execute("test-group", 1.0);
 
-        ec.log_atomic_naked_event(
-            "test-group",
-            &result,
-            1.0,
-            "test-strategy",
-            "ReduceOnly",
-        );
+        ec.log_atomic_naked_event("test-group", &result, 1.0, "test-strategy", "ReduceOnly");
 
         // Schema validated via types
-        assert_eq!(result.close_attempts.len() as u8, result.close_attempts.len() as u8);
+        assert_eq!(
+            result.close_attempts.len() as u8,
+            result.close_attempts.len() as u8
+        );
     }
 
     #[test]

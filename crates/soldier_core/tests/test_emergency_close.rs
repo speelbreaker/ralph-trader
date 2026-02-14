@@ -133,7 +133,10 @@ fn test_emergency_close_logs_atomic_naked_event() {
     );
 
     // Event schema validated via types (u64 always >= 0)
-    assert_eq!(result.close_attempts.len() as u8, result.close_attempts.len() as u8);
+    assert_eq!(
+        result.close_attempts.len() as u8,
+        result.close_attempts.len() as u8
+    );
 }
 
 /// CONTRACT.md §3.1: TradingMode is ReduceOnly during exposure
@@ -171,13 +174,7 @@ fn test_emergency_close_increments_naked_events_counter() {
     let result = ec.execute("group-counter", 1.0);
 
     // Log event increments counter
-    ec.log_atomic_naked_event(
-        "group-counter",
-        &result,
-        1.0,
-        "test-strategy",
-        "ReduceOnly",
-    );
+    ec.log_atomic_naked_event("group-counter", &result, 1.0, "test-strategy", "ReduceOnly");
 
     // Counter incremented via log call
 }
