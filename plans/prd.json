@@ -3604,7 +3604,18 @@
       "risk": "high",
       "needs_human_decision": false,
       "passes": false,
-      "contract_must_evidence": [],
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.1.1 Atomic Group Executor - First-Fail Invariant",
+          "location": "CONTRACT.md §1.1.1",
+          "anchor": "AT-098"
+        },
+        {
+          "quote": "CONTRACT.md §1.1.1 Atomic Group Executor - State Machine",
+          "location": "CONTRACT.md §1.1.1",
+          "anchor": "AT-099"
+        }
+      ],
       "enforcing_contract_ats": [
         "AT-116"
       ],
