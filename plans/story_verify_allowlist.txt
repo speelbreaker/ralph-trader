@@ -55,3 +55,8 @@ test -s evidence/phase0/break_glass/log_excerpt.txt
 test -s docs/health_endpoint.md
 cargo test -p soldier_infra --test test_health
 python -c "import json; json.load(open('evidence/phase0/keys/key_scope_probe.json'))"
+cargo test -p soldier_core --test test_atomic_group
+cargo test -p soldier_core --test test_churn_breaker
+cargo test -p soldier_core --test test_emergency_close
+cargo test -p soldier_core --test test_self_impact
+cargo test -p soldier_core --test test_sequencer
