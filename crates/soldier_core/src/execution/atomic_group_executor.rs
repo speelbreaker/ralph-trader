@@ -3,8 +3,16 @@ use super::group::{
 };
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 const MAX_RESCUE_ATTEMPTS: u8 = 2;
+const RESCUE_ATTEMPTS_TTL: Duration = Duration::from_secs(3600); // 1 hour eviction
+
+#[derive(Debug, Clone)]
+struct RescueAttemptEntry {
+    count: u8,
+    last_updated: Instant,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RescueAction {
@@ -15,13 +23,14 @@ pub enum RescueAction {
 
 pub struct AtomicGroupExecutor {
     epsilon: f64,
-    rescue_attempts: Mutex<HashMap<String, u8>>,
+    rescue_attempts: Mutex<HashMap<String, RescueAttemptEntry>>,
 }
 
 impl AtomicGroupExecutor {
     pub fn new(epsilon: f64) -> Self {
+        assert!(epsilon > 0.0, "epsilon must be positive, got {}", epsilon);
         Self {
-            epsilon: epsilon.abs(),
+            epsilon,
             rescue_attempts: Mutex::new(HashMap::new()),
         }
     }
@@ -100,21 +109,52 @@ impl AtomicGroupExecutor {
     }
 
     fn lookup_rescue_attempts(&self, group: &AtomicGroup) -> u8 {
-        let map = self.rescue_attempts.lock().expect("rescue_attempts lock");
-        map.get(group.group_id()).copied().unwrap_or(0)
+        // Handle lock poisoning gracefully
+        let map = match self.rescue_attempts.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                // Recover from poisoned lock by clearing it
+                eprintln!("rescue_attempts lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        map.get(group.group_id()).map(|e| e.count).unwrap_or(0)
     }
 
     fn bump_rescue_attempts(&self, group: &AtomicGroup) -> u8 {
-        let mut map = self.rescue_attempts.lock().expect("rescue_attempts lock");
-        let entry = map.entry(group.group_id().to_string()).or_insert(0);
-        if *entry < MAX_RESCUE_ATTEMPTS {
-            *entry += 1;
+        // Handle lock poisoning gracefully
+        let mut map = match self.rescue_attempts.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("rescue_attempts lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+
+        // Evict stale entries (TTL-based cleanup)
+        let now = Instant::now();
+        map.retain(|_k, entry| now.duration_since(entry.last_updated) <= RESCUE_ATTEMPTS_TTL);
+
+        let entry = map.entry(group.group_id().to_string()).or_insert(RescueAttemptEntry {
+            count: 0,
+            last_updated: now,
+        });
+        if entry.count < MAX_RESCUE_ATTEMPTS {
+            entry.count += 1;
         }
-        *entry
+        entry.last_updated = now;
+        entry.count
     }
 
     fn clear_rescue_attempts(&self, group: &AtomicGroup) {
-        let mut map = self.rescue_attempts.lock().expect("rescue_attempts lock");
+        // Handle lock poisoning gracefully
+        let mut map = match self.rescue_attempts.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("rescue_attempts lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
         map.remove(group.group_id());
     }
 }

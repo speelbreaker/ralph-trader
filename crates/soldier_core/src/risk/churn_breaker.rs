@@ -1,10 +1,13 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Churn circuit breaker per CONTRACT.md §1.2.2
 /// Prevents death-by-fees when strategy repeatedly legs + flattens
 ///
 /// Rule: >2 flattens in 5m => 15m blacklist blocks opens for that key
+///
+/// Thread-safety: All methods use interior mutability (Mutex) for safe concurrent access
 
 const FLATTEN_WINDOW: Duration = Duration::from_secs(5 * 60);
 const FLATTEN_TRIP_COUNT: usize = 2; // >2 means 3 or more
@@ -26,10 +29,14 @@ struct BlacklistEntry {
     blocked_until: Instant,
 }
 
-pub struct ChurnBreaker {
+struct ChurnBreakerState {
     flatten_history: HashMap<ChurnKey, Vec<FlattenEvent>>,
     blacklist: HashMap<ChurnKey, BlacklistEntry>,
     trip_counter: u64, // For churn_breaker_trip_total metric
+}
+
+pub struct ChurnBreaker {
+    state: Mutex<ChurnBreakerState>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,16 +48,27 @@ pub enum ChurnBreakerDecision {
 impl ChurnBreaker {
     pub fn new() -> Self {
         Self {
-            flatten_history: HashMap::new(),
-            blacklist: HashMap::new(),
-            trip_counter: 0,
+            state: Mutex::new(ChurnBreakerState {
+                flatten_history: HashMap::new(),
+                blacklist: HashMap::new(),
+                trip_counter: 0,
+            }),
         }
     }
 
     /// Record a flatten event. If >2 flattens in 5m, blacklist the key for 15m.
-    pub fn record_flatten(&mut self, key: ChurnKey, now: Instant) {
+    /// Thread-safe: uses interior mutability
+    pub fn record_flatten(&self, key: ChurnKey, now: Instant) {
+        let mut state = match self.state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("churn_breaker lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+
         // Add this flatten event
-        let events = self
+        let events = state
             .flatten_history
             .entry(key.clone())
             .or_insert_with(Vec::new);
@@ -62,13 +80,13 @@ impl ChurnBreaker {
         // Check if we've exceeded the trip count (>2 means 3+)
         if events.len() > FLATTEN_TRIP_COUNT {
             // Trip the breaker: blacklist this key
-            self.blacklist.insert(
+            state.blacklist.insert(
                 key.clone(),
                 BlacklistEntry {
                     blocked_until: now + BLACKLIST_DURATION,
                 },
             );
-            self.trip_counter += 1;
+            state.trip_counter += 1;
             // Note: churn breaker trip logged via decision reject reason
             // Metric: churn_breaker_trip_total (exposed via trip_count())
         }
@@ -76,19 +94,28 @@ impl ChurnBreaker {
 
     /// Check if an OPEN intent should be allowed or blocked.
     /// Returns Reject if key is blacklisted.
-    pub fn evaluate_open(&mut self, key: &ChurnKey, now: Instant) -> ChurnBreakerDecision {
+    /// Thread-safe: uses interior mutability
+    pub fn evaluate_open(&self, key: &ChurnKey, now: Instant) -> ChurnBreakerDecision {
+        let mut state = match self.state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("churn_breaker lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+
         // Prune expired blacklist entries
-        self.blacklist.retain(|_k, entry| now < entry.blocked_until);
+        state.blacklist.retain(|_k, entry| now < entry.blocked_until);
 
         // Check if this key is blacklisted
-        if let Some(entry) = self.blacklist.get(key) {
+        if let Some(entry) = state.blacklist.get(key) {
             let remaining_secs = entry.blocked_until.saturating_duration_since(now).as_secs();
             ChurnBreakerDecision::Reject {
                 reason: format!(
                     "ChurnBreakerActive: blacklisted for {}s remaining",
                     remaining_secs
                 ),
-                trip_count: self.trip_counter,
+                trip_count: state.trip_counter,
             }
         } else {
             ChurnBreakerDecision::Allow
@@ -96,8 +123,16 @@ impl ChurnBreaker {
     }
 
     /// Get total trip count (for churn_breaker_trip_total metric)
+    /// Thread-safe: uses interior mutability
     pub fn trip_count(&self) -> u64 {
-        self.trip_counter
+        let state = match self.state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("churn_breaker lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        state.trip_counter
     }
 }
 

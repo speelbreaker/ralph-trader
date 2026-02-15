@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use super::RiskState;
@@ -8,6 +9,9 @@ use super::RiskState;
 ///
 /// Rule: Stale trade feed => Degraded + latch blocks opens
 /// Rule: self_fraction/notional trip => reject with cooldown
+
+const FLOAT_EPSILON: f64 = 1e-9;
+const MIN_PUBLIC_VOLUME_USD: f64 = 1000.0; // Minimum public volume for fraction calculation
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SelfImpactKey {
@@ -63,31 +67,47 @@ struct CooldownEntry {
     blocked_until: Instant,
 }
 
-pub struct SelfImpactGuard {
+struct SelfImpactGuardState {
     cooldown_map: HashMap<SelfImpactKey, CooldownEntry>,
     trip_counter: u64, // For self_impact_trip_total metric
+}
+
+/// Thread-safety: All methods use interior mutability (Mutex) for safe concurrent access
+pub struct SelfImpactGuard {
+    state: Mutex<SelfImpactGuardState>,
 }
 
 impl SelfImpactGuard {
     pub fn new() -> Self {
         Self {
-            cooldown_map: HashMap::new(),
-            trip_counter: 0,
+            state: Mutex::new(SelfImpactGuardState {
+                cooldown_map: HashMap::new(),
+                trip_counter: 0,
+            }),
         }
     }
 
     /// Evaluate an OPEN intent against self-impact rules.
     /// Returns evaluation with allowed/latch/reject/risk_state fields.
+    /// Thread-safe: uses interior mutability
     pub fn evaluate_open(
-        &mut self,
+        &self,
         key: &SelfImpactKey,
         aggregates: TradeAggregates,
         now_ms: u64,
         now_instant: Instant,
         config: SelfImpactConfig,
     ) -> SelfImpactEvaluation {
+        let mut state = match self.state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("self_impact_guard lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+
         // Prune expired cooldowns
-        self.cooldown_map
+        state.cooldown_map
             .retain(|_k, entry| now_instant < entry.blocked_until);
 
         // Step 1: Check trade feed freshness (CONTRACT.md §1.2.3 freshness precondition)
@@ -115,7 +135,7 @@ impl SelfImpactGuard {
         }
 
         // Step 2: Feed is fresh, check if key is in cooldown
-        if let Some(entry) = self.cooldown_map.get(key) {
+        if let Some(entry) = state.cooldown_map.get(key) {
             let remaining_secs = entry
                 .blocked_until
                 .saturating_duration_since(now_instant)
@@ -132,27 +152,31 @@ impl SelfImpactGuard {
         }
 
         // Step 3: Compute self_fraction and check trip conditions
-        let epsilon = 1.0; // Prevent division by zero
-        let self_fraction =
-            aggregates.self_notional_usd / aggregates.public_notional_usd.max(epsilon);
+        // Only compute fraction if public volume is meaningful
+        let fraction_trip = if aggregates.public_notional_usd >= MIN_PUBLIC_VOLUME_USD {
+            let self_fraction = aggregates.self_notional_usd / aggregates.public_notional_usd;
 
-        // Trip condition A: self_fraction >= threshold AND self_notional >= min
-        let fraction_trip = self_fraction >= config.self_trade_fraction_trip
-            && aggregates.self_notional_usd >= config.self_trade_min_self_notional_usd;
+            // Trip condition A: self_fraction >= threshold (with epsilon tolerance) AND self_notional >= min
+            (self_fraction + FLOAT_EPSILON >= config.self_trade_fraction_trip)
+                && aggregates.self_notional_usd >= config.self_trade_min_self_notional_usd
+        } else {
+            // Public volume too small to compute meaningful fraction - skip fraction check
+            false
+        };
 
-        // Trip condition B: self_notional >= absolute trip threshold
-        let notional_trip = aggregates.self_notional_usd >= config.self_trade_notional_trip_usd;
+        // Trip condition B: self_notional >= absolute trip threshold (with epsilon tolerance)
+        let notional_trip = aggregates.self_notional_usd + FLOAT_EPSILON >= config.self_trade_notional_trip_usd;
 
         if fraction_trip || notional_trip {
             // Trip: reject and apply cooldown
-            self.cooldown_map.insert(
+            state.cooldown_map.insert(
                 key.clone(),
                 CooldownEntry {
                     blocked_until: now_instant
                         + Duration::from_secs(config.feedback_loop_cooldown_s),
                 },
             );
-            self.trip_counter += 1;
+            state.trip_counter += 1;
 
             SelfImpactEvaluation {
                 allowed: false,
@@ -172,8 +196,16 @@ impl SelfImpactGuard {
     }
 
     /// Get total trip count (for self_impact_trip_total metric)
+    /// Thread-safe: uses interior mutability
     pub fn trip_count(&self) -> u64 {
-        self.trip_counter
+        let state = match self.state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("self_impact_guard lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        state.trip_counter
     }
 }
 

@@ -140,16 +140,21 @@ impl EmergencyClose {
         true
     }
 
-    // Simulation helpers (replaced by real dispatch in production)
+    // ===== STUBS - MUST BE REPLACED FOR PRODUCTION =====
+    // These methods are placeholder stubs for testing.
+    // Production deployment REQUIRES integration with actual order executor.
+    // TODO: Replace with real dispatch before production use
     fn simulate_close_attempt(&self, qty: f64) -> f64 {
-        // Stub: returns full fill
+        // STUB: Always returns full fill for testing
+        // Production: Should dispatch IOC close order and return actual filled qty
         qty
     }
 
     fn execute_hedge_fallback(&self, remaining: f64) {
-        // Stub: would dispatch reduce-only perp hedge
+        // STUB: Log-only for testing
+        // Production: Should dispatch reduce-only perp hedge order
         eprintln!(
-            "[INFO] executing reduce-only delta hedge fallback remaining_qty={}",
+            "[WARN] STUB: executing reduce-only delta hedge fallback remaining_qty={}",
             remaining
         );
     }
