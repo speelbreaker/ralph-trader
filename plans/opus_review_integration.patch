@@ -1,0 +1,29 @@
+--- ralph.sh.orig	2026-02-14 00:00:00.000000000 -0800
++++ ralph.sh	2026-02-14 00:00:00.000000000 -0800
+@@ -3198,6 +3198,25 @@
+       echo "WARNING: mark_pass ignored because post-verify failed." | tee -a "$LOG_FILE"
+     else
+       if (( CONTRACT_REVIEW_OK == 1 )); then
++        # Opus 4.6 Expert Review Gate (if enabled)
++        if [[ "${RPH_REQUIRE_OPUS_REVIEW:-0}" == "1" ]]; then
++          echo "=== Opus 4.6 Expert Review Required ===" | tee -a "$LOG_FILE"
++          OPUS_REVIEW_RC=0
++          ./plans/opus_review.sh "$MARK_PASS_ID" "$NEXT_DESC" "$HEAD_BEFORE" "$HEAD_AFTER" "$ITER_DIR" | tee -a "$LOG_FILE" || OPUS_REVIEW_RC=$?
++
++          if (( OPUS_REVIEW_RC != 0 )); then
++            echo "ERROR: Opus review REJECTED or FAILED for story $MARK_PASS_ID" | tee -a "$LOG_FILE"
++            save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
++            BLOCK_DIR="$(write_blocked_with_state "opus_review_rejected" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
++            echo "<promise>BLOCKED_OPUS_REVIEW_REJECTED</promise>" | tee -a "$LOG_FILE"
++            echo "Blocked: Opus review rejected in $BLOCK_DIR" | tee -a "$LOG_FILE"
++            exit 1
++          else
++            echo "✓ Opus review APPROVED story $MARK_PASS_ID" | tee -a "$LOG_FILE"
++          fi
++        else
++          echo "INFO: Opus review disabled (set RPH_REQUIRE_OPUS_REVIEW=1 to enable)" | tee -a "$LOG_FILE"
++        fi
++
+         set +e
+         RPH_UPDATE_TASK_OK=1 RPH_STATE_FILE="$STATE_FILE" ./plans/update_task.sh "$MARK_PASS_ID" true
+         update_task_rc=$?
