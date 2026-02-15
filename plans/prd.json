@@ -845,11 +845,12 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_infra/src/deribit/account_summary.rs"
+        ],
         "create": [
           "crates/soldier_core/src/risk/margin_gate.rs",
-          "crates/soldier_core/tests/test_margin_gate.rs",
-          "crates/soldier_infra/src/deribit/account_summary.rs"
+          "crates/soldier_core/tests/test_margin_gate.rs"
         ],
         "avoid": [
           "plans/**"
