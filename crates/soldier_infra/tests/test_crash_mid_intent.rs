@@ -150,7 +150,9 @@ fn test_terminal_states_not_inflight_on_restart() {
         "Filled should not be pending dispatch"
     );
     assert!(
-        !pending.iter().any(|r| r.intent_hash == rejected.intent_hash),
+        !pending
+            .iter()
+            .any(|r| r.intent_hash == rejected.intent_hash),
         "Rejected should not be pending dispatch"
     );
 }
@@ -270,7 +272,10 @@ fn test_wal_append_failure_prevents_dispatch() {
     // Simulate state where we can verify append happened
     let replay = ledger.replay_latest().expect("replay");
     let found = replay.record_by_intent_hash(record.intent_hash);
-    assert!(found.is_some(), "Record should be in WAL after successful append");
+    assert!(
+        found.is_some(),
+        "Record should be in WAL after successful append"
+    );
 
     // In production, if append fails (disk full, permissions, etc.),
     // the dispatch loop MUST NOT proceed to send the order

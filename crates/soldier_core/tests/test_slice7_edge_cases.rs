@@ -1,13 +1,12 @@
 /// Edge case tests for Slice 7 implementation
 /// Tests failure modes found in code review
-
 use soldier_core::execution::atomic_group_executor::{AtomicGroupExecutor, RescueAction};
 use soldier_core::execution::group::{AtomicGroup, GroupState, LegOutcome, LegState};
+use soldier_core::risk::RiskState;
 use soldier_core::risk::churn_breaker::{ChurnBreaker, ChurnBreakerDecision, ChurnKey};
 use soldier_core::risk::self_impact_guard::{
     SelfImpactConfig, SelfImpactEvaluation, SelfImpactGuard, SelfImpactKey, TradeAggregates,
 };
-use soldier_core::risk::RiskState;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -103,7 +102,11 @@ fn test_concurrent_rescue_attempt_updates() {
     // Verify final state is sane (no corruption)
     let final_attempts = exec.rescue_attempts(&group);
     // Due to concurrency, exact count may vary, but should be bounded
-    assert!(final_attempts <= 2, "Rescue attempts exceeded max: {}", final_attempts);
+    assert!(
+        final_attempts <= 2,
+        "Rescue attempts exceeded max: {}",
+        final_attempts
+    );
 }
 
 // ===== ChurnBreaker Edge Cases =====
@@ -170,8 +173,17 @@ fn test_churn_breaker_concurrent_evaluate_open() {
                     let decision2 = breaker_clone.evaluate_open(&k2, Instant::now());
 
                     // key1 should be rejected, key2 allowed
-                    assert!(matches!(decision1, ChurnBreakerDecision::Reject { .. }), "Thread {}: key1 not rejected", i);
-                    assert_eq!(decision2, ChurnBreakerDecision::Allow, "Thread {}: key2 not allowed", i);
+                    assert!(
+                        matches!(decision1, ChurnBreakerDecision::Reject { .. }),
+                        "Thread {}: key1 not rejected",
+                        i
+                    );
+                    assert_eq!(
+                        decision2,
+                        ChurnBreakerDecision::Allow,
+                        "Thread {}: key2 not allowed",
+                        i
+                    );
                 }
             })
         })
@@ -207,7 +219,10 @@ fn test_self_impact_tiny_public_volume() {
     let eval = guard.evaluate_open(&key, aggregates, now_ms, now_instant, config);
 
     // Should allow (fraction check skipped due to tiny public volume)
-    assert!(eval.allowed, "Should allow when public volume too small for fraction check");
+    assert!(
+        eval.allowed,
+        "Should allow when public volume too small for fraction check"
+    );
     assert_eq!(eval.risk_state, RiskState::Healthy);
 }
 
@@ -224,7 +239,7 @@ fn test_self_impact_float_epsilon_tolerance() {
     // Due to float precision, 25000/100000 might be 0.24999999999
     let aggregates = TradeAggregates {
         public_notional_usd: 100000.0,
-        self_notional_usd: 25000.0,  // Exactly 25%
+        self_notional_usd: 25000.0, // Exactly 25%
         public_trades_last_update_ts_ms: Some(1000),
     };
 
@@ -235,7 +250,10 @@ fn test_self_impact_float_epsilon_tolerance() {
     let eval = guard.evaluate_open(&key, aggregates, now_ms, now_instant, config);
 
     // With epsilon tolerance, this should trip (25% >= threshold with tolerance)
-    assert!(!eval.allowed, "Should reject at exact threshold with epsilon tolerance");
+    assert!(
+        !eval.allowed,
+        "Should reject at exact threshold with epsilon tolerance"
+    );
     assert!(eval.reject_reason.is_some());
 }
 
@@ -251,7 +269,7 @@ fn test_self_impact_notional_trip_epsilon() {
     // Scenario: self_notional = exactly $150k (at absolute threshold)
     let aggregates = TradeAggregates {
         public_notional_usd: 500000.0,
-        self_notional_usd: 150000.0,  // Exactly at trip threshold
+        self_notional_usd: 150000.0, // Exactly at trip threshold
         public_trades_last_update_ts_ms: Some(1000),
     };
 
@@ -281,7 +299,7 @@ fn test_self_impact_concurrent_evaluate() {
 
                 let aggregates = TradeAggregates {
                     public_notional_usd: 100000.0,
-                    self_notional_usd: 30000.0,  // Will trip
+                    self_notional_usd: 30000.0, // Will trip
                     public_trades_last_update_ts_ms: Some(1000),
                 };
 
@@ -290,7 +308,8 @@ fn test_self_impact_concurrent_evaluate() {
                 let now_instant = Instant::now();
 
                 for _ in 0..10 {
-                    let eval = guard_clone.evaluate_open(&key, aggregates, now_ms, now_instant, config);
+                    let eval =
+                        guard_clone.evaluate_open(&key, aggregates, now_ms, now_instant, config);
                     // First call should reject and set cooldown
                     assert!(!eval.allowed, "Thread {}: should reject on trip", i);
                 }
@@ -320,7 +339,7 @@ fn test_self_impact_missing_trade_feed() {
     let aggregates = TradeAggregates {
         public_notional_usd: 100000.0,
         self_notional_usd: 10000.0,
-        public_trades_last_update_ts_ms: None,  // Missing!
+        public_trades_last_update_ts_ms: None, // Missing!
     };
 
     let config = SelfImpactConfig::default();
@@ -348,11 +367,11 @@ fn test_self_impact_stale_trade_feed() {
     let aggregates = TradeAggregates {
         public_notional_usd: 100000.0,
         self_notional_usd: 10000.0,
-        public_trades_last_update_ts_ms: Some(1000),  // Last update: 1000ms
+        public_trades_last_update_ts_ms: Some(1000), // Last update: 1000ms
     };
 
     let config = SelfImpactConfig::default();
-    let now_ms = 10000;  // Now: 10000ms (9 seconds later - stale!)
+    let now_ms = 10000; // Now: 10000ms (9 seconds later - stale!)
     let now_instant = Instant::now();
 
     let eval = guard.evaluate_open(&key, aggregates, now_ms, now_instant, config);

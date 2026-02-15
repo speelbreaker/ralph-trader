@@ -107,7 +107,8 @@ impl SelfImpactGuard {
         };
 
         // Prune expired cooldowns
-        state.cooldown_map
+        state
+            .cooldown_map
             .retain(|_k, entry| now_instant < entry.blocked_until);
 
         // Step 1: Check trade feed freshness (CONTRACT.md §1.2.3 freshness precondition)
@@ -165,7 +166,8 @@ impl SelfImpactGuard {
         };
 
         // Trip condition B: self_notional >= absolute trip threshold (with epsilon tolerance)
-        let notional_trip = aggregates.self_notional_usd + FLOAT_EPSILON >= config.self_trade_notional_trip_usd;
+        let notional_trip =
+            aggregates.self_notional_usd + FLOAT_EPSILON >= config.self_trade_notional_trip_usd;
 
         if fraction_trip || notional_trip {
             // Trip: reject and apply cooldown

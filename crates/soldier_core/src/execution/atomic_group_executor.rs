@@ -135,10 +135,12 @@ impl AtomicGroupExecutor {
         let now = Instant::now();
         map.retain(|_k, entry| now.duration_since(entry.last_updated) <= RESCUE_ATTEMPTS_TTL);
 
-        let entry = map.entry(group.group_id().to_string()).or_insert(RescueAttemptEntry {
-            count: 0,
-            last_updated: now,
-        });
+        let entry = map
+            .entry(group.group_id().to_string())
+            .or_insert(RescueAttemptEntry {
+                count: 0,
+                last_updated: now,
+            });
         if entry.count < MAX_RESCUE_ATTEMPTS {
             entry.count += 1;
         }

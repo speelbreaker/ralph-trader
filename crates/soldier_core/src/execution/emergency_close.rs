@@ -163,18 +163,18 @@ impl EmergencyClose {
     fn simulate_close_attempt(&self, qty: f64) -> f64 {
         // In production, this would use real instrument name from context
         let request = CloseOrderRequest {
-            instrument_name: "PLACEHOLDER".to_string(),  // TODO: Get from group context
+            instrument_name: "PLACEHOLDER".to_string(), // TODO: Get from group context
             qty,
-            side: OrderSide::Sell,  // TODO: Determine from position direction
+            side: OrderSide::Sell, // TODO: Determine from position direction
             order_type: OrderType::IOC,
-            buffer_ticks: 0,  // Set by caller based on attempt number
+            buffer_ticks: 0, // Set by caller based on attempt number
         };
 
         match self.dispatcher.dispatch_close(&request) {
             Ok(result) => result.filled_qty,
             Err(e) => {
                 eprintln!("[ERROR] Close attempt failed: {}", e);
-                0.0  // Treat dispatch error as zero fill
+                0.0 // Treat dispatch error as zero fill
             }
         }
     }
@@ -188,9 +188,9 @@ impl EmergencyClose {
 
         // In production, this would use real instrument name and determine side
         let request = HedgeOrderRequest {
-            instrument_name: "PLACEHOLDER-PERP".to_string(),  // TODO: Get perp instrument
+            instrument_name: "PLACEHOLDER-PERP".to_string(), // TODO: Get perp instrument
             qty: remaining,
-            side: OrderSide::Buy,  // TODO: Determine opposite side from position
+            side: OrderSide::Buy, // TODO: Determine opposite side from position
             reduce_only: true,
         };
 

@@ -105,7 +105,9 @@ impl ChurnBreaker {
         };
 
         // Prune expired blacklist entries
-        state.blacklist.retain(|_k, entry| now < entry.blocked_until);
+        state
+            .blacklist
+            .retain(|_k, entry| now < entry.blocked_until);
 
         // Check if this key is blacklisted
         if let Some(entry) = state.blacklist.get(key) {

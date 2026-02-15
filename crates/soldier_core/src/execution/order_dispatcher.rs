@@ -3,16 +3,15 @@
 /// This trait defines the interface between execution logic and actual order dispatch.
 /// Production implementations integrate with the exchange API layer.
 /// Test implementations can use stubs/mocks for deterministic testing.
-
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CloseOrderRequest {
     pub instrument_name: String,
     pub qty: f64,
-    pub side: OrderSide,  // Opposite of current position
+    pub side: OrderSide, // Opposite of current position
     pub order_type: OrderType,
-    pub buffer_ticks: i32,  // For IOC limit orders
+    pub buffer_ticks: i32, // For IOC limit orders
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,7 +30,7 @@ pub enum OrderSide {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrderType {
-    IOC,  // Immediate-or-cancel
+    IOC, // Immediate-or-cancel
     Limit,
 }
 
@@ -104,7 +103,7 @@ impl OrderDispatcher for TestStubDispatcher {
 
         Ok(OrderResult {
             requested_qty: request.qty,
-            filled_qty: request.qty,  // Stub: always full fill
+            filled_qty: request.qty, // Stub: always full fill
             status: OrderStatus::Filled,
         })
     }
@@ -117,7 +116,7 @@ impl OrderDispatcher for TestStubDispatcher {
 
         Ok(OrderResult {
             requested_qty: request.qty,
-            filled_qty: request.qty,  // Stub: always full fill
+            filled_qty: request.qty, // Stub: always full fill
             status: OrderStatus::Filled,
         })
     }
@@ -134,7 +133,9 @@ pub struct ProductionDispatcher {
 
 impl ProductionDispatcher {
     pub fn new() -> Self {
-        eprintln!("[WARN] ProductionDispatcher created - this MUST be replaced with real implementation");
+        eprintln!(
+            "[WARN] ProductionDispatcher created - this MUST be replaced with real implementation"
+        );
         Self { _private: () }
     }
 }
@@ -142,13 +143,13 @@ impl ProductionDispatcher {
 impl OrderDispatcher for ProductionDispatcher {
     fn dispatch_close(&self, _request: &CloseOrderRequest) -> Result<OrderResult, DispatchError> {
         Err(DispatchError::new(
-            "ProductionDispatcher::dispatch_close NOT IMPLEMENTED - integrate with exchange API layer"
+            "ProductionDispatcher::dispatch_close NOT IMPLEMENTED - integrate with exchange API layer",
         ))
     }
 
     fn dispatch_hedge(&self, _request: &HedgeOrderRequest) -> Result<OrderResult, DispatchError> {
         Err(DispatchError::new(
-            "ProductionDispatcher::dispatch_hedge NOT IMPLEMENTED - integrate with exchange API layer"
+            "ProductionDispatcher::dispatch_hedge NOT IMPLEMENTED - integrate with exchange API layer",
         ))
     }
 }
