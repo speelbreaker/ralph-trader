@@ -8,6 +8,7 @@ pub mod gate;
 pub mod gates;
 pub mod group;
 pub mod label;
+pub mod order_dispatcher;
 pub mod order_size;
 pub mod order_type_guard;
 pub mod post_only_guard;
