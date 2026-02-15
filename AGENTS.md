@@ -80,6 +80,13 @@ You will see context like `.ralph/iter_N_*/selected_item.json` or explicit instr
 - Work only the selected PRD item.
 - Fail closed on PRD ambiguity; set needs_human_decision=true and stop.
 - Follow the PRD scope (scope.touch, scope.create) strictly.
+- **AUTONOMOUS OPERATION (MANDATORY OVERRIDE)**: Ralph is non-interactive. Harness rules override skill interaction patterns.
+  - Do NOT ask questions. Do NOT wait for approval. Do NOT block on "contract conflicts" with skill Q&A requirements.
+  - Skills requiring Q&A (brainstorming, writing-plans): Adapt to autonomous mode. Make design decisions based on contract/PRD, document in design doc, implement.
+  - Skills requiring worktrees: Skip worktree creation. Work in current directory.
+  - Skills requiring user approval: Make decisions autonomously using contract/PRD as requirements source.
+  - If a skill says "you MUST ask questions", interpret that as "you MUST understand requirements" - satisfy by reading contract/PRD instead of asking.
+  - The only valid blocks are: scope violations, actual contract conflicts in requirements (not workflow), or genuinely ambiguous PRD that needs human decision.
 
 ### When asked to implement PENDING PRD stories OUTSIDE Ralph
 **FORBIDDEN**: Do NOT manually implement stories with `passes=false`.

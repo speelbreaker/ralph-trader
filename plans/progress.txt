@@ -224,3 +224,82 @@ Summary: Updated phase1 evidence run references from older failing runs to lates
 Commands: gh pr edit 113 --body-file /tmp/pr113_body.md; gh run view 21843261304 -R speelbreaker/ralph-trader --json databaseId,displayTitle,headSha,status,conclusion,url,event,jobs.
 Evidence: evidence/phase1/ci_links.md; evidence/phase1/README.md; https://github.com/speelbreaker/ralph-trader/actions/runs/21843261304.
 Next: Keep PR #112 and PR #113 open; merge when branch policy allows.
+Story: workflow-maintenance
+Date: 2026-02-13
+Summary: Added cross-repo comparison tracker with seeded issues/suggestions based on latest phase1 comparison report.
+Commands: update /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md.
+Evidence: /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md; /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_173039/report.md.
+Next: Keep this file updated after each new comparison run.
+Story: workflow-maintenance
+Date: 2026-02-13
+Summary: Full phase1 cross-repo comparison executed from clean detached worktrees at frozen refs (quick/full verify + churn + scenario + flakiness); tracker updated with new local-full-policy and scenario parity issues.
+Commands: comparison run via /Users/admin/Desktop/opus-trader/scripts/compare_phase1_outcomes.sh with --run-quick-verify --run-full-verify --opus-base origin/main --ralph-base origin/main --scenario-cmd and --flaky-runs 3.
+Evidence: /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_173436/report.md; /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_173436/ralph/logs/verify_full.log; /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md.
+Next: Prefer CI full-verify artifact as parity source unless owner explicitly approves local full verify.
+Story: workflow-maintenance
+Date: 2026-02-13
+Summary: Adopted and validated canonical shared scenario command for cross-repo parity: `cargo test -p soldier_core --test test_gate_ordering`; tracker updated with completed fix entry.
+Commands: cargo test -p soldier_core --test test_gate_ordering; parity run from opus script with --scenario-cmd/--flaky-cmd set to test_gate_ordering.
+Evidence: /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_181407/report.md; /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md.
+Next: keep this command as default scenario input for future comparisons.
+Story: workflow-maintenance
+Date: 2026-02-13
+Summary: During cross-repo Phase 1 comparison, local ralph quick verify entered workflow_acceptance, which was flagged as not appropriate for story-level outcome comparison. Run was stopped and replaced by a frozen-ref clean-worktree comparison that skipped verify invocation and used shared scenario + 5-run flakiness.
+Commands: comparison invoked from /Users/admin/Desktop/opus-trader/scripts/compare_phase1_outcomes.sh at frozen refs with --scenario-cmd "cargo test -p soldier_core --test test_gate_ordering" --flaky-runs 5 (no --run-quick-verify/--run-full-verify).
+Evidence: /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_200857/report.md; /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md.
+Notes: Partial run stopped by operator after clarification: /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_194414.
+Next: Add/standardize lightweight story-compare verify profile that excludes workflow_acceptance for this use case.
+Story: workflow-maintenance
+Date: 2026-02-13
+Summary: Cross-repo Phase1 comparison flow now uses pinned implementation tags and per-repo verify toggles, eliminating accidental ralph workflow_acceptance execution in story-level comparisons; weighted scoring is now auto-generated in reports.
+Commands: comparison invoked from /Users/admin/Desktop/opus-trader/scripts/compare_phase1_outcomes.sh with --opus-ref phase1-impl-opus --ralph-ref phase1-impl-ralph plus scenario/flakiness; toggle validation run with --run-quick-verify-opus (ralph verify not run).
+Evidence: /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_202708/report.md; /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_202708/report.json; /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_202314/report.md; /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md.
+Next: Use `phase1-impl-ralph` as default ref in future weighted comparisons unless superseded by a new approved Phase1 tag.
+Story: workflow-maintenance
+Date: 2026-02-13
+Summary: Focused execution/gates/tests comparison against pinned opus ref completed with persistent artifacts. Result highlights: ralph has stronger runtime reason-code telemetry and compact tests, while opus has substantially higher focused edge-case case-count density.
+Commands: comparison run from /Users/admin/Desktop/opus-trader using clean detached worktrees at `phase1-impl-opus` and `phase1-impl-ralph`; targeted cargo test list and nocapture runs for gate/missing-config/quantize/preflight/liquidity plus ralph fee_cache + phase1_dispatch_auth.
+Evidence: /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_143551_focused_exec_gates_tests/focused_compare_summary.md; /Users/admin/Desktop/opus-trader/artifacts/phase1_compare/20260213_143551_focused_exec_gates_tests/test_count_table.csv; /Users/admin/Desktop/ralph/plans/phase1_comparison_todo.md.
+Next: Raise focused edge-case matrix density (or equivalent property/table coverage) while preserving current telemetry model.
+Story: workflow-maintenance
+Date: 2026-02-13 20:53:07 UTC
+Summary: Completed RALPH-SUG-008 by expanding focused edge-case matrix density in story-comparison suites: added table-driven reject/path coverage for gate ordering, linked-order and stop/trigger preflight behavior, quantization metadata/raw-input/boundary rounding, and liquidity fail-closed/sorting/non-open behavior.
+Commands: cargo test -p soldier_core --test test_gate_ordering --test test_preflight --test test_quantize --test test_liquidity_gate.
+Evidence: crates/soldier_core/tests/test_gate_ordering.rs; crates/soldier_core/tests/test_preflight.rs; crates/soldier_core/tests/test_quantize.rs; crates/soldier_core/tests/test_liquidity_gate.rs.
+Next: Refresh focused compare report when latest parity snapshot is needed.
+Story: S7-000
+Date: 2026-02-14
+Summary: Implemented atomic group state machine + executor with first-fail latch and MixedFailed open blocking; added atomic group tests; confirmed design doc with ENABLE_ATOMIC_GROUPS flag; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_atomic_group.
+Evidence: crates/soldier_core/src/execution/group.rs; crates/soldier_core/src/execution/atomic_group_executor.rs; crates/soldier_core/tests/test_atomic_group.rs; docs/plans/2026-02-14-s7-000-atomic-group-design.md; cargo test output.
+Next: Commit changes and rerun ./plans/verify.sh quick on a clean tree.
+Story: S7-001
+Date: 2026-02-14
+Summary: Acknowledged AGENTS.md and plans/progress.txt; capped rescue attempts at 2 with flatten fallback and atomic_rescue_attempts histogram; added AT-117 test for rescue cap/no-chase behavior.
+Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_atomic_group.
+Evidence: crates/soldier_core/src/execution/atomic_group_executor.rs; crates/soldier_core/tests/test_atomic_group.rs; cargo test output (test_atomic_group).
+Next: Commit changes and rerun ./plans/verify.sh quick.
+Story: S7-002
+Date: 2026-02-14
+Summary: Implemented emergency close algorithm (CONTRACT.md §3.1) with 3 IOC close attempts using doubling buffer (5→10→20 ticks), reduce-only delta hedge fallback, AtomicNakedEvent logging, and gate bypass; added comprehensive tests for AT-338/339/340/346/347/013; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_emergency_close; cargo fmt; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/execution/emergency_close.rs; crates/soldier_core/tests/test_emergency_close.rs; cargo test output (12/12 passed); verify quick passed.
+Next: Mark S7-002 as passing.
+Story: S7-003
+Date: 2026-02-14
+Summary: Implemented sequencer with close→confirm→hedge ordering; repair flattens via emergency_close before hedge; blocks exposure increase when RiskState != Healthy; added 8 tests covering all acceptance criteria; registered module in execution/mod.rs; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_sequencer; cargo fmt; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/execution/sequencer.rs; crates/soldier_core/tests/test_sequencer.rs; crates/soldier_core/src/execution/mod.rs; cargo test output (8/8 passed).
+Next: Commit and rerun verify quick on clean tree.
+Story: S7-004
+Date: 2026-02-14
+Summary: Implemented churn breaker (CONTRACT.md §1.2.2): >2 flattens/5m => 15m blacklist blocks opens for that key; added churn_breaker.rs with ChurnKey tracking, record_flatten/evaluate_open API, and trip_counter metric; created 7 integration tests covering AT-221 (blacklist after 3 flattens, TTL enforcement), allow/block behavior, pruning, isolation, and counter; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_churn_breaker; cargo fmt; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/risk/churn_breaker.rs; crates/soldier_core/tests/test_churn_breaker.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (7/7 passed).
+Next: Commit and rerun verify quick on clean tree.
+Story: S7-005
+Date: 2026-02-14
+Summary: Implemented self-impact feedback loop guard (CONTRACT.md §1.2.3): stale/missing trade feed sets RiskState::Degraded + WS_TRADES_GAP_RECONCILE_REQUIRED latch blocking opens; fresh feed with self_fraction/notional trip rejects with FeedbackLoopGuardActive + cooldown; below threshold allows opens; added 7 tests covering AT-953/955/956/957; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_self_impact; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/risk/self_impact_guard.rs; crates/soldier_core/tests/test_self_impact.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_post.log; VERIFY OK (mode=quick).
+Next: Mark S7-005 as passing.

@@ -29,6 +29,13 @@ impl TradingMode {
     pub fn allows_cancel(self) -> bool {
         self.allows_close()
     }
+
+    /// Returns true if trading (OPEN intents) is allowed in this mode.
+    /// Used for status endpoint `is_trading_allowed` field.
+    /// Equivalent to `allows_open()`.
+    pub fn is_trading_allowed(self) -> bool {
+        self.allows_open()
+    }
 }
 
 pub struct PolicyGuard;

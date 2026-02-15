@@ -1,16 +1,21 @@
 use std::cell::RefCell;
 
+pub mod atomic_group_executor;
 mod build_order_intent;
 pub mod dispatch_map;
+pub mod emergency_close;
 pub mod gate;
 pub mod gates;
+pub mod group;
 pub mod label;
+pub mod order_dispatcher;
 pub mod order_size;
 pub mod order_type_guard;
 pub mod post_only_guard;
 mod preflight;
 pub mod pricer;
 pub mod quantize;
+pub mod sequencer;
 pub mod state;
 pub mod tlsm;
 
@@ -59,6 +64,7 @@ pub use quantize::{
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
     Side, quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
 };
+pub use sequencer::{ExecutionStep, IntentKind, RiskState, SequenceError, Sequencer};
 pub use state::{TlsmEvent, TlsmIntent, TlsmLedgerEntry, TlsmSide, TlsmState};
 pub use tlsm::{
     Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition, tlsm_out_of_order_total,

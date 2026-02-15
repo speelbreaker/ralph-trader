@@ -486,7 +486,10 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-040",
+        "AT-341"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -565,7 +568,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-905"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -578,6 +583,339 @@
         "status_contract_ats": []
       },
       "implementation_tests": []
+    },
+    {
+      "id": "S6-007",
+      "priority": 88,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "story_ref": "Inventory Skew Gate",
+      "category": "hardening",
+      "description": "Implement Inventory Skew Gate (§1.4.2) that biases execution against compounding inventory and requires higher edge/worse prices for risk-increasing trades near delta limits.",
+      "contract_refs": [
+        "§1.4.2 Inventory Skew Gate (Execution Bias vs Current Exposure)"
+      ],
+      "plan_refs": [
+        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/inventory_skew.rs",
+          "crates/soldier_core/tests/test_inventory_skew.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN current_delta ≈ 0.9 * delta_limit WHEN BUY intent evaluated THEN rejected (risk-increasing near limit).",
+        "GIVEN current_delta ≈ 0.9 * delta_limit WHEN SELL intent evaluated THEN allowed (risk-reducing).",
+        "GIVEN delta_limit missing WHEN OPEN intent evaluated THEN rejected with InventorySkewDeltaLimitMissing.",
+        "GIVEN inventory_bias=1.0 for BUY WHEN limit price computed THEN shifts 3 ticks away from touch.",
+        "GIVEN pending_delta reserved WHEN Inventory Skew evaluates THEN uses current + pending exposure."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/inventory_skew.rs with gate logic.",
+        "Implement inventory_bias computation: clamp(current_delta / delta_limit, -1, +1).",
+        "Implement min_edge_usd adjustment for risk-increasing trades.",
+        "Implement limit_price bias_ticks shift (3 tick max penalty).",
+        "Add rejection with InventorySkewDeltaLimitMissing when delta_limit missing.",
+        "Create crates/soldier_core/tests/test_inventory_skew.rs with acceptance tests.",
+        "Add test for AT-224 (BUY rejected near limit, SELL allowed).",
+        "Add test for AT-043, AT-922 (delta_limit missing rejection).",
+        "Add test for AT-030 (3 tick shift at inventory_bias=1.0).",
+        "Add test for AT-934 (current + pending exposure check)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_inventory_skew"
+      ],
+      "evidence": [
+        "cargo test output showing test_inventory_skew PASS",
+        "crates/soldier_core/src/risk/inventory_skew.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-224",
+        "AT-043",
+        "AT-922",
+        "AT-030",
+        "AT-934"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "InventorySkewDeltaLimitMissing"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [
+        "missing",
+        "parse_error"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_inventory_skew.rs"
+      ]
+    },
+    {
+      "id": "S6-008",
+      "priority": 87,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "story_ref": "PendingExposure Reservation",
+      "category": "hardening",
+      "description": "Implement PendingExposure Reservation (§1.4.2.1) to prevent concurrent signals from observing same 'free delta' and over-allocating risk budget.",
+      "contract_refs": [
+        "§1.4.2.1 PendingExposure Reservation (Anti Over‑Fill)"
+      ],
+      "plan_refs": [
+        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/pending_exposure.rs",
+          "crates/soldier_core/tests/test_pending_exposure.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN 5 concurrent opens with identical current_delta=0 WHEN PendingExposure reserve runs THEN only subset fitting budget reserves.",
+        "GIVEN reservation would breach budget WHEN reserve() attempted THEN rejected with PendingExposureBudgetExceeded and no dispatch.",
+        "GIVEN terminal outcome (Filled/Rejected/Canceled) WHEN triggered THEN reservation released."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/pending_exposure.rs with reservation logic.",
+        "Implement pending_delta tracking per instrument + global.",
+        "Implement reserve(delta_impact_est) with budget breach check.",
+        "Implement release on terminal TLSM transitions.",
+        "Add rejection with PendingExposureBudgetExceeded when budget breached.",
+        "Create crates/soldier_core/tests/test_pending_exposure.rs with acceptance tests.",
+        "Add test for AT-225 (5 concurrent opens, subset reserves).",
+        "Add test for AT-910 (budget breach rejection)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_pending_exposure"
+      ],
+      "evidence": [
+        "cargo test output showing test_pending_exposure PASS",
+        "crates/soldier_core/src/risk/pending_exposure.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-225",
+        "AT-910"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "PendingExposureBudgetExceeded"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [
+        "missing",
+        "stale"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_pending_exposure.rs"
+      ]
+    },
+    {
+      "id": "S6-009",
+      "priority": 86,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "story_ref": "Global Exposure Budget",
+      "category": "hardening",
+      "description": "Implement Global Exposure Budget (§1.4.2.2) to prevent 'safe per-instrument' trades from stacking into unsafe portfolio exposure using correlation-aware aggregation.",
+      "contract_refs": [
+        "§1.4.2.2 Global Exposure Budget (Cross‑Instrument, Correlation‑Aware)"
+      ],
+      "plan_refs": [
+        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/exposure_budget.rs",
+          "crates/soldier_core/tests/test_exposure_budget.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN BTC and ETH both near limits WHEN new BTC trade passes local delta gate THEN rejected if portfolio budget breaches after correlation.",
+        "GIVEN portfolio exposure would breach WHEN Global Budget evaluates OPEN THEN rejected with GlobalExposureBudgetExceeded and no dispatch.",
+        "GIVEN pending_delta reserved near limit WHEN Global Budget evaluates THEN uses current + pending exposure."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/exposure_budget.rs with portfolio logic.",
+        "Implement per-instrument delta_usd tracking.",
+        "Implement portfolio aggregation with correlation buckets (BTC/ETH=0.8, BTC/alts=0.6, ETH/alts=0.6).",
+        "Implement portfolio breach check using current + pending exposure.",
+        "Add rejection with GlobalExposureBudgetExceeded when portfolio breaches.",
+        "Create crates/soldier_core/tests/test_exposure_budget.rs with acceptance tests.",
+        "Add test for AT-226 (BTC+ETH correlation breach).",
+        "Add test for AT-911 (portfolio breach rejection).",
+        "Add test for AT-929 (current + pending exposure check)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_exposure_budget"
+      ],
+      "evidence": [
+        "cargo test output showing test_exposure_budget PASS",
+        "crates/soldier_core/src/risk/exposure_budget.rs"
+      ],
+      "dependencies": [
+        "S6-008"
+      ],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-226",
+        "AT-911",
+        "AT-929"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "GlobalExposureBudgetExceeded"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [
+        "missing",
+        "stale"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_exposure_budget.rs"
+      ]
+    },
+    {
+      "id": "S6-010",
+      "priority": 85,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 — Phase 1 Hardening Gates",
+      "story_ref": "Margin Headroom Gate",
+      "category": "hardening",
+      "description": "Implement Margin Headroom Gate (§1.4.3) to prevent margin liquidation via mm_util thresholds that reject opens and force ReduceOnly/Kill modes.",
+      "contract_refs": [
+        "§1.4.3 Margin Headroom Gate (Liquidation Shield)"
+      ],
+      "plan_refs": [
+        "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/margin_gate.rs",
+          "crates/soldier_infra/src/deribit/account_summary.rs",
+          "crates/soldier_core/tests/test_margin_gate.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN mm_util >= mm_util_reject_opens WHEN OPEN evaluated THEN rejected with MarginHeadroomRejectOpens.",
+        "GIVEN mm_util >= mm_util_reduceonly WHEN PolicyGuard computes TradingMode THEN TradingMode=ReduceOnly.",
+        "GIVEN mm_util >= mm_util_kill WHEN PolicyGuard computes TradingMode THEN TradingMode=Kill and emergency flatten eligible.",
+        "GIVEN equity=100k, maintenance_margin=72k WHEN Margin Gate evaluates OPEN THEN OPEN rejected.",
+        "GIVEN equity=100k, maintenance_margin=90k WHEN PolicyGuard computes THEN TradingMode=ReduceOnly."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/margin_gate.rs with mm_util logic.",
+        "Implement mm_util = maintenance_margin / max(equity, epsilon).",
+        "Implement gate rejection at mm_util_reject_opens with MarginHeadroomRejectOpens.",
+        "Extend PolicyGuard to force ReduceOnly at mm_util_reduceonly.",
+        "Extend PolicyGuard to force Kill at mm_util_kill.",
+        "Create crates/soldier_infra/src/deribit/account_summary.rs stub for /private/get_account_summary.",
+        "Create crates/soldier_core/tests/test_margin_gate.rs with acceptance tests.",
+        "Add test for AT-227, AT-912 (OPEN rejected at mm_util_reject_opens).",
+        "Add test for AT-228, AT-207 (ReduceOnly at mm_util_reduceonly).",
+        "Add test for AT-208 (Kill at mm_util_kill).",
+        "Add test for AT-206 (gate independent of TradingMode)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_margin_gate"
+      ],
+      "evidence": [
+        "cargo test output showing test_margin_gate PASS",
+        "crates/soldier_core/src/risk/margin_gate.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "high",
+      "needs_human_decision": false,
+      "passes": false,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-227",
+        "AT-912",
+        "AT-228",
+        "AT-206",
+        "AT-207",
+        "AT-208"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "MarginHeadroomRejectOpens"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [
+        "missing",
+        "stale"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_margin_gate.rs"
+      ]
     },
     {
       "id": "S1-011",
@@ -632,7 +970,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-333"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1261,7 +1601,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-218",
+        "AT-219",
+        "AT-343",
+        "AT-216"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1327,7 +1672,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-218",
+        "AT-219",
+        "AT-343",
+        "AT-216"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1398,7 +1748,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-003",
+        "AT-412",
+        "AT-113",
+        "AT-012"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -1717,7 +2072,7 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/lib.rs",
-          "crates/soldier_core/src/recovery",
+          "crates/soldier_core/src/recovery/**",
           "crates/soldier_core/tests/test_label_match.rs"
         ],
         "create": [],
@@ -1829,8 +2184,8 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/execution/mod.rs",
-          "crates/soldier_core/src/execution/preflight.rs",
           "crates/soldier_core/src/execution/order_type_guard.rs",
+          "crates/soldier_core/src/execution/preflight.rs",
           "crates/soldier_core/tests/test_preflight.rs"
         ],
         "create": [],
@@ -2026,8 +2381,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/venue/mod.rs",
           "crates/soldier_core/src/venue/capabilities.rs",
+          "crates/soldier_core/src/venue/mod.rs",
           "crates/soldier_core/tests/test_capabilities.rs"
         ],
         "create": [],
@@ -2123,8 +2478,8 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests/**",
-          "crates/soldier_infra/src/store"
+          "crates/soldier_infra/src/store/**",
+          "crates/soldier_infra/tests/**"
         ],
         "create": [],
         "avoid": [
@@ -2311,8 +2666,8 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests/**",
-          "crates/soldier_infra/src/store"
+          "crates/soldier_infra/src/store/**",
+          "crates/soldier_infra/tests/**"
         ],
         "create": [],
         "avoid": [
@@ -2405,8 +2760,8 @@
       "scope": {
         "touch": [
           "crates/soldier_infra/src/lib.rs",
-          "crates/soldier_infra/tests/**",
-          "crates/soldier_infra/src/wal.rs"
+          "crates/soldier_infra/src/wal.rs",
+          "crates/soldier_infra/tests/**"
         ],
         "create": [],
         "avoid": [
@@ -2508,8 +2863,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/gate.rs",
+          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/tests/test_liquidity_gate.rs"
         ],
         "create": [],
@@ -2617,13 +2972,13 @@
       ],
       "scope": {
         "touch": [
+          "crates/soldier_core/src/risk/fees.rs",
           "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/state.rs",
-          "crates/soldier_infra/src/deribit/mod.rs",
-          "crates/soldier_infra/src/deribit/account_summary.rs",
-          "crates/soldier_core/src/risk/fees.rs",
+          "crates/soldier_core/tests/test_fee_cache.rs",
           "crates/soldier_core/tests/test_fee_staleness.rs",
-          "crates/soldier_core/tests/test_fee_cache.rs"
+          "crates/soldier_infra/src/deribit/account_summary.rs",
+          "crates/soldier_infra/src/deribit/mod.rs"
         ],
         "create": [],
         "avoid": [
@@ -2733,8 +3088,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/gates.rs",
+          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/tests/test_net_edge_gate.rs"
         ],
         "create": [],
@@ -2919,8 +3274,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/build_order_intent.rs",
+          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/tests/test_gate_ordering.rs",
           "crates/soldier_core/tests/test_phase1_dispatch_auth.rs"
         ],
@@ -3056,7 +3411,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-935"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3090,8 +3447,8 @@
       ],
       "scope": {
         "touch": [
-          "evidence/phase1/determinism/intent_hashes.txt",
-          "crates/soldier_core/tests/test_intent_determinism.rs"
+          "crates/soldier_core/tests/test_intent_determinism.rs",
+          "evidence/phase1/determinism/intent_hashes.txt"
         ],
         "create": [],
         "avoid": [
@@ -3126,7 +3483,12 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-218",
+        "AT-343",
+        "AT-219",
+        "AT-216"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3199,7 +3561,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-201"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3232,8 +3596,8 @@
       ],
       "scope": {
         "touch": [
-          "evidence/phase1/traceability/sample_rejection_log.txt",
-          "crates/soldier_core/tests/test_intent_id_propagation.rs"
+          "crates/soldier_core/tests/test_intent_id_propagation.rs",
+          "evidence/phase1/traceability/sample_rejection_log.txt"
         ],
         "create": [],
         "avoid": [
@@ -3266,7 +3630,11 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-024",
+        "AT-025",
+        "AT-026"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3347,7 +3715,11 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-010",
+        "AT-1055",
+        "AT-338"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3381,9 +3753,9 @@
       ],
       "scope": {
         "touch": [
-          "evidence/phase1/config_fail_closed/missing_keys_matrix.json",
           "crates/soldier_core/tests/test_missing_config.rs",
-          "docs/critical_config_keys.md"
+          "docs/critical_config_keys.md",
+          "evidence/phase1/config_fail_closed/missing_keys_matrix.json"
         ],
         "create": [],
         "avoid": [
@@ -3418,7 +3790,9 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-110"
+      ],
       "reason_codes": {
         "type": "RejectReason",
         "values": [
@@ -3454,11 +3828,11 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [],
-        "create": [
-          "evidence/phase1/crash_mid_intent/drill.md",
-          "crates/soldier_infra/tests/test_crash_mid_intent.rs"
+        "touch": [
+          "crates/soldier_infra/tests/test_crash_mid_intent.rs",
+          "evidence/phase1/crash_mid_intent/drill.md"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -3492,7 +3866,10 @@
       "needs_human_decision": false,
       "passes": true,
       "contract_must_evidence": [],
-      "enforcing_contract_ats": [],
+      "enforcing_contract_ats": [
+        "AT-233",
+        "AT-935"
+      ],
       "reason_codes": {
         "type": "",
         "values": []
@@ -3506,6 +3883,594 @@
       },
       "implementation_tests": [
         "crates/soldier_infra/tests/test_crash_mid_intent.rs"
+      ]
+    },
+    {
+      "id": "S7-000",
+      "priority": 88,
+      "phase": 2,
+      "slice": 7,
+      "slice_ref": "Slice 7 — Atomic Group Executor + Emergency Close + Sequencer + Churn Breaker",
+      "story_ref": "S7.1 Group state machine + first-fail invariant",
+      "category": "execution",
+      "description": "Implement atomic group state machine with first-fail invariant to prevent marking Complete until safe.",
+      "contract_refs": [
+        "CONTRACT.md §3 Atomic Group Execution",
+        "AT-116"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 7 — Atomic Group Executor + Emergency Close / S7.1"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/src/execution/atomic_group_executor.rs",
+          "crates/soldier_core/tests/test_atomic_group.rs",
+          "crates/soldier_core/src/execution/group.rs",
+          "docs/plans/2026-02-14-s7-000-atomic-group-design.md"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN atomic group state WHEN evaluated THEN cannot mark Complete until safe.",
+        "GIVEN first observed failure WHEN processing group THEN seeds MixedFailed and is not overwritten by later async updates.",
+        "GIVEN MixedFailed state WHEN evaluating THEN blocks opens until neutral."
+      ],
+      "steps": [
+        "Create group.rs and atomic_group_executor.rs modules.",
+        "Implement group state machine transitions.",
+        "Ensure first failure seeds MixedFailed deterministically.",
+        "Add test_atomic_group_mixed_failed_then_flattened.",
+        "Add test_mixed_failed_blocks_opens_until_neutral (AT-116).",
+        "Add counter atomic_group_state_total{state}."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_atomic_group"
+      ],
+      "evidence": [
+        "ENABLE_ATOMIC_GROUPS config flag documented",
+        "cargo test output"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "high",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.1.1 Atomic Group Executor - First-Fail Invariant",
+          "location": "CONTRACT.md §1.1.1",
+          "anchor": "AT-098"
+        },
+        {
+          "quote": "CONTRACT.md §1.1.1 Atomic Group Executor - State Machine",
+          "location": "CONTRACT.md §1.1.1",
+          "anchor": "AT-099"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-116"
+      ],
+      "reason_codes": {
+        "type": "ModeReasonCode",
+        "values": [
+          "REDUCEONLY_ATOMIC_NAKED"
+        ]
+      },
+      "enforcement_point": "AtomicGroupExecutor",
+      "failure_mode": [
+        "stall"
+      ],
+      "observability": {
+        "metrics": [
+          {
+            "name": "atomic_group_state_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": [
+              "state"
+            ]
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_atomic_group.rs"
+      ]
+    },
+    {
+      "id": "S7-001",
+      "priority": 87,
+      "phase": 2,
+      "slice": 7,
+      "slice_ref": "Slice 7 — Atomic Group Executor + Emergency Close + Sequencer + Churn Breaker",
+      "story_ref": "S7.2 Bounded rescue (≤2) and no chase loop",
+      "category": "execution",
+      "description": "Limit rescue attempts to max 2 IOC tries before fallback to flatten.",
+      "contract_refs": [
+        "CONTRACT.md §3 Atomic Group Execution",
+        "AT-117"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 7 / S7.2"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/atomic_group_executor.rs",
+          "crates/soldier_core/tests/test_atomic_group.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN rescue attempts WHEN processing atomic group THEN max 2 rescue IOC attempts.",
+        "GIVEN 2 rescue failures WHEN fallback triggered THEN flatten path executes.",
+        "GIVEN rescue exhausted WHEN fallback triggered THEN no chase loop occurs."
+      ],
+      "steps": [
+        "Add rescue attempt counter to atomic_group_executor.rs.",
+        "Enforce max 2 rescue IOC attempts.",
+        "Trigger flatten after 2nd rescue failure.",
+        "Add test_atomic_rescue_attempts_limited_to_two (AT-117).",
+        "Add histogram atomic_rescue_attempts."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_atomic_group"
+      ],
+      "evidence": [
+        "cargo test output"
+      ],
+      "dependencies": [
+        "S7-000"
+      ],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.1.2 Partial Fill Tracking",
+          "location": "CONTRACT.md §1.1.2",
+          "anchor": "AT-117"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-117"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::MaxRetriesExceeded"
+        ]
+      },
+      "enforcement_point": "AtomicGroupExecutor",
+      "failure_mode": [
+        "stall"
+      ],
+      "observability": {
+        "metrics": [
+          {
+            "name": "atomic_rescue_attempts",
+            "type": "histogram",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_atomic_group.rs"
+      ]
+    },
+    {
+      "id": "S7-002",
+      "priority": 86,
+      "phase": 2,
+      "slice": 7,
+      "slice_ref": "Slice 7 — Atomic Group Executor + Emergency Close + Sequencer + Churn Breaker",
+      "story_ref": "S7.3 Deterministic emergency close + hedge fallback",
+      "category": "execution",
+      "description": "Implement emergency close algorithm: 3 tries IOC close, then reduce-only delta hedge; logs AtomicNakedEvent; TradingMode is ReduceOnly during exposure.",
+      "contract_refs": [
+        "CONTRACT.md §3.1 Emergency Close",
+        "AT-338",
+        "AT-339",
+        "AT-340",
+        "AT-346",
+        "AT-347",
+        "AT-013"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 7 / S7.3"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/emergency_close.rs",
+          "crates/soldier_core/tests/test_emergency_close.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN emergency close triggered WHEN processing THEN 3 IOC close attempts with doubling buffer (5→10→20 ticks).",
+        "GIVEN 3 close failures WHEN fallback triggered THEN reduce-only delta hedge executes.",
+        "GIVEN exposure remains WHEN processing THEN logs AtomicNakedEvent and TradingMode is ReduceOnly.",
+        "GIVEN emergency close WHEN evaluating gates THEN bypasses liquidity and net_edge gates."
+      ],
+      "steps": [
+        "Create emergency_close.rs module.",
+        "Implement 3-try close with doubling buffer (close_buffer_ticks: 5→10→20).",
+        "Add reduce-only delta hedge fallback.",
+        "Log AtomicNakedEvent on naked exposure.",
+        "Bypass liquidity/net_edge gates for emergency close.",
+        "Add test_emergency_close_fallback_hedge_after_retries.",
+        "Add test_emergency_close_bypasses_liquidity_gate.",
+        "Add test_emergency_close_bypasses_net_edge_gate.",
+        "Add Kill-tier containment tests (AT-338/339/340/346/347/013).",
+        "Add histogram time_to_delta_neutral_ms, counter atomic_naked_events_total."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_emergency_close"
+      ],
+      "evidence": [
+        "cargo test output"
+      ],
+      "dependencies": [
+        "S7-000"
+      ],
+      "est_size": "S",
+      "risk": "high",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.1.3 Emergency Close - Naked Inventory Reduction",
+          "location": "CONTRACT.md §1.1.3",
+          "anchor": "AT-338"
+        },
+        {
+          "quote": "CONTRACT.md §1.1.3 Emergency Close - REDUCEONLY_ATOMIC_NAKED mode",
+          "location": "CONTRACT.md §1.1.3",
+          "anchor": "AT-339"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-338",
+        "AT-339",
+        "AT-340",
+        "AT-346",
+        "AT-347",
+        "AT-013"
+      ],
+      "reason_codes": {
+        "type": "ModeReasonCode",
+        "values": [
+          "REDUCEONLY_ATOMIC_NAKED"
+        ]
+      },
+      "enforcement_point": "AtomicGroupExecutor",
+      "failure_mode": [
+        "stall"
+      ],
+      "observability": {
+        "metrics": [
+          {
+            "name": "time_to_delta_neutral_ms",
+            "type": "histogram",
+            "unit": "ms",
+            "labels": []
+          },
+          {
+            "name": "atomic_naked_events_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_emergency_close.rs"
+      ]
+    },
+    {
+      "id": "S7-003",
+      "priority": 85,
+      "phase": 2,
+      "slice": 7,
+      "slice_ref": "Slice 7 — Atomic Group Executor + Emergency Close + Sequencer + Churn Breaker",
+      "story_ref": "S7.4 Sequencer ordering rules",
+      "category": "execution",
+      "description": "Implement sequencer with close→confirm→hedge ordering; repair flattens before hedge; never increase exposure when RiskState != Healthy.",
+      "contract_refs": [
+        "CONTRACT.md §3 Sequencer"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 7 / S7.4"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/execution/sequencer.rs",
+          "crates/soldier_core/tests/test_sequencer.rs",
+          "crates/soldier_core/src/execution/mod.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN sequencer ordering WHEN processing THEN close→confirm→hedge order enforced.",
+        "GIVEN repair path WHEN processing THEN flatten filled legs first via emergency_close_algorithm; hedge only after flatten retries fail.",
+        "GIVEN RiskState != Healthy WHEN evaluating THEN never increase exposure."
+      ],
+      "steps": [
+        "Create sequencer.rs module.",
+        "Implement close→confirm→hedge ordering.",
+        "Add repair path: flatten first, hedge only after retries fail.",
+        "Block exposure increase when RiskState != Healthy.",
+        "Add test_sequencer_close_then_hedge_ordering.",
+        "Add test_sequencer_blocks_exposure_increase_when_riskstate_not_healthy.",
+        "Add test_sequencer_repair_flattens_before_hedge.",
+        "Add counter sequencer_order_violation_total."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_sequencer"
+      ],
+      "evidence": [
+        "cargo test output"
+      ],
+      "dependencies": [
+        "S7-002"
+      ],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.1.4 Order Sequencer - Atomic Group Submit",
+          "location": "CONTRACT.md §1.1.4",
+          "anchor": "AT-125"
+        },
+        {
+          "quote": "CONTRACT.md §1.1.4 Order Sequencer - Partial Fill Handling",
+          "location": "CONTRACT.md §1.1.4",
+          "anchor": "AT-126"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-125",
+        "AT-126",
+        "AT-127",
+        "AT-128"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::RiskStateNotHealthy"
+        ]
+      },
+      "enforcement_point": "AtomicGroupExecutor",
+      "failure_mode": [
+        "stall"
+      ],
+      "observability": {
+        "metrics": [
+          {
+            "name": "sequencer_order_violation_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_sequencer.rs"
+      ]
+    },
+    {
+      "id": "S7-004",
+      "priority": 84,
+      "phase": 2,
+      "slice": 7,
+      "slice_ref": "Slice 7 — Atomic Group Executor + Emergency Close + Sequencer + Churn Breaker",
+      "story_ref": "S7.5 Churn breaker",
+      "category": "risk",
+      "description": "Implement churn breaker: >2 flattens/5m => 15m blacklist blocks opens for that key.",
+      "contract_refs": [
+        "CONTRACT.md §1.2.2 Atomic Churn Circuit Breaker (Flatten Storm Guard)"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 7 / S7.5"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/churn_breaker.rs",
+          "crates/soldier_core/tests/test_churn_breaker.rs",
+          "crates/soldier_core/src/risk/mod.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN >2 flattens in 5m window WHEN evaluating THEN 15m blacklist blocks opens for that key.",
+        "GIVEN blacklist active WHEN evaluating opens THEN opens are blocked.",
+        "GIVEN churn breaker inactive WHEN evaluating THEN opens are allowed."
+      ],
+      "steps": [
+        "Create churn_breaker.rs module.",
+        "Track flatten events per key with 5m window.",
+        "Apply 15m blacklist on >2 flattens/5m.",
+        "Block opens for blacklisted keys.",
+        "Add test_churn_breaker_blacklists_after_three.",
+        "Add counter churn_breaker_trip_total."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_churn_breaker"
+      ],
+      "evidence": [
+        "cargo test output"
+      ],
+      "dependencies": [
+        "S7-002"
+      ],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.2.1 Churn Breaker - Flip-Flop Backoff",
+          "location": "CONTRACT.md §1.2.1",
+          "anchor": "AT-341"
+        },
+        {
+          "quote": "CONTRACT.md §1.2.1 Churn Breaker - RejectReason::ChurnBreakerActive",
+          "location": "CONTRACT.md §1.2.1",
+          "anchor": "AT-342"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-341",
+        "AT-342",
+        "AT-343",
+        "AT-344"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::ChurnBreakerActive"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "churn_breaker_trip_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_churn_breaker.rs"
+      ]
+    },
+    {
+      "id": "S7-005",
+      "priority": 83,
+      "phase": 2,
+      "slice": 7,
+      "slice_ref": "Slice 7 — Atomic Group Executor + Emergency Close + Sequencer + Churn Breaker",
+      "story_ref": "S7.6 Self-Impact Feedback Loop Guard (Echo Chamber Breaker)",
+      "category": "risk",
+      "description": "Implement self-impact guard: stale/missing trade feed blocks opens; self_fraction/notional trip conditions reject with cooldown.",
+      "contract_refs": [
+        "CONTRACT.md §1.2.3 Self-Impact Feedback Loop Guard",
+        "AT-953",
+        "AT-955",
+        "AT-956",
+        "AT-957"
+      ],
+      "plan_refs": [
+        "IMPLEMENTATION_PLAN.md Slice 7 / S7.6"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/self_impact_guard.rs",
+          "crates/soldier_core/tests/test_self_impact.rs",
+          "crates/soldier_core/src/risk/mod.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN public trade feed stale/missing WHEN evaluating THEN set RiskState::Degraded, set WS_TRADES_GAP_RECONCILE_REQUIRED latch, block opens until reconcile clears.",
+        "GIVEN feed fresh and self_fraction/notional trip WHEN evaluating open in same direction THEN reject with FeedbackLoopGuardActive and apply cooldown.",
+        "GIVEN self-impact below threshold WHEN evaluating THEN allow open."
+      ],
+      "steps": [
+        "Create self_impact_guard.rs module.",
+        "Check trade feed freshness; if stale/missing: set Degraded + latch.",
+        "Compute self_fraction and self_notional when feed fresh.",
+        "Apply trip conditions and reject with cooldown.",
+        "Add test_self_impact_stale_feed_sets_latch (AT-953).",
+        "Add test_self_impact_fraction_trip_rejects (AT-955).",
+        "Add test_self_impact_notional_trip_rejects (AT-956).",
+        "Add test_self_impact_below_threshold_allows (AT-957).",
+        "Add counter self_impact_trip_total."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_self_impact"
+      ],
+      "evidence": [
+        "cargo test output"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [
+        {
+          "quote": "CONTRACT.md §1.2.3 Self-Impact Feedback Loop Guard - Trade Feed Freshness",
+          "location": "CONTRACT.md §1.2.3",
+          "anchor": "AT-953"
+        },
+        {
+          "quote": "CONTRACT.md §1.2.3 Self-Impact Feedback Loop Guard - Self Fraction Trip",
+          "location": "CONTRACT.md §1.2.3",
+          "anchor": "AT-955"
+        },
+        {
+          "quote": "CONTRACT.md §1.2.3 Self-Impact Feedback Loop Guard - Self Notional Trip",
+          "location": "CONTRACT.md §1.2.3",
+          "anchor": "AT-956"
+        }
+      ],
+      "enforcing_contract_ats": [
+        "AT-953",
+        "AT-955",
+        "AT-956",
+        "AT-957"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "RejectReason::FeedbackLoopGuardActive"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "self_impact_trip_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_self_impact.rs"
       ]
     }
   ]
