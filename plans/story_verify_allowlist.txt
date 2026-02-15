@@ -60,3 +60,7 @@ cargo test -p soldier_core --test test_churn_breaker
 cargo test -p soldier_core --test test_emergency_close
 cargo test -p soldier_core --test test_self_impact
 cargo test -p soldier_core --test test_sequencer
+cargo test -p soldier_core --test test_inventory_skew
+cargo test -p soldier_core --test test_pending_exposure
+cargo test -p soldier_core --test test_exposure_budget
+cargo test -p soldier_core --test test_margin_gate
