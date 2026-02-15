@@ -600,11 +600,11 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/src/risk/inventory_skew.rs",
           "crates/soldier_core/tests/test_inventory_skew.rs"
         ],
-        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -685,11 +685,11 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/src/risk/pending_exposure.rs",
           "crates/soldier_core/tests/test_pending_exposure.rs"
         ],
-        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -763,11 +763,11 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/src/risk/exposure_budget.rs",
           "crates/soldier_core/tests/test_exposure_budget.rs"
         ],
-        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -845,12 +845,12 @@
         "Phase 1 — Foundation (Panic‑Free Deterministic Intents)"
       ],
       "scope": {
-        "touch": [
+        "touch": [],
+        "create": [
           "crates/soldier_core/src/risk/margin_gate.rs",
-          "crates/soldier_infra/src/deribit/account_summary.rs",
-          "crates/soldier_core/tests/test_margin_gate.rs"
+          "crates/soldier_core/tests/test_margin_gate.rs",
+          "crates/soldier_infra/src/deribit/account_summary.rs"
         ],
-        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -3903,10 +3903,10 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/atomic_group_executor.rs",
-          "crates/soldier_core/tests/test_atomic_group.rs",
           "crates/soldier_core/src/execution/group.rs",
+          "crates/soldier_core/src/execution/mod.rs",
+          "crates/soldier_core/tests/test_atomic_group.rs",
           "docs/plans/2026-02-14-s7-000-atomic-group-design.md"
         ],
         "create": [],
@@ -4197,9 +4197,9 @@
       ],
       "scope": {
         "touch": [
+          "crates/soldier_core/src/execution/mod.rs",
           "crates/soldier_core/src/execution/sequencer.rs",
-          "crates/soldier_core/tests/test_sequencer.rs",
-          "crates/soldier_core/src/execution/mod.rs"
+          "crates/soldier_core/tests/test_sequencer.rs"
         ],
         "create": [],
         "avoid": []
@@ -4295,8 +4295,8 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/risk/churn_breaker.rs",
-          "crates/soldier_core/tests/test_churn_breaker.rs",
-          "crates/soldier_core/src/risk/mod.rs"
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/tests/test_churn_breaker.rs"
         ],
         "create": [],
         "avoid": []
@@ -4391,9 +4391,9 @@
       ],
       "scope": {
         "touch": [
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/self_impact_guard.rs",
-          "crates/soldier_core/tests/test_self_impact.rs",
-          "crates/soldier_core/src/risk/mod.rs"
+          "crates/soldier_core/tests/test_self_impact.rs"
         ],
         "create": [],
         "avoid": []
