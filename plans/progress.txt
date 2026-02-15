@@ -303,3 +303,9 @@ Summary: Implemented self-impact feedback loop guard (CONTRACT.md §1.2.3): stal
 Commands: cargo test -p soldier_core --test test_self_impact; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/risk/self_impact_guard.rs; crates/soldier_core/tests/test_self_impact.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_post.log; VERIFY OK (mode=quick).
 Next: Mark S7-005 as passing.
+Story: S6-007
+Date: 2026-02-15
+Summary: Implemented Inventory Skew Gate (§1.4.2) with inventory_bias computation, risk-increasing trade rejection near limits, tick penalty adjustment, and delta_limit missing handling; added 10 comprehensive tests covering AT-224 (BUY/SELL directionality), AT-043/AT-922 (delta_limit missing), AT-030 (3 tick shift), and AT-934 (current+pending exposure); acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_inventory_skew; cargo fmt.
+Evidence: crates/soldier_core/src/risk/inventory_skew.rs; crates/soldier_core/tests/test_inventory_skew.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (10/10 passed).
+Next: Commit and run ./plans/verify.sh quick on clean tree.
