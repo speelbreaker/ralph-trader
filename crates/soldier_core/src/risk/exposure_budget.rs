@@ -169,12 +169,13 @@ impl GlobalExposureBudget {
         let portfolio_delta = variance_abs.sqrt();
 
         // Check for NaN (safety net for floating-point edge cases)
+        // Fail-closed: return INFINITY to force rejection
         if portfolio_delta.is_nan() {
             eprintln!(
-                "exposure_budget: NaN portfolio_delta detected (variance={}), returning 0",
+                "exposure_budget: NaN portfolio_delta detected (variance={}), returning INFINITY (fail-closed)",
                 variance
             );
-            return 0.0;
+            return f64::INFINITY;
         }
 
         // Preserve sign

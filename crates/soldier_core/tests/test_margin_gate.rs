@@ -236,7 +236,7 @@ fn test_zero_equity_uses_epsilon() {
 #[test]
 fn test_negative_equity_scenario() {
     // Edge case: negative equity (liquidation scenario)
-    // Should be treated as very small positive via max(equity, epsilon)
+    // Returns INFINITY to force Kill mode (fail-closed)
     let snapshot = MarginSnapshot {
         maintenance_margin: 50_000.0,
         equity: -10_000.0,
@@ -244,8 +244,8 @@ fn test_negative_equity_scenario() {
     let config = MarginConfig::default();
 
     let mm_util = snapshot.mm_util();
-    assert!(mm_util > 0.0);
-    assert!(mm_util.is_finite());
+    assert_eq!(mm_util, f64::INFINITY);
+    assert!(mm_util.is_infinite());
 
     // Should trigger Kill mode
     let mode = compute_margin_mode_recommendation(&snapshot, &config);
