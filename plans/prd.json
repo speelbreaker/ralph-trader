@@ -892,7 +892,7 @@
       "est_size": "S",
       "risk": "high",
       "needs_human_decision": false,
-      "passes": false,
+      "passes": true,
       "contract_must_evidence": [],
       "enforcing_contract_ats": [
         "AT-227",
