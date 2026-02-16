@@ -64,7 +64,7 @@ pub use quantize::{
     InstrumentQuantization, QuantizeReject, QuantizeRejectReason, QuantizedFields, QuantizedSteps,
     Side, quantization_reject_too_small_total, quantize, quantize_from_metadata, quantize_steps,
 };
-pub use sequencer::{ExecutionStep, IntentKind, RiskState, SequenceError, Sequencer};
+pub use sequencer::{ExecutionStep, IntentKind, SequenceError, Sequencer};
 pub use state::{TlsmEvent, TlsmIntent, TlsmLedgerEntry, TlsmSide, TlsmState};
 pub use tlsm::{
     Tlsm, TlsmError, TlsmLedger, TlsmLedgerError, TlsmTransition, tlsm_out_of_order_total,

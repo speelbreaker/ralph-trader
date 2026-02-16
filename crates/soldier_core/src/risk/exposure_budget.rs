@@ -52,11 +52,14 @@ enum CorrelationBucket {
 
 impl CorrelationBucket {
     /// Classify instrument into correlation bucket based on symbol
+    ///
+    /// Matches "BTC-*" or "ETH-*" precisely at the start of the instrument ID
     fn classify(instrument_id: &str) -> Self {
         let upper = instrument_id.to_uppercase();
-        if upper.starts_with("BTC") || upper.contains("BTC-") {
+        // Match "BTC-" or "BTC_" at start, or standalone "BTC"
+        if upper.starts_with("BTC-") || upper.starts_with("BTC_") || upper == "BTC" {
             CorrelationBucket::Btc
-        } else if upper.starts_with("ETH") || upper.contains("ETH-") {
+        } else if upper.starts_with("ETH-") || upper.starts_with("ETH_") || upper == "ETH" {
             CorrelationBucket::Eth
         } else {
             CorrelationBucket::Alts
@@ -159,7 +162,20 @@ impl GlobalExposureBudget {
 
         // Portfolio delta is sqrt of variance, with sign from net delta
         let net_delta: f64 = bucket_deltas.values().sum();
-        let portfolio_delta = variance.sqrt();
+
+        // Defensive: variance can be negative with offsetting positions in signed-delta model
+        // Take absolute value before sqrt to avoid NaN
+        let variance_abs = variance.abs();
+        let portfolio_delta = variance_abs.sqrt();
+
+        // Check for NaN (safety net for floating-point edge cases)
+        if portfolio_delta.is_nan() {
+            eprintln!(
+                "exposure_budget: NaN portfolio_delta detected (variance={}), returning 0",
+                variance
+            );
+            return 0.0;
+        }
 
         // Preserve sign
         if net_delta < 0.0 {
