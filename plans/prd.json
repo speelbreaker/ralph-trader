@@ -766,12 +766,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/exposure_budget.rs",
           "crates/soldier_core/tests/test_exposure_budget.rs"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
