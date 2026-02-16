@@ -1,6 +1,4 @@
-use soldier_core::execution::sequencer::{
-    ExecutionStep, IntentKind, SequenceError, Sequencer,
-};
+use soldier_core::execution::sequencer::{ExecutionStep, IntentKind, SequenceError, Sequencer};
 use soldier_core::risk::RiskState;
 
 #[test]

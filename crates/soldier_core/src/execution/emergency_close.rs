@@ -93,7 +93,8 @@ impl EmergencyClose {
             let buffer = INITIAL_BUFFER_TICKS * (1 << (attempt_num - 1)); // 5, 10, 20
 
             // Simulate close attempt (in real impl, this would dispatch IOC order)
-            let filled = self.simulate_close_attempt(remaining, buffer, instrument_name, close_side);
+            let filled =
+                self.simulate_close_attempt(remaining, buffer, instrument_name, close_side);
             remaining -= filled;
 
             attempts.push(CloseAttempt {
