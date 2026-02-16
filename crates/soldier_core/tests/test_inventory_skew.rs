@@ -69,34 +69,17 @@ fn test_at224_buy_rejected_when_edge_multiplier_excessive() {
 
     // current_delta = 100, limit = 100 => inventory_bias = 1.0
     // BUY: directed_bias = 1.0, multiplier = 1.5 > 1.4 => REJECT
-    let eval_buy = evaluate_inventory_skew(
-        100.0,
-        0.0,
-        Some(100.0),
-        IntentSide::Buy,
-        1.0,
-        0.5,
-        &config,
-    );
+    let eval_buy =
+        evaluate_inventory_skew(100.0, 0.0, Some(100.0), IntentSide::Buy, 1.0, 0.5, &config);
     assert!(
         !eval_buy.allowed,
         "BUY should be rejected when edge multiplier > threshold"
     );
-    assert_eq!(
-        eval_buy.reject_reason,
-        Some("InventorySkew".to_string())
-    );
+    assert_eq!(eval_buy.reject_reason, Some("InventorySkew".to_string()));
 
     // SELL: directed_bias = -1.0, multiplier = 0.0 < threshold => ALLOWED
-    let eval_sell = evaluate_inventory_skew(
-        100.0,
-        0.0,
-        Some(100.0),
-        IntentSide::Sell,
-        1.0,
-        0.5,
-        &config,
-    );
+    let eval_sell =
+        evaluate_inventory_skew(100.0, 0.0, Some(100.0), IntentSide::Sell, 1.0, 0.5, &config);
     assert!(eval_sell.allowed, "SELL should be allowed (risk-reducing)");
 }
 
@@ -216,8 +199,8 @@ fn test_at934_current_plus_pending_exposure_used() {
     // current alone: bias = 0.3, ticks = ceil(0.3*3) = ceil(0.9) = 1
     // current+pending: total = 40, bias = 0.4, ticks = ceil(0.4*3) = ceil(1.2) = 2
     let eval2 = evaluate_inventory_skew(
-        30.0,  // current: bias = 0.3, ticks = 1
-        10.0,  // combined: total = 40, bias = 0.4, ticks = 2
+        30.0, // current: bias = 0.3, ticks = 1
+        10.0, // combined: total = 40, bias = 0.4, ticks = 2
         delta_limit,
         IntentSide::Buy,
         1.0,
@@ -256,10 +239,7 @@ fn test_sell_allowed_near_negative_limit() {
         !eval_sell.allowed,
         "SELL when short should be rejected (risk-increasing, excessive edge)"
     );
-    assert_eq!(
-        eval_sell.reject_reason,
-        Some("InventorySkew".to_string())
-    );
+    assert_eq!(eval_sell.reject_reason, Some("InventorySkew".to_string()));
 
     // BUY is risk-reducing (reduces negative delta)
     // directed_bias = inventory_bias * side_sign = (-0.9) * (+1.0) = -0.9

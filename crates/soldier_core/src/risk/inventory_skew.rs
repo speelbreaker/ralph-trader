@@ -143,7 +143,8 @@ mod tests {
 
         // current_delta = 90, pending = 0, limit = 100 => bias = 0.9
         // bias_ticks = ceil(0.9 * 3) = ceil(2.7) = 3
-        let eval = evaluate_inventory_skew(90.0, 0.0, Some(100.0), IntentSide::Sell, 1.0, 0.5, &config);
+        let eval =
+            evaluate_inventory_skew(90.0, 0.0, Some(100.0), IntentSide::Sell, 1.0, 0.5, &config);
         assert!(eval.allowed);
         assert_eq!(eval.bias_ticks, 3);
     }
@@ -170,9 +171,13 @@ mod tests {
         // current = 60, pending = 20, limit = 100 => total = 80 (bias = 0.8)
         // edge_multiplier = 1.4 (at threshold), allowed
         // bias_ticks = ceil(0.8 * 3) = ceil(2.4) = 3
-        let eval = evaluate_inventory_skew(60.0, 20.0, Some(100.0), IntentSide::Buy, 1.0, 0.5, &config);
+        let eval =
+            evaluate_inventory_skew(60.0, 20.0, Some(100.0), IntentSide::Buy, 1.0, 0.5, &config);
 
         assert!(eval.allowed);
-        assert_eq!(eval.bias_ticks, 3, "Should use current+pending for bias calculation");
+        assert_eq!(
+            eval.bias_ticks, 3,
+            "Should use current+pending for bias calculation"
+        );
     }
 }
