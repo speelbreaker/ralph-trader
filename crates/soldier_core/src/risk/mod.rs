@@ -2,6 +2,7 @@ pub mod churn_breaker;
 pub mod exposure_budget;
 pub mod fees;
 pub mod inventory_skew;
+pub mod margin_gate;
 pub mod pending_exposure;
 pub mod self_impact_guard;
 pub mod state;
@@ -18,6 +19,10 @@ pub use fees::{
 };
 pub use inventory_skew::{
     IntentSide, InventorySkewConfig, InventorySkewEvaluation, evaluate_inventory_skew,
+};
+pub use margin_gate::{
+    MarginConfig, MarginGateResult, MarginModeRecommendation, MarginSnapshot,
+    compute_margin_mode_recommendation, evaluate_margin_gate_for_open,
 };
 pub use pending_exposure::{DeltaContracts, PendingExposureTracker, ReservationId, ReserveResult};
 pub use self_impact_guard::{
