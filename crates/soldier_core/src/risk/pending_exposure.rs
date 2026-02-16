@@ -125,6 +125,9 @@ impl PendingExposureTracker {
         delta_impact_est: DeltaContracts,
         current_delta: DeltaContracts,
     ) -> ReserveResult {
+        // Note: unwrap() on Mutex::lock() is acceptable here - lock poisoning
+        // indicates a panic in another thread while holding the lock, which is
+        // a fatal error that should propagate
         let mut instruments = self.instruments.lock().unwrap();
 
         // Get or create instrument tracker
