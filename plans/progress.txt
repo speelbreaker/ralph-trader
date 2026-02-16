@@ -357,3 +357,9 @@ Summary: Verified S6-009 Global Exposure Budget (§1.4.2.2) implementation from 
 Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_exposure_budget.
 Evidence: crates/soldier_core/src/risk/exposure_budget.rs; crates/soldier_core/tests/test_exposure_budget.rs; crates/soldier_core/src/risk/mod.rs; all 9 tests passed; VERIFY OK (mode=quick).
 Next: Mark S6-009 as passing.
+Story: S6-010
+Date: 2026-02-16
+Summary: Implemented Margin Headroom Gate (§1.4.3) with mm_util thresholds for liquidation shield; created margin_gate.rs with MarginSnapshot, mm_util computation (maintenance_margin / max(equity, epsilon)), gate evaluation for OPEN rejection at mm_util_reject_opens (0.70), TradingMode recommendations (ReduceOnly at 0.85, Kill at 0.95); extended account_summary.rs with maintenance_margin, initial_margin, equity fields; added 11 comprehensive tests covering AT-227 (OPEN rejected at 72%), AT-912 (MarginHeadroomRejectOpens reason), AT-228 (ReduceOnly at 90%), AT-206 (gate independent of mode), AT-207 (ReduceOnly allows closes), AT-208 (Kill at 95%), plus edge cases for zero/negative equity, exact thresholds, custom config; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_margin_gate; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/risk/margin_gate.rs; crates/soldier_core/tests/test_margin_gate.rs; crates/soldier_core/src/risk/mod.rs; crates/soldier_infra/src/deribit/account_summary.rs; all 11 tests passed; VERIFY OK (mode=quick).
+Next: Mark S6-010 as passing.
