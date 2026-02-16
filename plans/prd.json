@@ -601,12 +601,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/inventory_skew.rs",
           "crates/soldier_core/tests/test_inventory_skew.rs"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
