@@ -309,3 +309,9 @@ Summary: Implemented Inventory Skew Gate (§1.4.2) with inventory_bias computati
 Commands: cargo test -p soldier_core --test test_inventory_skew; cargo fmt.
 Evidence: crates/soldier_core/src/risk/inventory_skew.rs; crates/soldier_core/tests/test_inventory_skew.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (10/10 passed).
 Next: Commit and run ./plans/verify.sh quick on clean tree.
+Story: S6-007
+Date: 2026-02-15
+Summary: Verified S6-007 Inventory Skew Gate implementation from previous iteration; all 10 tests pass covering AT-224 (BUY/SELL directionality), AT-043/AT-922 (delta_limit missing), AT-030 (3 tick shift), AT-934 (current+pending exposure); baseline verify quick GREEN; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_inventory_skew.
+Evidence: crates/soldier_core/src/risk/inventory_skew.rs; crates/soldier_core/tests/test_inventory_skew.rs; .ralph/verify_pre.log; cargo test output (10/10 passed).
+Next: Mark S6-007 as passing.
