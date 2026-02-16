@@ -585,344 +585,6 @@
       "implementation_tests": []
     },
     {
-      "id": "S6-007",
-      "priority": 88,
-      "phase": 1,
-      "slice": 6,
-      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
-      "story_ref": "Inventory Skew Gate",
-      "category": "hardening",
-      "description": "Implement Inventory Skew Gate (\u00a71.4.2) that biases execution against compounding inventory and requires higher edge/worse prices for risk-increasing trades near delta limits.",
-      "contract_refs": [
-        "\u00a71.4.2 Inventory Skew Gate (Execution Bias vs Current Exposure)"
-      ],
-      "plan_refs": [
-        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
-      ],
-      "scope": {
-        "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
-          "crates/soldier_core/src/risk/inventory_skew.rs",
-          "crates/soldier_core/tests/test_inventory_skew.rs"
-        ],
-        "create": [],
-        "avoid": [
-          "plans/**"
-        ]
-      },
-      "acceptance": [
-        "GIVEN current_delta \u2248 0.9 * delta_limit WHEN BUY intent evaluated THEN rejected (risk-increasing near limit).",
-        "GIVEN current_delta \u2248 0.9 * delta_limit WHEN SELL intent evaluated THEN allowed (risk-reducing).",
-        "GIVEN delta_limit missing WHEN OPEN intent evaluated THEN rejected with InventorySkewDeltaLimitMissing.",
-        "GIVEN inventory_bias=1.0 for BUY WHEN limit price computed THEN shifts 3 ticks away from touch.",
-        "GIVEN pending_delta reserved WHEN Inventory Skew evaluates THEN uses current + pending exposure."
-      ],
-      "steps": [
-        "Create crates/soldier_core/src/risk/inventory_skew.rs with gate logic.",
-        "Implement inventory_bias computation: clamp(current_delta / delta_limit, -1, +1).",
-        "Implement min_edge_usd adjustment for risk-increasing trades.",
-        "Implement limit_price bias_ticks shift (3 tick max penalty).",
-        "Add rejection with InventorySkewDeltaLimitMissing when delta_limit missing.",
-        "Create crates/soldier_core/tests/test_inventory_skew.rs with acceptance tests.",
-        "Add test for AT-224 (BUY rejected near limit, SELL allowed).",
-        "Add test for AT-043, AT-922 (delta_limit missing rejection).",
-        "Add test for AT-030 (3 tick shift at inventory_bias=1.0).",
-        "Add test for AT-934 (current + pending exposure check)."
-      ],
-      "verify": [
-        "./plans/verify.sh",
-        "cargo test -p soldier_core --test test_inventory_skew"
-      ],
-      "evidence": [
-        "cargo test output showing test_inventory_skew PASS",
-        "crates/soldier_core/src/risk/inventory_skew.rs"
-      ],
-      "dependencies": [],
-      "est_size": "S",
-      "risk": "med",
-      "needs_human_decision": false,
-      "passes": true,
-      "contract_must_evidence": [],
-      "enforcing_contract_ats": [
-        "AT-224",
-        "AT-043",
-        "AT-922",
-        "AT-030",
-        "AT-934"
-      ],
-      "reason_codes": {
-        "type": "RejectReason",
-        "values": [
-          "InventorySkewDeltaLimitMissing"
-        ]
-      },
-      "enforcement_point": "DispatcherChokepoint",
-      "failure_mode": [
-        "missing",
-        "parse_error"
-      ],
-      "observability": {
-        "metrics": [],
-        "status_fields": [],
-        "status_contract_ats": []
-      },
-      "implementation_tests": [
-        "crates/soldier_core/tests/test_inventory_skew.rs"
-      ]
-    },
-    {
-      "id": "S6-008",
-      "priority": 87,
-      "phase": 1,
-      "slice": 6,
-      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
-      "story_ref": "PendingExposure Reservation",
-      "category": "hardening",
-      "description": "Implement PendingExposure Reservation (\u00a71.4.2.1) to prevent concurrent signals from observing same 'free delta' and over-allocating risk budget.",
-      "contract_refs": [
-        "\u00a71.4.2.1 PendingExposure Reservation (Anti Over\u2011Fill)"
-      ],
-      "plan_refs": [
-        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
-      ],
-      "scope": {
-        "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
-          "crates/soldier_core/src/risk/pending_exposure.rs",
-          "crates/soldier_core/tests/test_pending_exposure.rs"
-        ],
-        "create": [],
-        "avoid": [
-          "plans/**"
-        ]
-      },
-      "acceptance": [
-        "GIVEN 5 concurrent opens with identical current_delta=0 WHEN PendingExposure reserve runs THEN only subset fitting budget reserves.",
-        "GIVEN reservation would breach budget WHEN reserve() attempted THEN rejected with PendingExposureBudgetExceeded and no dispatch.",
-        "GIVEN terminal outcome (Filled/Rejected/Canceled) WHEN triggered THEN reservation released."
-      ],
-      "steps": [
-        "Create crates/soldier_core/src/risk/pending_exposure.rs with reservation logic.",
-        "Implement pending_delta tracking per instrument + global.",
-        "Implement reserve(delta_impact_est) with budget breach check.",
-        "Implement release on terminal TLSM transitions.",
-        "Add rejection with PendingExposureBudgetExceeded when budget breached.",
-        "Create crates/soldier_core/tests/test_pending_exposure.rs with acceptance tests.",
-        "Add test for AT-225 (5 concurrent opens, subset reserves).",
-        "Add test for AT-910 (budget breach rejection)."
-      ],
-      "verify": [
-        "./plans/verify.sh",
-        "cargo test -p soldier_core --test test_pending_exposure"
-      ],
-      "evidence": [
-        "cargo test output showing test_pending_exposure PASS",
-        "crates/soldier_core/src/risk/pending_exposure.rs"
-      ],
-      "dependencies": [],
-      "est_size": "S",
-      "risk": "med",
-      "needs_human_decision": false,
-      "passes": true,
-      "contract_must_evidence": [],
-      "enforcing_contract_ats": [
-        "AT-225",
-        "AT-910"
-      ],
-      "reason_codes": {
-        "type": "RejectReason",
-        "values": [
-          "PendingExposureBudgetExceeded"
-        ]
-      },
-      "enforcement_point": "DispatcherChokepoint",
-      "failure_mode": [
-        "missing",
-        "stale"
-      ],
-      "observability": {
-        "metrics": [],
-        "status_fields": [],
-        "status_contract_ats": []
-      },
-      "implementation_tests": [
-        "crates/soldier_core/tests/test_pending_exposure.rs"
-      ]
-    },
-    {
-      "id": "S6-009",
-      "priority": 86,
-      "phase": 1,
-      "slice": 6,
-      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
-      "story_ref": "Global Exposure Budget",
-      "category": "hardening",
-      "description": "Implement Global Exposure Budget (\u00a71.4.2.2) to prevent 'safe per-instrument' trades from stacking into unsafe portfolio exposure using correlation-aware aggregation.",
-      "contract_refs": [
-        "\u00a71.4.2.2 Global Exposure Budget (Cross\u2011Instrument, Correlation\u2011Aware)"
-      ],
-      "plan_refs": [
-        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
-      ],
-      "scope": {
-        "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
-          "crates/soldier_core/src/risk/exposure_budget.rs",
-          "crates/soldier_core/tests/test_exposure_budget.rs"
-        ],
-        "create": [],
-        "avoid": [
-          "plans/**"
-        ]
-      },
-      "acceptance": [
-        "GIVEN BTC and ETH both near limits WHEN new BTC trade passes local delta gate THEN rejected if portfolio budget breaches after correlation.",
-        "GIVEN portfolio exposure would breach WHEN Global Budget evaluates OPEN THEN rejected with GlobalExposureBudgetExceeded and no dispatch.",
-        "GIVEN pending_delta reserved near limit WHEN Global Budget evaluates THEN uses current + pending exposure."
-      ],
-      "steps": [
-        "Create crates/soldier_core/src/risk/exposure_budget.rs with portfolio logic.",
-        "Implement per-instrument delta_usd tracking.",
-        "Implement portfolio aggregation with correlation buckets (BTC/ETH=0.8, BTC/alts=0.6, ETH/alts=0.6).",
-        "Implement portfolio breach check using current + pending exposure.",
-        "Add rejection with GlobalExposureBudgetExceeded when portfolio breaches.",
-        "Create crates/soldier_core/tests/test_exposure_budget.rs with acceptance tests.",
-        "Add test for AT-226 (BTC+ETH correlation breach).",
-        "Add test for AT-911 (portfolio breach rejection).",
-        "Add test for AT-929 (current + pending exposure check)."
-      ],
-      "verify": [
-        "./plans/verify.sh",
-        "cargo test -p soldier_core --test test_exposure_budget"
-      ],
-      "evidence": [
-        "cargo test output showing test_exposure_budget PASS",
-        "crates/soldier_core/src/risk/exposure_budget.rs"
-      ],
-      "dependencies": [
-        "S6-008"
-      ],
-      "est_size": "S",
-      "risk": "med",
-      "needs_human_decision": false,
-      "passes": true,
-      "contract_must_evidence": [],
-      "enforcing_contract_ats": [
-        "AT-226",
-        "AT-911",
-        "AT-929"
-      ],
-      "reason_codes": {
-        "type": "RejectReason",
-        "values": [
-          "GlobalExposureBudgetExceeded"
-        ]
-      },
-      "enforcement_point": "DispatcherChokepoint",
-      "failure_mode": [
-        "missing",
-        "stale"
-      ],
-      "observability": {
-        "metrics": [],
-        "status_fields": [],
-        "status_contract_ats": []
-      },
-      "implementation_tests": [
-        "crates/soldier_core/tests/test_exposure_budget.rs"
-      ]
-    },
-    {
-      "id": "S6-010",
-      "priority": 85,
-      "phase": 1,
-      "slice": 6,
-      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
-      "story_ref": "Margin Headroom Gate",
-      "category": "hardening",
-      "description": "Implement Margin Headroom Gate (\u00a71.4.3) to prevent margin liquidation via mm_util thresholds that reject opens and force ReduceOnly/Kill modes.",
-      "contract_refs": [
-        "\u00a71.4.3 Margin Headroom Gate (Liquidation Shield)"
-      ],
-      "plan_refs": [
-        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
-      ],
-      "scope": {
-        "touch": [
-          "crates/soldier_infra/src/deribit/account_summary.rs",
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
-          "crates/soldier_core/src/risk/margin_gate.rs",
-          "crates/soldier_core/tests/test_margin_gate.rs"
-        ],
-        "avoid": [
-          "plans/**"
-        ]
-      },
-      "acceptance": [
-        "GIVEN mm_util >= mm_util_reject_opens WHEN OPEN evaluated THEN rejected with MarginHeadroomRejectOpens.",
-        "GIVEN mm_util >= mm_util_reduceonly WHEN PolicyGuard computes TradingMode THEN TradingMode=ReduceOnly.",
-        "GIVEN mm_util >= mm_util_kill WHEN PolicyGuard computes TradingMode THEN TradingMode=Kill and emergency flatten eligible.",
-        "GIVEN equity=100k, maintenance_margin=72k WHEN Margin Gate evaluates OPEN THEN OPEN rejected.",
-        "GIVEN equity=100k, maintenance_margin=90k WHEN PolicyGuard computes THEN TradingMode=ReduceOnly."
-      ],
-      "steps": [
-        "Create crates/soldier_core/src/risk/margin_gate.rs with mm_util logic.",
-        "Implement mm_util = maintenance_margin / max(equity, epsilon).",
-        "Implement gate rejection at mm_util_reject_opens with MarginHeadroomRejectOpens.",
-        "Extend PolicyGuard to force ReduceOnly at mm_util_reduceonly.",
-        "Extend PolicyGuard to force Kill at mm_util_kill.",
-        "Create crates/soldier_infra/src/deribit/account_summary.rs stub for /private/get_account_summary.",
-        "Create crates/soldier_core/tests/test_margin_gate.rs with acceptance tests.",
-        "Add test for AT-227, AT-912 (OPEN rejected at mm_util_reject_opens).",
-        "Add test for AT-228, AT-207 (ReduceOnly at mm_util_reduceonly).",
-        "Add test for AT-208 (Kill at mm_util_kill).",
-        "Add test for AT-206 (gate independent of TradingMode)."
-      ],
-      "verify": [
-        "./plans/verify.sh",
-        "cargo test -p soldier_core --test test_margin_gate"
-      ],
-      "evidence": [
-        "cargo test output showing test_margin_gate PASS",
-        "crates/soldier_core/src/risk/margin_gate.rs"
-      ],
-      "dependencies": [],
-      "est_size": "S",
-      "risk": "high",
-      "needs_human_decision": false,
-      "passes": true,
-      "contract_must_evidence": [],
-      "enforcing_contract_ats": [
-        "AT-227",
-        "AT-912",
-        "AT-228",
-        "AT-206",
-        "AT-207",
-        "AT-208"
-      ],
-      "reason_codes": {
-        "type": "RejectReason",
-        "values": [
-          "MarginHeadroomRejectOpens"
-        ]
-      },
-      "enforcement_point": "PolicyGuard",
-      "failure_mode": [
-        "missing",
-        "stale"
-      ],
-      "observability": {
-        "metrics": [],
-        "status_fields": [],
-        "status_contract_ats": []
-      },
-      "implementation_tests": [
-        "crates/soldier_core/tests/test_margin_gate.rs"
-      ]
-    },
-    {
       "id": "S1-011",
       "priority": 65,
       "phase": 1,
@@ -3888,6 +3550,344 @@
       },
       "implementation_tests": [
         "crates/soldier_infra/tests/test_crash_mid_intent.rs"
+      ]
+    },
+    {
+      "id": "S6-007",
+      "priority": 88,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
+      "story_ref": "Inventory Skew Gate",
+      "category": "hardening",
+      "description": "Implement Inventory Skew Gate (\u00a71.4.2) that biases execution against compounding inventory and requires higher edge/worse prices for risk-increasing trades near delta limits.",
+      "contract_refs": [
+        "\u00a71.4.2 Inventory Skew Gate (Execution Bias vs Current Exposure)"
+      ],
+      "plan_refs": [
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/risk/inventory_skew.rs",
+          "crates/soldier_core/tests/test_inventory_skew.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN current_delta \u2248 0.9 * delta_limit WHEN BUY intent evaluated THEN rejected (risk-increasing near limit).",
+        "GIVEN current_delta \u2248 0.9 * delta_limit WHEN SELL intent evaluated THEN allowed (risk-reducing).",
+        "GIVEN delta_limit missing WHEN OPEN intent evaluated THEN rejected with InventorySkewDeltaLimitMissing.",
+        "GIVEN inventory_bias=1.0 for BUY WHEN limit price computed THEN shifts 3 ticks away from touch.",
+        "GIVEN pending_delta reserved WHEN Inventory Skew evaluates THEN uses current + pending exposure."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/inventory_skew.rs with gate logic.",
+        "Implement inventory_bias computation: clamp(current_delta / delta_limit, -1, +1).",
+        "Implement min_edge_usd adjustment for risk-increasing trades.",
+        "Implement limit_price bias_ticks shift (3 tick max penalty).",
+        "Add rejection with InventorySkewDeltaLimitMissing when delta_limit missing.",
+        "Create crates/soldier_core/tests/test_inventory_skew.rs with acceptance tests.",
+        "Add test for AT-224 (BUY rejected near limit, SELL allowed).",
+        "Add test for AT-043, AT-922 (delta_limit missing rejection).",
+        "Add test for AT-030 (3 tick shift at inventory_bias=1.0).",
+        "Add test for AT-934 (current + pending exposure check)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_inventory_skew"
+      ],
+      "evidence": [
+        "cargo test output showing test_inventory_skew PASS",
+        "crates/soldier_core/src/risk/inventory_skew.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-224",
+        "AT-043",
+        "AT-922",
+        "AT-030",
+        "AT-934"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "InventorySkewDeltaLimitMissing"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [
+        "missing",
+        "parse_error"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_inventory_skew.rs"
+      ]
+    },
+    {
+      "id": "S6-008",
+      "priority": 87,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
+      "story_ref": "PendingExposure Reservation",
+      "category": "hardening",
+      "description": "Implement PendingExposure Reservation (\u00a71.4.2.1) to prevent concurrent signals from observing same 'free delta' and over-allocating risk budget.",
+      "contract_refs": [
+        "\u00a71.4.2.1 PendingExposure Reservation (Anti Over\u2011Fill)"
+      ],
+      "plan_refs": [
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/risk/pending_exposure.rs",
+          "crates/soldier_core/tests/test_pending_exposure.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN 5 concurrent opens with identical current_delta=0 WHEN PendingExposure reserve runs THEN only subset fitting budget reserves.",
+        "GIVEN reservation would breach budget WHEN reserve() attempted THEN rejected with PendingExposureBudgetExceeded and no dispatch.",
+        "GIVEN terminal outcome (Filled/Rejected/Canceled) WHEN triggered THEN reservation released."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/pending_exposure.rs with reservation logic.",
+        "Implement pending_delta tracking per instrument + global.",
+        "Implement reserve(delta_impact_est) with budget breach check.",
+        "Implement release on terminal TLSM transitions.",
+        "Add rejection with PendingExposureBudgetExceeded when budget breached.",
+        "Create crates/soldier_core/tests/test_pending_exposure.rs with acceptance tests.",
+        "Add test for AT-225 (5 concurrent opens, subset reserves).",
+        "Add test for AT-910 (budget breach rejection)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_pending_exposure"
+      ],
+      "evidence": [
+        "cargo test output showing test_pending_exposure PASS",
+        "crates/soldier_core/src/risk/pending_exposure.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-225",
+        "AT-910"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "PendingExposureBudgetExceeded"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [
+        "missing",
+        "stale"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_pending_exposure.rs"
+      ]
+    },
+    {
+      "id": "S6-009",
+      "priority": 86,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
+      "story_ref": "Global Exposure Budget",
+      "category": "hardening",
+      "description": "Implement Global Exposure Budget (\u00a71.4.2.2) to prevent 'safe per-instrument' trades from stacking into unsafe portfolio exposure using correlation-aware aggregation.",
+      "contract_refs": [
+        "\u00a71.4.2.2 Global Exposure Budget (Cross\u2011Instrument, Correlation\u2011Aware)"
+      ],
+      "plan_refs": [
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/risk/exposure_budget.rs",
+          "crates/soldier_core/tests/test_exposure_budget.rs"
+        ],
+        "create": [],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN BTC and ETH both near limits WHEN new BTC trade passes local delta gate THEN rejected if portfolio budget breaches after correlation.",
+        "GIVEN portfolio exposure would breach WHEN Global Budget evaluates OPEN THEN rejected with GlobalExposureBudgetExceeded and no dispatch.",
+        "GIVEN pending_delta reserved near limit WHEN Global Budget evaluates THEN uses current + pending exposure."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/exposure_budget.rs with portfolio logic.",
+        "Implement per-instrument delta_usd tracking.",
+        "Implement portfolio aggregation with correlation buckets (BTC/ETH=0.8, BTC/alts=0.6, ETH/alts=0.6).",
+        "Implement portfolio breach check using current + pending exposure.",
+        "Add rejection with GlobalExposureBudgetExceeded when portfolio breaches.",
+        "Create crates/soldier_core/tests/test_exposure_budget.rs with acceptance tests.",
+        "Add test for AT-226 (BTC+ETH correlation breach).",
+        "Add test for AT-911 (portfolio breach rejection).",
+        "Add test for AT-929 (current + pending exposure check)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_exposure_budget"
+      ],
+      "evidence": [
+        "cargo test output showing test_exposure_budget PASS",
+        "crates/soldier_core/src/risk/exposure_budget.rs"
+      ],
+      "dependencies": [
+        "S6-008"
+      ],
+      "est_size": "S",
+      "risk": "med",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-226",
+        "AT-911",
+        "AT-929"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "GlobalExposureBudgetExceeded"
+        ]
+      },
+      "enforcement_point": "DispatcherChokepoint",
+      "failure_mode": [
+        "missing",
+        "stale"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_exposure_budget.rs"
+      ]
+    },
+    {
+      "id": "S6-010",
+      "priority": 85,
+      "phase": 1,
+      "slice": 6,
+      "slice_ref": "Slice 6 \u2014 Phase 1 Hardening Gates",
+      "story_ref": "Margin Headroom Gate",
+      "category": "hardening",
+      "description": "Implement Margin Headroom Gate (\u00a71.4.3) to prevent margin liquidation via mm_util thresholds that reject opens and force ReduceOnly/Kill modes.",
+      "contract_refs": [
+        "\u00a71.4.3 Margin Headroom Gate (Liquidation Shield)"
+      ],
+      "plan_refs": [
+        "Phase 1 \u2014 Foundation (Panic\u2011Free Deterministic Intents)"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_infra/src/deribit/account_summary.rs",
+          "crates/soldier_core/src/risk/mod.rs"
+        ],
+        "create": [
+          "crates/soldier_core/src/risk/margin_gate.rs",
+          "crates/soldier_core/tests/test_margin_gate.rs"
+        ],
+        "avoid": [
+          "plans/**"
+        ]
+      },
+      "acceptance": [
+        "GIVEN mm_util >= mm_util_reject_opens WHEN OPEN evaluated THEN rejected with MarginHeadroomRejectOpens.",
+        "GIVEN mm_util >= mm_util_reduceonly WHEN PolicyGuard computes TradingMode THEN TradingMode=ReduceOnly.",
+        "GIVEN mm_util >= mm_util_kill WHEN PolicyGuard computes TradingMode THEN TradingMode=Kill and emergency flatten eligible.",
+        "GIVEN equity=100k, maintenance_margin=72k WHEN Margin Gate evaluates OPEN THEN OPEN rejected.",
+        "GIVEN equity=100k, maintenance_margin=90k WHEN PolicyGuard computes THEN TradingMode=ReduceOnly."
+      ],
+      "steps": [
+        "Create crates/soldier_core/src/risk/margin_gate.rs with mm_util logic.",
+        "Implement mm_util = maintenance_margin / max(equity, epsilon).",
+        "Implement gate rejection at mm_util_reject_opens with MarginHeadroomRejectOpens.",
+        "Extend PolicyGuard to force ReduceOnly at mm_util_reduceonly.",
+        "Extend PolicyGuard to force Kill at mm_util_kill.",
+        "Create crates/soldier_infra/src/deribit/account_summary.rs stub for /private/get_account_summary.",
+        "Create crates/soldier_core/tests/test_margin_gate.rs with acceptance tests.",
+        "Add test for AT-227, AT-912 (OPEN rejected at mm_util_reject_opens).",
+        "Add test for AT-228, AT-207 (ReduceOnly at mm_util_reduceonly).",
+        "Add test for AT-208 (Kill at mm_util_kill).",
+        "Add test for AT-206 (gate independent of TradingMode)."
+      ],
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --test test_margin_gate"
+      ],
+      "evidence": [
+        "cargo test output showing test_margin_gate PASS",
+        "crates/soldier_core/src/risk/margin_gate.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "high",
+      "needs_human_decision": false,
+      "passes": true,
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-227",
+        "AT-912",
+        "AT-228",
+        "AT-206",
+        "AT-207",
+        "AT-208"
+      ],
+      "reason_codes": {
+        "type": "RejectReason",
+        "values": [
+          "MarginHeadroomRejectOpens"
+        ]
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [
+        "missing",
+        "stale"
+      ],
+      "observability": {
+        "metrics": [],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_margin_gate.rs"
       ]
     },
     {
