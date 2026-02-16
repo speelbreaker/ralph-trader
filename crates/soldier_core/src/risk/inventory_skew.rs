@@ -66,7 +66,7 @@ pub fn evaluate_inventory_skew(
     delta_limit: Option<f64>,
     side: IntentSide,
     min_edge_usd: f64,
-    tick_size_usd: f64,
+    _tick_size_usd: f64,
     config: &InventorySkewConfig,
 ) -> InventorySkewEvaluation {
     // AT-043, AT-922: Reject when delta_limit missing
@@ -107,18 +107,17 @@ pub fn evaluate_inventory_skew(
         IntentSide::Sell => -1.0,
     };
     let directed_bias = inventory_bias * side_sign;
-    let adjusted_min_edge_usd = min_edge_usd * (1.0 + config.inventory_skew_k * directed_bias);
 
-    // AT-224 enforcement: Reject if edge adjustment makes trade economically unreasonable
+    // AT-224 enforcement: Compute edge multiplier
     // If directed_bias > 0 (risk-increasing), edge gets harsher
     // Reject if the multiplier exceeds the configured threshold
-    // This ensures AT-224 "BUY rejected near limit, SELL allowed" behavior
     let edge_multiplier = 1.0 + config.inventory_skew_k * directed_bias;
+    let adjusted_min_edge_usd = min_edge_usd * edge_multiplier;
 
     if edge_multiplier > config.edge_rejection_threshold {
         return InventorySkewEvaluation {
             allowed: false,
-            reject_reason: Some("InventorySkewExcessiveEdgeRequired".to_string()),
+            reject_reason: Some("InventorySkew".to_string()),
             risk_state: RiskState::Healthy,
             adjusted_min_edge_usd: Some(adjusted_min_edge_usd),
             bias_ticks,
@@ -168,9 +167,10 @@ mod tests {
         // AT-934: current + pending exposure
         let config = InventorySkewConfig::default();
 
-        // current = 70, pending = 30, limit = 100 => total = 100 (bias = 1.0)
-        // bias_ticks = ceil(1.0 * 3) = 3
-        let eval = evaluate_inventory_skew(70.0, 30.0, Some(100.0), IntentSide::Buy, 1.0, 0.5, &config);
+        // current = 60, pending = 20, limit = 100 => total = 80 (bias = 0.8)
+        // edge_multiplier = 1.4 (at threshold), allowed
+        // bias_ticks = ceil(0.8 * 3) = ceil(2.4) = 3
+        let eval = evaluate_inventory_skew(60.0, 20.0, Some(100.0), IntentSide::Buy, 1.0, 0.5, &config);
 
         assert!(eval.allowed);
         assert_eq!(eval.bias_ticks, 3, "Should use current+pending for bias calculation");

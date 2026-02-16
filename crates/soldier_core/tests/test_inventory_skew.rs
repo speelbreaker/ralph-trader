@@ -33,7 +33,7 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
     );
     assert_eq!(
         eval_buy.reject_reason,
-        Some("InventorySkewExcessiveEdgeRequired".to_string()),
+        Some("InventorySkew".to_string()),
         "BUY rejection reason should indicate excessive edge"
     );
 
@@ -84,7 +84,7 @@ fn test_at224_buy_rejected_when_edge_multiplier_excessive() {
     );
     assert_eq!(
         eval_buy.reject_reason,
-        Some("InventorySkewExcessiveEdgeRequired".to_string())
+        Some("InventorySkew".to_string())
     );
 
     // SELL: directed_bias = -1.0, multiplier = 0.0 < threshold => ALLOWED
@@ -258,7 +258,7 @@ fn test_sell_allowed_near_negative_limit() {
     );
     assert_eq!(
         eval_sell.reject_reason,
-        Some("InventorySkewExcessiveEdgeRequired".to_string())
+        Some("InventorySkew".to_string())
     );
 
     // BUY is risk-reducing (reduces negative delta)
