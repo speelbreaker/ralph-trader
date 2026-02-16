@@ -345,3 +345,9 @@ Summary: Verification confirmed S6-008 PendingExposure Reservation (§1.4.2.1) i
 Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_pending_exposure.
 Evidence: crates/soldier_core/src/risk/pending_exposure.rs; crates/soldier_core/tests/test_pending_exposure.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_current.log; .ralph/test_pending_exposure_current.log; all 10 tests passed; VERIFY OK (mode=quick).
 Next: Mark S6-008 as passing.
+Story: S6-009
+Date: 2026-02-16
+Summary: Implemented Global Exposure Budget (§1.4.2.2) with correlation-aware portfolio aggregation to prevent safe per-instrument trades from stacking into unsafe portfolio exposure; created exposure_budget.rs with correlation buckets (BTC/ETH=0.8, BTC/alts=0.6, ETH/alts=0.6), portfolio variance computation, and breach detection with GlobalExposureBudgetExceeded rejection; added 9 comprehensive tests covering AT-226 (BTC+ETH correlation breach), AT-911 (portfolio breach rejection), AT-929 (current+pending exposure), plus edge cases for single/multi-instrument portfolios and short positions; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_exposure_budget; cargo fmt.
+Evidence: crates/soldier_core/src/risk/exposure_budget.rs; crates/soldier_core/tests/test_exposure_budget.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (9/9 passed).
+Next: Commit and run ./plans/verify.sh quick on clean tree.
