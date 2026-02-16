@@ -36,7 +36,16 @@ pub struct MarginSnapshot {
 
 impl MarginSnapshot {
     /// Compute mm_util = maintenance_margin / max(equity, epsilon)
+    ///
+    /// If equity is negative (account liquidated), returns f64::INFINITY to force Kill mode
     pub fn mm_util(&self) -> f64 {
+        if self.equity < 0.0 {
+            eprintln!(
+                "margin_gate: negative equity detected ({}), returning infinity",
+                self.equity
+            );
+            return f64::INFINITY;
+        }
         self.maintenance_margin / self.equity.max(EPSILON)
     }
 }

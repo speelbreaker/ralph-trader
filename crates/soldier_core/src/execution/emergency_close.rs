@@ -69,7 +69,21 @@ impl EmergencyClose {
 
     /// Execute emergency close algorithm (CONTRACT.md §3.1)
     /// Returns (attempts, hedge_used, time_ms)
-    pub fn execute(&self, _group_id: &str, initial_exposure: f64) -> EmergencyCloseResult {
+    ///
+    /// # Arguments
+    /// * `_group_id` - Group identifier for event logging
+    /// * `initial_exposure` - Initial position exposure to close
+    /// * `instrument_name` - Instrument to close (e.g., "BTC-25JAN25-50000-C")
+    /// * `close_side` - Side for close order (Buy to close short, Sell to close long)
+    /// * `hedge_instrument` - Perp instrument for delta hedge fallback (e.g., "BTC-PERP")
+    pub fn execute(
+        &self,
+        _group_id: &str,
+        initial_exposure: f64,
+        instrument_name: &str,
+        close_side: OrderSide,
+        hedge_instrument: &str,
+    ) -> EmergencyCloseResult {
         let start = Instant::now();
         let mut attempts = Vec::new();
         let mut remaining = initial_exposure.abs();
@@ -79,7 +93,7 @@ impl EmergencyClose {
             let buffer = INITIAL_BUFFER_TICKS * (1 << (attempt_num - 1)); // 5, 10, 20
 
             // Simulate close attempt (in real impl, this would dispatch IOC order)
-            let filled = self.simulate_close_attempt(remaining, buffer);
+            let filled = self.simulate_close_attempt(remaining, buffer, instrument_name, close_side);
             remaining -= filled;
 
             attempts.push(CloseAttempt {
@@ -98,7 +112,12 @@ impl EmergencyClose {
 
         // Reduce-only delta hedge fallback if still exposed
         let (hedge_used, final_exposure) = if remaining > self.epsilon {
-            let residual = self.execute_hedge_fallback(remaining);
+            // Hedge side is opposite of close side
+            let hedge_side = match close_side {
+                OrderSide::Buy => OrderSide::Sell,
+                OrderSide::Sell => OrderSide::Buy,
+            };
+            let residual = self.execute_hedge_fallback(remaining, hedge_instrument, hedge_side);
             (true, residual)
         } else {
             (false, remaining)
@@ -158,12 +177,17 @@ impl EmergencyClose {
     /// Dispatch IOC close attempt via order dispatcher
     ///
     /// Returns filled quantity. May return partial fill.
-    fn simulate_close_attempt(&self, qty: f64, buffer_ticks: i32) -> f64 {
-        // In production, this would use real instrument name from context
+    fn simulate_close_attempt(
+        &self,
+        qty: f64,
+        buffer_ticks: i32,
+        instrument_name: &str,
+        side: OrderSide,
+    ) -> f64 {
         let request = CloseOrderRequest {
-            instrument_name: "PLACEHOLDER".to_string(), // TODO: Get from group context
+            instrument_name: instrument_name.to_string(),
             qty,
-            side: OrderSide::Sell, // TODO: Determine from position direction
+            side,
             order_type: OrderType::IOC,
             buffer_ticks,
         };
@@ -179,17 +203,21 @@ impl EmergencyClose {
 
     /// Execute reduce-only delta hedge fallback via order dispatcher
     /// Returns residual exposure after hedge attempt (remaining - filled)
-    fn execute_hedge_fallback(&self, remaining: f64) -> f64 {
+    fn execute_hedge_fallback(
+        &self,
+        remaining: f64,
+        hedge_instrument: &str,
+        hedge_side: OrderSide,
+    ) -> f64 {
         eprintln!(
             "[INFO] Executing reduce-only delta hedge fallback remaining_qty={}",
             remaining
         );
 
-        // In production, this would use real instrument name and determine side
         let request = HedgeOrderRequest {
-            instrument_name: "PLACEHOLDER-PERP".to_string(), // TODO: Get perp instrument
+            instrument_name: hedge_instrument.to_string(),
             qty: remaining,
-            side: OrderSide::Buy, // TODO: Determine opposite side from position
+            side: hedge_side,
             reduce_only: true,
         };
 
@@ -214,7 +242,10 @@ fn now_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("time")
+        .unwrap_or_else(|e| {
+            eprintln!("now_ms: system time before UNIX_EPOCH: {}, using 0", e);
+            std::time::Duration::from_secs(0)
+        })
         .as_millis() as u64
 }
 
@@ -239,7 +270,13 @@ mod tests {
     #[test]
     fn test_emergency_close_three_attempts_with_doubling_buffer() {
         let ec = EmergencyClose::new_with_test_dispatcher(0.001);
-        let result = ec.execute("test-group", 1.0);
+        let result = ec.execute(
+            "test-group",
+            1.0,
+            "BTC-25JAN25-50000-C",
+            OrderSide::Sell,
+            "BTC-PERP",
+        );
 
         assert_eq!(result.close_attempts.len(), 1); // Full fill on first try
         assert_eq!(result.close_attempts[0].buffer_ticks, 5);
@@ -265,7 +302,13 @@ mod tests {
     #[test]
     fn test_atomic_naked_event_schema() {
         let ec = EmergencyClose::new_with_test_dispatcher(0.001);
-        let result = ec.execute("test-group", 1.0);
+        let result = ec.execute(
+            "test-group",
+            1.0,
+            "BTC-25JAN25-50000-C",
+            OrderSide::Sell,
+            "BTC-PERP",
+        );
 
         ec.log_atomic_naked_event("test-group", &result, 1.0, "test-strategy", "ReduceOnly");
 

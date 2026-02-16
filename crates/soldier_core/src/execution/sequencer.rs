@@ -1,5 +1,7 @@
 use std::sync::Mutex;
 
+use crate::risk::RiskState;
+
 /// Position-Aware Execution Sequencer (CONTRACT.md §1.5)
 ///
 /// Enforces close→confirm→hedge ordering to prevent creating new naked risk
@@ -18,14 +20,6 @@ pub enum IntentKind {
     Open,
     Close,
     Repair,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RiskState {
-    Healthy,
-    Degraded,
-    Maintenance,
-    Kill,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -174,12 +168,25 @@ impl Sequencer {
     }
 
     fn increment_counter(&self, name: &str) {
-        let mut metrics = self.metrics.lock().unwrap();
+        let mut metrics = match self.metrics.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("sequencer metrics lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
         *metrics.entry(name.to_string()).or_insert(0) += 1;
     }
 
     pub fn get_counter(&self, name: &str) -> u64 {
-        self.metrics.lock().unwrap().get(name).copied().unwrap_or(0)
+        let metrics = match self.metrics.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("sequencer metrics lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        metrics.get(name).copied().unwrap_or(0)
     }
 }
 

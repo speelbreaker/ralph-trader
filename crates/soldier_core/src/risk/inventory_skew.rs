@@ -114,7 +114,8 @@ pub fn evaluate_inventory_skew(
     let edge_multiplier = 1.0 + config.inventory_skew_k * directed_bias;
     let adjusted_min_edge_usd = min_edge_usd * edge_multiplier;
 
-    if edge_multiplier > config.edge_rejection_threshold {
+    // Use epsilon tolerance to avoid floating-point boundary issues
+    if edge_multiplier > config.edge_rejection_threshold + FLOAT_EPSILON {
         return InventorySkewEvaluation {
             allowed: false,
             reject_reason: Some("InventorySkew".to_string()),
