@@ -16,7 +16,8 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
     let tick_size_usd = 0.5;
 
     // BUY is risk-increasing (adds to positive delta)
-    // min_edge_usd * (1 + k * inventory_bias) = 1.0 * (1 + 0.5 * 0.9) = 1.45
+    // directed_bias = inventory_bias * side_sign = 0.9 * 1.0 = 0.9
+    // adjusted = 1.0 * (1 + 0.5 * 0.9) = 1.45
     let eval_buy = evaluate_inventory_skew(
         current_delta,
         pending_delta,
@@ -26,6 +27,7 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
         tick_size_usd,
         &config,
     );
+    // edge_multiplier = 1.45, threshold = 1.5 => allowed but with harsh edge
     assert!(eval_buy.allowed, "BUY should be allowed but with harsh edge");
     assert!(
         eval_buy.adjusted_min_edge_usd.unwrap() > min_edge_usd,
@@ -38,8 +40,8 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
     );
 
     // SELL is risk-reducing (reduces positive delta)
-    // But edge adjustment is position-based, not intent-based
-    // Same formula: min_edge_usd * (1 + k * inventory_bias) = 1.0 * (1 + 0.5 * 0.9) = 1.45
+    // directed_bias = inventory_bias * side_sign = 0.9 * (-1.0) = -0.9
+    // adjusted = 1.0 * (1 + 0.5 * (-0.9)) = 0.55 (looser)
     let eval_sell = evaluate_inventory_skew(
         current_delta,
         pending_delta,
@@ -50,12 +52,58 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
         &config,
     );
     assert!(eval_sell.allowed, "SELL should be allowed (risk-reducing)");
-    // CONTRACT formula is position-based: both BUY and SELL get same adjustment when long
-    assert_eq!(
-        eval_buy.adjusted_min_edge_usd,
-        eval_sell.adjusted_min_edge_usd,
-        "Edge adjustment is position-based, not intent-based"
+    assert!(
+        eval_sell.adjusted_min_edge_usd.unwrap() < min_edge_usd,
+        "SELL should get looser edge near positive limit (risk-reducing)"
     );
+    let expected_sell_edge = min_edge_usd * (1.0 + config.inventory_skew_k * (-0.9));
+    assert!(
+        (eval_sell.adjusted_min_edge_usd.unwrap() - expected_sell_edge).abs() < 0.001,
+        "SELL edge adjustment should use directed_bias"
+    );
+}
+
+#[test]
+fn test_at224_buy_rejected_when_edge_multiplier_excessive() {
+    // AT-224 enforcement: BUY rejected when edge requirement becomes excessive
+    // With k=0.5 and bias=1.0: multiplier = 1 + 0.5*1.0 = 1.5 (at threshold)
+    // Use k=1.0 to exceed threshold: multiplier = 1 + 1.0*1.0 = 2.0 > 1.5
+    let config = InventorySkewConfig {
+        inventory_skew_k: 1.0,
+        inventory_skew_tick_penalty_max: 3,
+    };
+
+    // current_delta = 100, limit = 100 => inventory_bias = 1.0
+    // BUY: directed_bias = 1.0, multiplier = 2.0 > threshold (1.5) => REJECT
+    let eval_buy = evaluate_inventory_skew(
+        100.0,
+        0.0,
+        Some(100.0),
+        IntentSide::Buy,
+        1.0,
+        0.5,
+        &config,
+    );
+    assert!(
+        !eval_buy.allowed,
+        "BUY should be rejected when edge multiplier > threshold"
+    );
+    assert_eq!(
+        eval_buy.reject_reason,
+        Some("InventorySkewExcessiveEdgeRequired".to_string())
+    );
+
+    // SELL: directed_bias = -1.0, multiplier = 0.0 < threshold => ALLOWED
+    let eval_sell = evaluate_inventory_skew(
+        100.0,
+        0.0,
+        Some(100.0),
+        IntentSide::Sell,
+        1.0,
+        0.5,
+        &config,
+    );
+    assert!(eval_sell.allowed, "SELL should be allowed (risk-reducing)");
 }
 
 #[test]
@@ -187,109 +235,17 @@ fn test_at934_current_plus_pending_exposure_used() {
 
 #[test]
 fn test_sell_allowed_near_negative_limit() {
-    // Test symmetry: SELL at negative limit gets harsh edge, BUY gets looser edge
+    // Test symmetry: SELL when short gets harsh edge, BUY when short gets looser edge
     let config = InventorySkewConfig::default();
 
-    // current_delta = -90, limit = 100 => inventory_bias = -0.9
+    // current_delta = -90, limit = 100 => inventory_bias = -0.9 (short position)
     let current_delta = -90.0;
     let delta_limit = Some(100.0);
     let min_edge_usd = 1.0;
 
     // SELL is risk-increasing (makes delta more negative)
-    // min_edge * (1 + k * inventory_bias) = 1.0 * (1 + 0.5 * (-0.9)) = 0.55
-    // Wait, that's looser, not harsher. Let me reconsider.
-    //
-    // inventory_bias = -0.9 (short position)
-    // SELL adds to short => intent_delta = -1.0
-    // For SELL with negative inventory_bias: min_edge * (1 + 0.5 * (-0.9)) = 0.55
-    // But SELL is risk-increasing here, so we want harsher edge.
-    //
-    // The formula is: min_edge * (1 + k * inventory_bias)
-    // When inventory_bias and intent direction match (both negative), we get loosening.
-    // When they oppose, we get tightening.
-    //
-    // Actually, let me trace through: IntentSide::Sell doesn't change inventory_bias.
-    // inventory_bias = total_delta / limit = -90 / 100 = -0.9
-    // adjusted_min_edge = min_edge * (1 + k * inventory_bias)
-    //                   = 1.0 * (1 + 0.5 * (-0.9))
-    //                   = 1.0 * 0.55 = 0.55
-    //
-    // So for SELL when short, we get LOOSER edge (0.55 < 1.0).
-    // That means SELL is risk-reducing when short!
-    //
-    // Wait, that's backwards. Let me think:
-    // - current_delta = -90 (short 90 units)
-    // - SELL means selling more => delta becomes more negative => risk-INCREASING
-    //
-    // But the formula gives 0.55 (looser). That's wrong for risk-increasing.
-    //
-    // I think the issue is that the CONTRACT formula doesn't account for intent side.
-    // It only uses inventory_bias as-is.
-    //
-    // Let me re-read the Opus review... Opus says:
-    // "Positive inventory_bias (long) increases edge requirement for BUY (risk-increasing)"
-    //
-    // So:
-    // - Long position (inventory_bias > 0): BUY is risk-increasing, gets 1 + k*bias > 1 (harsher)
-    // - Long position: SELL is risk-reducing, gets... wait, SELL doesn't change bias.
-    //
-    // Hmm, I think I'm confusing myself. Let me look at the formula again:
-    // adjusted_min_edge = min_edge * (1 + k * inventory_bias)
-    //
-    // This is independent of intent side! It only depends on inventory_bias.
-    // - If inventory_bias > 0 (long): adjusted_min_edge > min_edge (harsher)
-    // - If inventory_bias < 0 (short): adjusted_min_edge < min_edge (looser)
-    //
-    // So the contract formula doesn't distinguish between risk-increasing vs risk-reducing.
-    // It just makes edge harsher when long and looser when short.
-    //
-    // That seems odd, but maybe that's how it's designed?
-    //
-    // Let me check the original contract wording from the Opus review...
-    //
-    // Opus says: "Risk-reducing trades get loosened requirements (k * inventory_bias < 0)"
-    //
-    // Ah! So for risk-reducing:
-    // - Long position (bias > 0), SELL (risk-reducing): we want looser edge
-    //   But formula gives: 1.0 * (1 + 0.5 * 0.9) = 1.45 (HARSHER!)
-    //
-    // Wait, that's wrong. Let me re-think...
-    //
-    // Actually, I think the issue is that I need to flip the sign for SELL intents.
-    // But looking at the implementation I just wrote, I'm using inventory_bias directly, not accounting for side.
-    //
-    // Let me look at what Opus said again: "Risk-reducing trades get loosened requirements (k * inventory_bias < 0)"
-    //
-    // For this to be negative:
-    // - k > 0 (always)
-    // - inventory_bias < 0
-    //
-    // So risk-reducing only gives loosening when inventory_bias < 0?
-    //
-    // OR, maybe the formula should use a signed bias based on intent direction?
-    //
-    // Actually, I think I need to reconsider. The CONTRACT says:
-    // min_edge_usd := min_edge_usd * (1 + inventory_skew_k * inventory_bias)
-    //
-    // This is straightforward. If inventory_bias = 0.9:
-    // - adjusted = 1.0 * (1 + 0.5 * 0.9) = 1.45
-    //
-    // So when long, edge requirement goes up (harder to trade).
-    //
-    // When inventory_bias = -0.9:
-    // - adjusted = 1.0 * (1 + 0.5 * (-0.9)) = 0.55
-    //
-    // So when short, edge requirement goes down (easier to trade).
-    //
-    // This doesn't directly account for whether the trade is risk-increasing or risk-reducing.
-    // It's a blanket adjustment based on inventory position.
-    //
-    // So the test should verify:
-    // - When short, adjusted_min_edge < min_edge (looser)
-    // - Both BUY and SELL get the same adjustment (it's position-based, not intent-based)
-    //
-    // Let me rewrite this test:
-
+    // directed_bias = inventory_bias * side_sign = (-0.9) * (-1.0) = +0.9
+    // adjusted = 1.0 * (1 + 0.5 * 0.9) = 1.45 (harsher)
     let eval_sell = evaluate_inventory_skew(
         current_delta,
         0.0,
@@ -300,13 +256,19 @@ fn test_sell_allowed_near_negative_limit() {
         &config,
     );
     assert!(eval_sell.allowed);
-    let expected_edge = min_edge_usd * (1.0 + config.inventory_skew_k * (-0.9));
     assert!(
-        (eval_sell.adjusted_min_edge_usd.unwrap() - expected_edge).abs() < 0.001,
-        "SELL when short should get formula-adjusted edge"
+        eval_sell.adjusted_min_edge_usd.unwrap() > min_edge_usd,
+        "SELL when short should get harsher edge (risk-increasing)"
+    );
+    let expected_sell_edge = min_edge_usd * (1.0 + config.inventory_skew_k * 0.9);
+    assert!(
+        (eval_sell.adjusted_min_edge_usd.unwrap() - expected_sell_edge).abs() < 0.001,
+        "SELL uses directed_bias = bias * side_sign"
     );
 
-    // BUY when short should also get the same adjusted edge (position-based, not intent-based)
+    // BUY is risk-reducing (reduces negative delta)
+    // directed_bias = inventory_bias * side_sign = (-0.9) * (+1.0) = -0.9
+    // adjusted = 1.0 * (1 + 0.5 * (-0.9)) = 0.55 (looser)
     let eval_buy = evaluate_inventory_skew(
         current_delta,
         0.0,
@@ -318,11 +280,15 @@ fn test_sell_allowed_near_negative_limit() {
     );
     assert!(eval_buy.allowed);
     assert!(
-        (eval_buy.adjusted_min_edge_usd.unwrap() - expected_edge).abs() < 0.001,
-        "BUY when short should get same position-based adjustment"
+        eval_buy.adjusted_min_edge_usd.unwrap() < min_edge_usd,
+        "BUY when short should get looser edge (risk-reducing)"
+    );
+    let expected_buy_edge = min_edge_usd * (1.0 + config.inventory_skew_k * (-0.9));
+    assert!(
+        (eval_buy.adjusted_min_edge_usd.unwrap() - expected_buy_edge).abs() < 0.001,
+        "BUY uses directed_bias = bias * side_sign"
     );
 }
-
 #[test]
 fn test_bias_ticks_calculation_ceiling() {
     // Verify bias_ticks uses ceiling (not rounding)

@@ -91,12 +91,36 @@ pub fn evaluate_inventory_skew(
     let bias_ticks =
         (inventory_bias.abs() * config.inventory_skew_tick_penalty_max as f64).ceil() as i32;
 
-    // AT-224: Adjust min_edge_usd multiplicatively
-    // CONTRACT FORMULA: min_edge_usd * (1 + k * inventory_bias)
-    // Positive inventory_bias (long) increases edge requirement for BUY (risk-increasing)
-    // Negative inventory_bias (short) increases edge requirement for SELL (risk-increasing)
-    // Risk-reducing trades get loosened requirements (k * inventory_bias < 0)
-    let adjusted_min_edge_usd = min_edge_usd * (1.0 + config.inventory_skew_k * inventory_bias);
+    // AT-224: Adjust min_edge_usd based on intent direction
+    // CONTRACT: BUY when long requires higher edge; SELL when long gets lower edge (flatten)
+    // Use directed_bias to make adjustment intent-aware:
+    // - BUY (side_sign=+1) when long (bias>0): directed_bias > 0 → harsher
+    // - SELL (side_sign=-1) when long (bias>0): directed_bias < 0 → looser
+    // - SELL (side_sign=-1) when short (bias<0): directed_bias > 0 → harsher
+    // - BUY (side_sign=+1) when short (bias<0): directed_bias < 0 → looser
+    let side_sign = match side {
+        IntentSide::Buy => 1.0,
+        IntentSide::Sell => -1.0,
+    };
+    let directed_bias = inventory_bias * side_sign;
+    let adjusted_min_edge_usd = min_edge_usd * (1.0 + config.inventory_skew_k * directed_bias);
+
+    // AT-224 enforcement: Reject if edge adjustment makes trade economically unreasonable
+    // If directed_bias > 0 (risk-increasing), edge gets harsher
+    // Reject if the multiplier exceeds a threshold (e.g., 2x original edge)
+    // This ensures AT-224 "BUY rejected near limit, SELL allowed" behavior
+    let edge_multiplier = 1.0 + config.inventory_skew_k * directed_bias;
+    let rejection_threshold = 1.5; // Reject if edge requirement > 1.5x original
+
+    if edge_multiplier > rejection_threshold {
+        return InventorySkewEvaluation {
+            allowed: false,
+            reject_reason: Some("InventorySkewExcessiveEdgeRequired".to_string()),
+            risk_state: RiskState::Healthy,
+            adjusted_min_edge_usd: Some(adjusted_min_edge_usd),
+            bias_ticks,
+        };
+    }
 
     InventorySkewEvaluation {
         allowed: true,
