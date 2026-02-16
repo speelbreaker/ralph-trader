@@ -303,3 +303,63 @@ Summary: Implemented self-impact feedback loop guard (CONTRACT.md §1.2.3): stal
 Commands: cargo test -p soldier_core --test test_self_impact; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/risk/self_impact_guard.rs; crates/soldier_core/tests/test_self_impact.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_post.log; VERIFY OK (mode=quick).
 Next: Mark S7-005 as passing.
+Story: S6-007
+Date: 2026-02-15
+Summary: Implemented Inventory Skew Gate (§1.4.2) with inventory_bias computation, risk-increasing trade rejection near limits, tick penalty adjustment, and delta_limit missing handling; added 10 comprehensive tests covering AT-224 (BUY/SELL directionality), AT-043/AT-922 (delta_limit missing), AT-030 (3 tick shift), and AT-934 (current+pending exposure); acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_inventory_skew; cargo fmt.
+Evidence: crates/soldier_core/src/risk/inventory_skew.rs; crates/soldier_core/tests/test_inventory_skew.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (10/10 passed).
+Next: Commit and run ./plans/verify.sh quick on clean tree.
+Story: S6-007
+Date: 2026-02-15
+Summary: Verified S6-007 Inventory Skew Gate implementation from previous iteration; all 10 tests pass covering AT-224 (BUY/SELL directionality), AT-043/AT-922 (delta_limit missing), AT-030 (3 tick shift), AT-934 (current+pending exposure); baseline verify quick GREEN; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_inventory_skew.
+Evidence: crates/soldier_core/src/risk/inventory_skew.rs; crates/soldier_core/tests/test_inventory_skew.rs; .ralph/verify_pre.log; cargo test output (10/10 passed).
+Next: Mark S6-007 as passing.
+Story: S6-008
+Date: 2026-02-16
+Summary: Implemented PendingExposure Reservation (§1.4.2.1) with atomic delta tracking per instrument; reserve() checks budget breach before dispatch and rejects with BudgetExceeded reason; release() frees capacity on terminal outcomes; added 10 tests covering AT-225 (5 concurrent opens, subset reserves), AT-910 (budget breach rejection), current+pending exposure, and edge cases; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/init.sh; cargo test -p soldier_core --test test_pending_exposure; cargo fmt.
+Evidence: crates/soldier_core/src/risk/pending_exposure.rs; crates/soldier_core/tests/test_pending_exposure.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (10/10 passed).
+Next: Commit and run ./plans/verify.sh quick on clean tree.
+Story: S6-008
+Date: 2026-02-16
+Summary: Verified S6-008 PendingExposure Reservation implementation from previous iteration; all 10 tests pass including AT-225 (5 concurrent opens, subset reserves) and AT-910 (budget breach rejection with BudgetExceeded reason); baseline verify quick GREEN; implementation complete with atomic delta tracking, reserve/release API, and comprehensive edge-case coverage; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/init.sh; ./plans/verify.sh quick; cargo test -p soldier_core --test test_pending_exposure.
+Evidence: crates/soldier_core/src/risk/pending_exposure.rs; crates/soldier_core/tests/test_pending_exposure.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_pre.log; .ralph/test_pending_exposure.log; all 10 tests passed.
+Next: Mark S6-008 as passing.
+Story: S6-008
+Date: 2026-02-16
+Summary: Verified S6-008 PendingExposure Reservation (§1.4.2.1) implementation is complete and passing all gates; implementation provides atomic per-instrument reservation with reserve/release API preventing concurrent signal over-allocation; all 10 tests pass including AT-225 (5 concurrent opens, subset reserves) and AT-910 (budget breach rejection with BudgetExceeded reason); baseline and post-implementation verify quick are GREEN; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh quick (baseline and post-verify); cargo test -p soldier_core --test test_pending_exposure.
+Evidence: crates/soldier_core/src/risk/pending_exposure.rs; crates/soldier_core/tests/test_pending_exposure.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_pre.log; .ralph/verify_post.log; .ralph/test_pending_exposure.log; all 10 tests passed; VERIFY OK (mode=quick) pre and post.
+Next: Mark S6-008 as passing.
+Story: S6-008
+Date: 2026-02-16
+Summary: Final verification iteration confirms S6-008 PendingExposure Reservation (§1.4.2.1) is complete and passing all gates; implementation provides atomic per-instrument reservation with reserve/release API preventing concurrent signal over-allocation of risk budget; all 10 tests pass including AT-225 (5 concurrent opens, subset reserves based on budget) and AT-910 (budget breach rejection with BudgetExceeded reason, no dispatch); baseline verify quick GREEN; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_pending_exposure -- --nocapture.
+Evidence: crates/soldier_core/src/risk/pending_exposure.rs; crates/soldier_core/tests/test_pending_exposure.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify/20260216-095302; all 10 tests passed (test_at_225_concurrent_opens_subset_reserves, test_at_910_budget_breach_rejection, plus 8 edge case tests); VERIFY OK (mode=quick).
+Next: Mark S6-008 as passing.
+Story: S6-008
+Date: 2026-02-16
+Summary: Verification confirmed S6-008 PendingExposure Reservation (§1.4.2.1) implementation is complete and passing all gates; atomic per-instrument reservation with reserve/release API prevents concurrent signal over-allocation of risk budget; all 10 tests pass including AT-225 (5 concurrent opens, subset reserves based on budget) and AT-910 (budget breach rejection with BudgetExceeded reason, no dispatch); baseline verify quick GREEN; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_pending_exposure.
+Evidence: crates/soldier_core/src/risk/pending_exposure.rs; crates/soldier_core/tests/test_pending_exposure.rs; crates/soldier_core/src/risk/mod.rs; .ralph/verify_current.log; .ralph/test_pending_exposure_current.log; all 10 tests passed; VERIFY OK (mode=quick).
+Next: Mark S6-008 as passing.
+Story: S6-009
+Date: 2026-02-16
+Summary: Implemented Global Exposure Budget (§1.4.2.2) with correlation-aware portfolio aggregation to prevent safe per-instrument trades from stacking into unsafe portfolio exposure; created exposure_budget.rs with correlation buckets (BTC/ETH=0.8, BTC/alts=0.6, ETH/alts=0.6), portfolio variance computation, and breach detection with GlobalExposureBudgetExceeded rejection; added 9 comprehensive tests covering AT-226 (BTC+ETH correlation breach), AT-911 (portfolio breach rejection), AT-929 (current+pending exposure), plus edge cases for single/multi-instrument portfolios and short positions; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_exposure_budget; cargo fmt.
+Evidence: crates/soldier_core/src/risk/exposure_budget.rs; crates/soldier_core/tests/test_exposure_budget.rs; crates/soldier_core/src/risk/mod.rs; cargo test output (9/9 passed).
+Next: Commit and run ./plans/verify.sh quick on clean tree.
+Story: S6-009
+Date: 2026-02-16
+Summary: Verified S6-009 Global Exposure Budget (§1.4.2.2) implementation from previous iteration is complete and passing all gates; correlation-aware portfolio aggregation prevents safe per-instrument trades from stacking into unsafe portfolio exposure using correlation buckets (BTC/ETH=0.8, BTC/alts=0.6, ETH/alts=0.6); all 9 tests pass including AT-226 (BTC+ETH correlation breach), AT-911 (portfolio breach rejection with GlobalExposureBudgetExceeded), AT-929 (current+pending exposure); baseline verify quick GREEN; acknowledged AGENTS.md and plans/progress.txt.
+Commands: ./plans/verify.sh quick; cargo test -p soldier_core --test test_exposure_budget.
+Evidence: crates/soldier_core/src/risk/exposure_budget.rs; crates/soldier_core/tests/test_exposure_budget.rs; crates/soldier_core/src/risk/mod.rs; all 9 tests passed; VERIFY OK (mode=quick).
+Next: Mark S6-009 as passing.
+Story: S6-010
+Date: 2026-02-16
+Summary: Implemented Margin Headroom Gate (§1.4.3) with mm_util thresholds for liquidation shield; created margin_gate.rs with MarginSnapshot, mm_util computation (maintenance_margin / max(equity, epsilon)), gate evaluation for OPEN rejection at mm_util_reject_opens (0.70), TradingMode recommendations (ReduceOnly at 0.85, Kill at 0.95); extended account_summary.rs with maintenance_margin, initial_margin, equity fields; added 11 comprehensive tests covering AT-227 (OPEN rejected at 72%), AT-912 (MarginHeadroomRejectOpens reason), AT-228 (ReduceOnly at 90%), AT-206 (gate independent of mode), AT-207 (ReduceOnly allows closes), AT-208 (Kill at 95%), plus edge cases for zero/negative equity, exact thresholds, custom config; acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_margin_gate; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
+Evidence: crates/soldier_core/src/risk/margin_gate.rs; crates/soldier_core/tests/test_margin_gate.rs; crates/soldier_core/src/risk/mod.rs; crates/soldier_infra/src/deribit/account_summary.rs; all 11 tests passed; VERIFY OK (mode=quick).
+Next: Mark S6-010 as passing.

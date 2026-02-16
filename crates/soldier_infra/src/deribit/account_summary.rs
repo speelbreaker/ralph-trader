@@ -15,6 +15,12 @@ pub struct DeribitAccountSummary {
         alias = "timestamp"
     )]
     pub fee_model_cached_at_ts_ms: Option<u64>,
+    #[serde(default)]
+    pub maintenance_margin: Option<f64>,
+    #[serde(default)]
+    pub initial_margin: Option<f64>,
+    #[serde(default)]
+    pub equity: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

@@ -79,7 +79,7 @@ impl EmergencyClose {
             let buffer = INITIAL_BUFFER_TICKS * (1 << (attempt_num - 1)); // 5, 10, 20
 
             // Simulate close attempt (in real impl, this would dispatch IOC order)
-            let filled = self.simulate_close_attempt(remaining);
+            let filled = self.simulate_close_attempt(remaining, buffer);
             remaining -= filled;
 
             attempts.push(CloseAttempt {
@@ -97,14 +97,12 @@ impl EmergencyClose {
         }
 
         // Reduce-only delta hedge fallback if still exposed
-        let hedge_used = if remaining > self.epsilon {
-            self.execute_hedge_fallback(remaining);
-            true
+        let (hedge_used, final_exposure) = if remaining > self.epsilon {
+            let residual = self.execute_hedge_fallback(remaining);
+            (true, residual)
         } else {
-            false
+            (false, remaining)
         };
-
-        let final_exposure = if hedge_used { 0.0 } else { remaining };
         let time_ms = start.elapsed().as_millis() as u64;
 
         record_time_to_neutral_metric(time_ms);
@@ -160,14 +158,14 @@ impl EmergencyClose {
     /// Dispatch IOC close attempt via order dispatcher
     ///
     /// Returns filled quantity. May return partial fill.
-    fn simulate_close_attempt(&self, qty: f64) -> f64 {
+    fn simulate_close_attempt(&self, qty: f64, buffer_ticks: i32) -> f64 {
         // In production, this would use real instrument name from context
         let request = CloseOrderRequest {
             instrument_name: "PLACEHOLDER".to_string(), // TODO: Get from group context
             qty,
             side: OrderSide::Sell, // TODO: Determine from position direction
             order_type: OrderType::IOC,
-            buffer_ticks: 0, // Set by caller based on attempt number
+            buffer_ticks,
         };
 
         match self.dispatcher.dispatch_close(&request) {
@@ -180,7 +178,8 @@ impl EmergencyClose {
     }
 
     /// Execute reduce-only delta hedge fallback via order dispatcher
-    fn execute_hedge_fallback(&self, remaining: f64) {
+    /// Returns residual exposure after hedge attempt (remaining - filled)
+    fn execute_hedge_fallback(&self, remaining: f64) -> f64 {
         eprintln!(
             "[INFO] Executing reduce-only delta hedge fallback remaining_qty={}",
             remaining
@@ -196,13 +195,16 @@ impl EmergencyClose {
 
         match self.dispatcher.dispatch_hedge(&request) {
             Ok(result) => {
+                let residual = remaining - result.filled_qty;
                 eprintln!(
-                    "[INFO] Hedge fallback completed: requested={} filled={}",
-                    result.requested_qty, result.filled_qty
+                    "[INFO] Hedge fallback completed: requested={} filled={} residual={}",
+                    result.requested_qty, result.filled_qty, residual
                 );
+                residual
             }
             Err(e) => {
                 eprintln!("[ERROR] Hedge fallback failed: {}", e);
+                remaining // Hedge failed, full exposure remains
             }
         }
     }

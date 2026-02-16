@@ -1,0 +1,259 @@
+//! Global Exposure Budget (Cross-Instrument, Correlation-Aware)
+//!
+//! Implements §1.4.2.2 from CONTRACT.md.
+//!
+//! Prevents "safe per-instrument" trades from stacking into unsafe portfolio exposure
+//! by using correlation-aware aggregation across instruments.
+//!
+//! # Model
+//! - Track exposures per instrument: `delta_usd` (required), `vega_usd` (optional), `gamma_usd` (optional)
+//! - Portfolio aggregation uses conservative correlation buckets:
+//!   - `corr(BTC,ETH)=0.8`, `corr(BTC,alts)=0.6`, `corr(ETH,alts)=0.6`
+//! - Gate new opens if portfolio exposure breaches limits even if single-instrument gates pass
+//! - Rejections for portfolio breach MUST use `Rejected(GlobalExposureBudgetExceeded)`
+//!
+//! # Integration Rule
+//! The Global Budget must be checked using **current + pending** exposure (see §1.4.2.1).
+
+use std::collections::HashMap;
+
+/// Instrument exposure in USD
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InstrumentExposure {
+    pub delta_usd: f64,
+}
+
+/// Portfolio-level exposure budget configuration
+#[derive(Debug, Clone)]
+pub struct GlobalBudgetConfig {
+    /// Maximum portfolio delta exposure in USD
+    pub portfolio_delta_limit_usd: f64,
+}
+
+/// Result of global budget evaluation
+#[derive(Debug, Clone, PartialEq)]
+pub enum GlobalBudgetResult {
+    /// Budget check passed
+    Pass,
+    /// Portfolio budget would be exceeded
+    GlobalExposureBudgetExceeded {
+        portfolio_delta_after: f64,
+        limit: f64,
+    },
+}
+
+/// Correlation bucket for an instrument
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum CorrelationBucket {
+    Btc,
+    Eth,
+    Alts,
+}
+
+impl CorrelationBucket {
+    /// Classify instrument into correlation bucket based on symbol
+    fn classify(instrument_id: &str) -> Self {
+        let upper = instrument_id.to_uppercase();
+        if upper.starts_with("BTC") || upper.contains("BTC-") {
+            CorrelationBucket::Btc
+        } else if upper.starts_with("ETH") || upper.contains("ETH-") {
+            CorrelationBucket::Eth
+        } else {
+            CorrelationBucket::Alts
+        }
+    }
+
+    /// Get correlation coefficient between two buckets
+    fn correlation(a: CorrelationBucket, b: CorrelationBucket) -> f64 {
+        use CorrelationBucket::*;
+        match (a, b) {
+            (Btc, Btc) | (Eth, Eth) | (Alts, Alts) => 1.0,
+            (Btc, Eth) | (Eth, Btc) => 0.8,
+            (Btc, Alts) | (Alts, Btc) => 0.6,
+            (Eth, Alts) | (Alts, Eth) => 0.6,
+        }
+    }
+}
+
+/// Global exposure budget evaluator
+pub struct GlobalExposureBudget {
+    config: GlobalBudgetConfig,
+}
+
+impl GlobalExposureBudget {
+    /// Create a new global budget evaluator
+    pub fn new(config: GlobalBudgetConfig) -> Self {
+        Self { config }
+    }
+
+    /// Evaluate if a new trade would breach the portfolio budget
+    ///
+    /// # Arguments
+    /// * `current_exposures` - Current + pending exposure per instrument (combined per §1.4.2.1)
+    /// * `new_instrument` - Instrument for the new trade
+    /// * `new_delta_usd` - Additional delta USD from the new trade
+    ///
+    /// # Returns
+    /// * `GlobalBudgetResult::Pass` if portfolio budget OK
+    /// * `GlobalBudgetResult::GlobalExposureBudgetExceeded` if portfolio would breach
+    pub fn evaluate(
+        &self,
+        current_exposures: &HashMap<String, InstrumentExposure>,
+        new_instrument: &str,
+        new_delta_usd: f64,
+    ) -> GlobalBudgetResult {
+        // Build portfolio exposure after adding new trade
+        let mut exposures_after = current_exposures.clone();
+        exposures_after
+            .entry(new_instrument.to_string())
+            .and_modify(|e| e.delta_usd += new_delta_usd)
+            .or_insert(InstrumentExposure {
+                delta_usd: new_delta_usd,
+            });
+
+        // Compute correlation-aware portfolio delta
+        let portfolio_delta = self.compute_portfolio_delta(&exposures_after);
+
+        // Check against limit
+        if portfolio_delta.abs() > self.config.portfolio_delta_limit_usd {
+            GlobalBudgetResult::GlobalExposureBudgetExceeded {
+                portfolio_delta_after: portfolio_delta,
+                limit: self.config.portfolio_delta_limit_usd,
+            }
+        } else {
+            GlobalBudgetResult::Pass
+        }
+    }
+
+    /// Compute correlation-aware portfolio delta from per-instrument exposures
+    ///
+    /// Uses correlation buckets:
+    /// - corr(BTC, BTC) = 1.0
+    /// - corr(BTC, ETH) = 0.8
+    /// - corr(BTC, alts) = 0.6
+    /// - corr(ETH, alts) = 0.6
+    ///
+    /// Portfolio variance = sum_i sum_j corr(i,j) * delta_i * delta_j
+    /// Portfolio delta = sqrt(variance) with sign preserved from net delta
+    fn compute_portfolio_delta(&self, exposures: &HashMap<String, InstrumentExposure>) -> f64 {
+        if exposures.is_empty() {
+            return 0.0;
+        }
+
+        // Group exposures by correlation bucket
+        let mut bucket_deltas: HashMap<CorrelationBucket, f64> = HashMap::new();
+        for (instrument_id, exposure) in exposures {
+            let bucket = CorrelationBucket::classify(instrument_id);
+            *bucket_deltas.entry(bucket).or_insert(0.0) += exposure.delta_usd;
+        }
+
+        // Compute portfolio variance using correlation matrix
+        // Use signed deltas so opposite positions (hedge) reduce variance
+        let mut variance = 0.0;
+        for (&bucket_i, &delta_i) in &bucket_deltas {
+            for (&bucket_j, &delta_j) in &bucket_deltas {
+                let corr = CorrelationBucket::correlation(bucket_i, bucket_j);
+                variance += corr * delta_i * delta_j;
+            }
+        }
+
+        // Portfolio delta is sqrt of variance, with sign from net delta
+        let net_delta: f64 = bucket_deltas.values().sum();
+        let portfolio_delta = variance.sqrt();
+
+        // Preserve sign
+        if net_delta < 0.0 {
+            -portfolio_delta
+        } else {
+            portfolio_delta
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_correlation_bucket_classification() {
+        assert_eq!(
+            CorrelationBucket::classify("BTC-PERP"),
+            CorrelationBucket::Btc
+        );
+        assert_eq!(
+            CorrelationBucket::classify("BTC-25JAN25"),
+            CorrelationBucket::Btc
+        );
+        assert_eq!(
+            CorrelationBucket::classify("ETH-PERP"),
+            CorrelationBucket::Eth
+        );
+        assert_eq!(
+            CorrelationBucket::classify("ETH-25JAN25"),
+            CorrelationBucket::Eth
+        );
+        assert_eq!(
+            CorrelationBucket::classify("SOL-PERP"),
+            CorrelationBucket::Alts
+        );
+        assert_eq!(
+            CorrelationBucket::classify("DOGE-PERP"),
+            CorrelationBucket::Alts
+        );
+    }
+
+    #[test]
+    fn test_correlation_coefficients() {
+        assert_eq!(
+            CorrelationBucket::correlation(CorrelationBucket::Btc, CorrelationBucket::Btc),
+            1.0
+        );
+        assert_eq!(
+            CorrelationBucket::correlation(CorrelationBucket::Btc, CorrelationBucket::Eth),
+            0.8
+        );
+        assert_eq!(
+            CorrelationBucket::correlation(CorrelationBucket::Btc, CorrelationBucket::Alts),
+            0.6
+        );
+        assert_eq!(
+            CorrelationBucket::correlation(CorrelationBucket::Eth, CorrelationBucket::Alts),
+            0.6
+        );
+    }
+
+    #[test]
+    fn test_single_instrument_within_limit() {
+        let config = GlobalBudgetConfig {
+            portfolio_delta_limit_usd: 10000.0,
+        };
+        let budget = GlobalExposureBudget::new(config);
+
+        let exposures = HashMap::new();
+        let result = budget.evaluate(&exposures, "BTC-PERP", 5000.0);
+
+        assert_eq!(result, GlobalBudgetResult::Pass);
+    }
+
+    #[test]
+    fn test_single_instrument_exceeds_limit() {
+        let config = GlobalBudgetConfig {
+            portfolio_delta_limit_usd: 10000.0,
+        };
+        let budget = GlobalExposureBudget::new(config);
+
+        let exposures = HashMap::new();
+        let result = budget.evaluate(&exposures, "BTC-PERP", 15000.0);
+
+        match result {
+            GlobalBudgetResult::GlobalExposureBudgetExceeded {
+                portfolio_delta_after,
+                limit,
+            } => {
+                assert!(portfolio_delta_after.abs() > 10000.0);
+                assert_eq!(limit, 10000.0);
+            }
+            _ => panic!("Expected GlobalExposureBudgetExceeded"),
+        }
+    }
+}
