@@ -687,12 +687,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/pending_exposure.rs",
           "crates/soldier_core/tests/test_pending_exposure.rs"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
