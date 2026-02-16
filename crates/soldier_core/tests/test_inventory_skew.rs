@@ -17,7 +17,7 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
 
     // BUY is risk-increasing (adds to positive delta)
     // directed_bias = inventory_bias * side_sign = 0.9 * 1.0 = 0.9
-    // adjusted = 1.0 * (1 + 0.5 * 0.9) = 1.45
+    // edge_multiplier = 1.0 + 0.5 * 0.9 = 1.45 > threshold (1.4) => REJECTED
     let eval_buy = evaluate_inventory_skew(
         current_delta,
         pending_delta,
@@ -27,16 +27,14 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
         tick_size_usd,
         &config,
     );
-    // edge_multiplier = 1.45, threshold = 1.5 => allowed but with harsh edge
-    assert!(eval_buy.allowed, "BUY should be allowed but with harsh edge");
     assert!(
-        eval_buy.adjusted_min_edge_usd.unwrap() > min_edge_usd,
-        "BUY should require higher edge near positive limit"
+        !eval_buy.allowed,
+        "BUY should be rejected near positive limit (AT-224)"
     );
-    let expected_buy_edge = min_edge_usd * (1.0 + config.inventory_skew_k * 0.9);
-    assert!(
-        (eval_buy.adjusted_min_edge_usd.unwrap() - expected_buy_edge).abs() < 0.001,
-        "Edge adjustment should match formula"
+    assert_eq!(
+        eval_buy.reject_reason,
+        Some("InventorySkewExcessiveEdgeRequired".to_string()),
+        "BUY rejection reason should indicate excessive edge"
     );
 
     // SELL is risk-reducing (reduces positive delta)
@@ -65,16 +63,12 @@ fn test_at224_buy_rejected_near_limit_sell_allowed() {
 
 #[test]
 fn test_at224_buy_rejected_when_edge_multiplier_excessive() {
-    // AT-224 enforcement: BUY rejected when edge requirement becomes excessive
-    // With k=0.5 and bias=1.0: multiplier = 1 + 0.5*1.0 = 1.5 (at threshold)
-    // Use k=1.0 to exceed threshold: multiplier = 1 + 1.0*1.0 = 2.0 > 1.5
-    let config = InventorySkewConfig {
-        inventory_skew_k: 1.0,
-        inventory_skew_tick_penalty_max: 3,
-    };
+    // AT-224 enforcement: BUY rejected at full inventory limit
+    // With k=0.5 and bias=1.0: multiplier = 1 + 0.5*1.0 = 1.5 > threshold (1.4) => REJECT
+    let config = InventorySkewConfig::default(); // threshold = 1.4
 
     // current_delta = 100, limit = 100 => inventory_bias = 1.0
-    // BUY: directed_bias = 1.0, multiplier = 2.0 > threshold (1.5) => REJECT
+    // BUY: directed_bias = 1.0, multiplier = 1.5 > 1.4 => REJECT
     let eval_buy = evaluate_inventory_skew(
         100.0,
         0.0,
@@ -169,6 +163,7 @@ fn test_at030_exact_three_tick_penalty_at_inventory_bias_one() {
     // AT-030 verification with explicit inventory_bias = 1.0
     let config = InventorySkewConfig {
         inventory_skew_k: 0.5, // CONTRACT default
+        edge_rejection_threshold: 1.4,
         inventory_skew_tick_penalty_max: 3,
     };
 
@@ -195,10 +190,10 @@ fn test_at934_current_plus_pending_exposure_used() {
     // AT-934: current + pending exposure used for decision
     let config = InventorySkewConfig::default();
 
-    // current_delta = 70, pending_delta = 30, limit = 100
-    // total = 100 => inventory_bias = 1.0
-    let current_delta = 70.0;
-    let pending_delta = 30.0;
+    // current_delta = 60, pending_delta = 20, limit = 100
+    // total = 80 => inventory_bias = 0.8
+    let current_delta = 60.0;
+    let pending_delta = 20.0;
     let delta_limit = Some(100.0);
 
     let eval = evaluate_inventory_skew(
@@ -211,8 +206,10 @@ fn test_at934_current_plus_pending_exposure_used() {
         &config,
     );
 
-    // With combined exposure = 100 (bias=1.0), should have maximum tick penalty
+    // With combined exposure = 80 (bias=0.8), edge_multiplier = 1.4 (at threshold)
+    // Should be allowed (not strictly greater than threshold)
     assert!(eval.allowed);
+    // bias_ticks = ceil(0.8 * 3) = ceil(2.4) = 3
     assert_eq!(eval.bias_ticks, 3, "Should use current + pending for bias");
 
     // Verify with specific values where current alone vs current+pending differ
@@ -245,7 +242,7 @@ fn test_sell_allowed_near_negative_limit() {
 
     // SELL is risk-increasing (makes delta more negative)
     // directed_bias = inventory_bias * side_sign = (-0.9) * (-1.0) = +0.9
-    // adjusted = 1.0 * (1 + 0.5 * 0.9) = 1.45 (harsher)
+    // edge_multiplier = 1.0 + 0.5 * 0.9 = 1.45 > threshold (1.4) => REJECTED
     let eval_sell = evaluate_inventory_skew(
         current_delta,
         0.0,
@@ -255,15 +252,13 @@ fn test_sell_allowed_near_negative_limit() {
         0.5,
         &config,
     );
-    assert!(eval_sell.allowed);
     assert!(
-        eval_sell.adjusted_min_edge_usd.unwrap() > min_edge_usd,
-        "SELL when short should get harsher edge (risk-increasing)"
+        !eval_sell.allowed,
+        "SELL when short should be rejected (risk-increasing, excessive edge)"
     );
-    let expected_sell_edge = min_edge_usd * (1.0 + config.inventory_skew_k * 0.9);
-    assert!(
-        (eval_sell.adjusted_min_edge_usd.unwrap() - expected_sell_edge).abs() < 0.001,
-        "SELL uses directed_bias = bias * side_sign"
+    assert_eq!(
+        eval_sell.reject_reason,
+        Some("InventorySkewExcessiveEdgeRequired".to_string())
     );
 
     // BUY is risk-reducing (reduces negative delta)
@@ -294,6 +289,7 @@ fn test_bias_ticks_calculation_ceiling() {
     // Verify bias_ticks uses ceiling (not rounding)
     let config = InventorySkewConfig {
         inventory_skew_k: 0.5,
+        edge_rejection_threshold: 1.4,
         inventory_skew_tick_penalty_max: 3,
     };
 
@@ -327,6 +323,7 @@ fn test_zero_pending_delta() {
 fn test_adjusted_min_edge_usd_calculation() {
     // Verify adjusted_min_edge_usd is multiplicative
     let config = InventorySkewConfig {
+        edge_rejection_threshold: 1.4,
         inventory_skew_k: 0.5,
         inventory_skew_tick_penalty_max: 3,
     };

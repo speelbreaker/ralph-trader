@@ -11,6 +11,9 @@ pub struct InventorySkewConfig {
     pub inventory_skew_k: f64,
     /// Maximum tick penalty for limit price bias (typically 3)
     pub inventory_skew_tick_penalty_max: i32,
+    /// Rejection threshold for edge multiplier (AT-224: typically 1.4)
+    /// When edge_multiplier > threshold, reject the risk-increasing trade
+    pub edge_rejection_threshold: f64,
 }
 
 impl Default for InventorySkewConfig {
@@ -18,6 +21,7 @@ impl Default for InventorySkewConfig {
         Self {
             inventory_skew_k: 0.5,
             inventory_skew_tick_penalty_max: 3,
+            edge_rejection_threshold: 1.4, // AT-224: reject at bias ≈ 0.9 (multiplier = 1.45)
         }
     }
 }
@@ -107,12 +111,11 @@ pub fn evaluate_inventory_skew(
 
     // AT-224 enforcement: Reject if edge adjustment makes trade economically unreasonable
     // If directed_bias > 0 (risk-increasing), edge gets harsher
-    // Reject if the multiplier exceeds a threshold (e.g., 2x original edge)
+    // Reject if the multiplier exceeds the configured threshold
     // This ensures AT-224 "BUY rejected near limit, SELL allowed" behavior
     let edge_multiplier = 1.0 + config.inventory_skew_k * directed_bias;
-    let rejection_threshold = 1.5; // Reject if edge requirement > 1.5x original
 
-    if edge_multiplier > rejection_threshold {
+    if edge_multiplier > config.edge_rejection_threshold {
         return InventorySkewEvaluation {
             allowed: false,
             reject_reason: Some("InventorySkewExcessiveEdgeRequired".to_string()),
