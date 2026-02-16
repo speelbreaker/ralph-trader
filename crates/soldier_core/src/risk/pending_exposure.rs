@@ -68,6 +68,10 @@ impl InstrumentPending {
     }
 
     fn reserve(&mut self, id: ReservationId, delta_impact: DeltaContracts) {
+        // Make idempotent: if reservation exists, subtract old value first
+        if let Some(old_impact) = self.reservations.get(&id) {
+            self.pending_delta -= old_impact.abs();
+        }
         self.pending_delta += delta_impact.abs();
         self.reservations.insert(id, delta_impact);
     }

@@ -148,11 +148,12 @@ impl GlobalExposureBudget {
         }
 
         // Compute portfolio variance using correlation matrix
+        // Use signed deltas so opposite positions (hedge) reduce variance
         let mut variance = 0.0;
         for (&bucket_i, &delta_i) in &bucket_deltas {
             for (&bucket_j, &delta_j) in &bucket_deltas {
                 let corr = CorrelationBucket::correlation(bucket_i, bucket_j);
-                variance += corr * delta_i.abs() * delta_j.abs();
+                variance += corr * delta_i * delta_j;
             }
         }
 
