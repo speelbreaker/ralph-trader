@@ -5,6 +5,7 @@ pub mod exposure_budget;
 pub mod fees;
 pub mod inventory_skew;
 pub mod margin_gate;
+pub mod network_jitter;
 pub mod pending_exposure;
 pub mod self_impact_guard;
 pub mod state;
@@ -31,6 +32,7 @@ pub use margin_gate::{
     MarginConfig, MarginGateResult, MarginModeRecommendation, MarginSnapshot,
     compute_margin_mode_recommendation, evaluate_margin_gate_for_open,
 };
+pub use network_jitter::{JitterInputs, JitterMetrics, NetworkJitterConfig, NetworkJitterMonitor};
 pub use pending_exposure::{DeltaContracts, PendingExposureTracker, ReservationId, ReserveResult};
 pub use self_impact_guard::{
     LatchReason, SelfImpactConfig, SelfImpactEvaluation, SelfImpactGuard, SelfImpactKey,
