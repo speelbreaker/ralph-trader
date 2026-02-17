@@ -398,3 +398,10 @@ Summary: Final confirmation iteration — S8-009 BasisMonitor (CONTRACT.md §2.3
 Commands: bash plans/init.sh; bash plans/verify.sh full (clean tree, VERIFY OK mode=full; 13/13 basis_monitor tests passed).
 Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full, clean tree).
 Next: Mark S8-009 as passing.
+
+Story: S8-008
+Date: 2026-02-17
+Summary: Implemented GET /api/v1/health endpoint (CONTRACT.md §7.0 AT-022). Created self-contained health handler in crates/soldier_infra/src/http/health.rs with HealthState (watchdog_last_heartbeat_ts_ms Arc<AtomicU64>, http_health_calls_total counter, build_id), HttpMethod enum (Get/Post/Put/Delete), HttpRequest, HttpResponse, HealthPayload with to_json() serialization. handle_health() returns 200 JSON {ok:true, build_id, contract_version} for GET; 405 for non-GET (AT-407); updates watchdog_last_heartbeat_ts_ms=now_ms as side-effect (§3.2 Smart Watchdog). router.rs contains PATH_HEALTH constant. Test file uses #[path] to include health.rs directly (no lib.rs change needed). 10 integration tests pass covering AT-022 (200 with required fields, ok=true), watchdog update, AT-407 (POST/PUT/DELETE all 405), counter increment, contract_version=5.2. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_infra --test test_http_health (10/10 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt -p soldier_infra.
+Evidence: crates/soldier_infra/src/http/health.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_health.rs; 10/10 tests passed (AT-022/AT-407); clippy clean.
+Next: Commit and run ./plans/verify.sh full on clean tree.
