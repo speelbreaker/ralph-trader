@@ -18,9 +18,9 @@ mod guard;
 
 use guard::{
     AxisResolver, CapitalRiskAxis, CortexOverride, EnforcedProfile, F1CertStatus,
-    MarketIntegrityAxis, ModeReasonCode, PolicyEvidenceState,
-    PolicyGuardConfig, PolicyGuardInputs, PolicyRiskState, PolicyTradingMode, SystemIntegrityAxis,
-    compute_cancel_batch, is_open_intent, resolve_trading_mode,
+    MarketIntegrityAxis, ModeReasonCode, PolicyEvidenceState, PolicyGuardConfig, PolicyGuardInputs,
+    PolicyRiskState, PolicyTradingMode, SystemIntegrityAxis, compute_cancel_batch, is_open_intent,
+    resolve_trading_mode,
 };
 
 /// Build a "clean" input snapshot that results in Active (all good).

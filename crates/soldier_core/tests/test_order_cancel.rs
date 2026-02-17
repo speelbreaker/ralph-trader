@@ -8,9 +8,9 @@
 mod guard;
 
 use guard::{
-    AxisResolver, CortexOverride, EnforcedProfile, F1CertStatus,
-    PolicyEvidenceState, PolicyGuardConfig, PolicyGuardInputs, PolicyRiskState, PolicyTradingMode,
-    compute_cancel_batch, is_open_intent,
+    AxisResolver, CortexOverride, EnforcedProfile, F1CertStatus, PolicyEvidenceState,
+    PolicyGuardConfig, PolicyGuardInputs, PolicyRiskState, PolicyTradingMode, compute_cancel_batch,
+    is_open_intent,
 };
 
 fn clean_inputs(now_ms: u64) -> PolicyGuardInputs {
