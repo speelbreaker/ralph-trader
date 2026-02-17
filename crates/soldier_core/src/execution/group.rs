@@ -251,12 +251,12 @@ fn record_state(state: GroupState) {
 }
 
 fn transition_allowed(from: GroupState, to: GroupState) -> bool {
-    match (from, to) {
+    matches!(
+        (from, to),
         (GroupState::New, GroupState::Dispatched)
-        | (GroupState::Dispatched, GroupState::Complete)
-        | (GroupState::Dispatched, GroupState::MixedFailed)
-        | (GroupState::MixedFailed, GroupState::Flattening)
-        | (GroupState::Flattening, GroupState::Flattened) => true,
-        _ => false,
-    }
+            | (GroupState::Dispatched, GroupState::Complete)
+            | (GroupState::Dispatched, GroupState::MixedFailed)
+            | (GroupState::MixedFailed, GroupState::Flattening)
+            | (GroupState::Flattening, GroupState::Flattened)
+    )
 }

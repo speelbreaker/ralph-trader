@@ -12,7 +12,6 @@ use std::time::Instant;
 ///
 /// Uses dependency injection via OrderDispatcher trait for testability and
 /// production integration.
-
 const MAX_CLOSE_ATTEMPTS: u8 = 3;
 const INITIAL_BUFFER_TICKS: i32 = 5;
 
@@ -287,8 +286,8 @@ mod tests {
 
     #[test]
     fn test_emergency_close_buffer_doubling_sequence() {
-        let buffers = vec![
-            INITIAL_BUFFER_TICKS * 1, // 5
+        let buffers = [
+            INITIAL_BUFFER_TICKS, // 5
             INITIAL_BUFFER_TICKS * 2, // 10
             INITIAL_BUFFER_TICKS * 4, // 20
         ];

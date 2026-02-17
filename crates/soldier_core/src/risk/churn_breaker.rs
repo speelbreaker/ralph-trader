@@ -8,7 +8,6 @@ use std::time::{Duration, Instant};
 /// Rule: >2 flattens in 5m => 15m blacklist blocks opens for that key
 ///
 /// Thread-safety: All methods use interior mutability (Mutex) for safe concurrent access
-
 const FLATTEN_WINDOW: Duration = Duration::from_secs(5 * 60);
 const FLATTEN_TRIP_COUNT: usize = 2; // >2 means 3 or more
 const BLACKLIST_DURATION: Duration = Duration::from_secs(15 * 60);

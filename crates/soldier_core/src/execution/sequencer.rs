@@ -12,7 +12,6 @@ use crate::risk::RiskState;
 /// - Opening: Open → Confirm → Hedge
 /// - Repairs: Flatten first (emergency_close_algorithm), hedge only after retries fail
 /// - Never increase exposure when RiskState != Healthy
-
 const COUNTER_SEQUENCER_ORDER_VIOLATION: &str = "sequencer_order_violation_total";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
