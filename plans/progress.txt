@@ -384,3 +384,10 @@ Summary: Final verification iteration confirming S8-009 BasisMonitor (CONTRACT.m
 Commands: cargo test -p soldier_core --lib --test test_basis_monitor (13/13 passed); git add evidence/phase1/config_fail_closed/missing_keys_matrix.json && git commit; bash plans/verify.sh full.
 Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
 Next: Mark S8-009 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Verification iteration — S8-009 BasisMonitor (CONTRACT.md §2.3.3) confirmed complete and passing all gates. Clean tree after committing missing_keys_matrix.json; init.sh OK; full verify GREEN. All 13 integration tests pass: AT-951 (reduceonly window trip), AT-952 (kill override), AT-954 (missing/stale fail-closed), AT-963 (below threshold normal). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: git add missing_keys_matrix.json && git commit; bash plans/init.sh; bash plans/verify.sh full (VERIFY OK mode=full; 13/13 basis_monitor tests passed).
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
+Next: Mark S8-009 as passing.
