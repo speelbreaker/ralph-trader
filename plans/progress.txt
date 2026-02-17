@@ -377,3 +377,10 @@ Summary: Verified S8-009 BasisMonitor implementation (CONTRACT.md §2.3.3) is co
 Commands: bash plans/init.sh; git commit (timestamp fix); cargo test -p soldier_core --lib --test test_basis_monitor (13/13 passed); VERIFY_ALLOW_LOCAL_FULL=1 bash plans/verify.sh full.
 Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
 Next: Mark S8-009 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Final verification iteration confirming S8-009 BasisMonitor (CONTRACT.md §2.3.3) is complete and passing all gates. Committed auto-updated missing_keys_matrix.json to clean tree, ran full verify GREEN. All 13 integration tests pass covering AT-951 (reduceonly window trip), AT-952 (kill window trip + override), AT-954 (missing/stale price fail-closed), AT-963 (below threshold normal). Implementation complete: basis_monitor.rs with BasisMonitorConfig, BasisPrices, BasisDecision enum (Normal/ForceReduceOnly/ForceKill), stateful window-trip logic, fail-closed on missing/stale prices, basis_trip_total counter. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_basis_monitor (13/13 passed); git add evidence/phase1/config_fail_closed/missing_keys_matrix.json && git commit; bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
+Next: Mark S8-009 as passing.
