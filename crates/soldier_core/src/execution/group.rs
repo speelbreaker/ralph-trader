@@ -12,6 +12,7 @@ pub enum GroupState {
 }
 
 impl GroupState {
+    #[allow(dead_code)]
     pub fn is_terminal(self) -> bool {
         matches!(self, GroupState::Complete | GroupState::Flattened)
     }
@@ -20,6 +21,7 @@ impl GroupState {
         !matches!(self, GroupState::MixedFailed | GroupState::Flattening)
     }
 
+    #[allow(dead_code)]
     pub fn as_str(self) -> &'static str {
         match self {
             GroupState::New => "New",
@@ -42,6 +44,7 @@ pub enum GroupFailure {
 }
 
 impl GroupFailure {
+    #[allow(dead_code)]
     pub fn as_str(self) -> &'static str {
         match self {
             GroupFailure::Rejected => "Rejected",
@@ -54,6 +57,7 @@ impl GroupFailure {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum LegState {
     Pending,
     Filled,
@@ -78,6 +82,7 @@ impl LegOutcome {
         }
     }
 
+    #[allow(dead_code)]
     pub fn pending(requested_qty: f64) -> Self {
         Self::new(requested_qty, 0.0, LegState::Pending)
     }
@@ -90,10 +95,12 @@ impl LegOutcome {
         Self::new(requested_qty, 0.0, LegState::Rejected)
     }
 
+    #[allow(dead_code)]
     pub fn canceled(requested_qty: f64) -> Self {
         Self::new(requested_qty, 0.0, LegState::Canceled)
     }
 
+    #[allow(dead_code)]
     pub fn unfilled(requested_qty: f64) -> Self {
         Self::new(requested_qty, 0.0, LegState::Unfilled)
     }
@@ -182,6 +189,7 @@ impl AtomicGroup {
     }
 }
 
+#[allow(dead_code)]
 pub fn atomic_group_state_total(state: GroupState) -> u64 {
     ATOMIC_GROUP_METRICS.total(state)
 }
@@ -207,6 +215,7 @@ impl AtomicGroupMetrics {
         }
     }
 
+    #[allow(dead_code)]
     pub fn total(&self, state: GroupState) -> u64 {
         match state {
             GroupState::New => self.new_total.load(Ordering::Relaxed),

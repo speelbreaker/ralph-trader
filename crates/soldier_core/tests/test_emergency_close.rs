@@ -40,7 +40,7 @@ fn test_emergency_close_allowed_during_wal_degradation() {
     );
 
     assert!(
-        result.close_attempts.len() >= 1,
+        !result.close_attempts.is_empty(),
         "emergency close must attempt close even under WAL degradation"
     );
 }
@@ -60,7 +60,7 @@ fn test_emergency_close_allowed_during_session_termination() {
     );
 
     assert!(
-        result.close_attempts.len() >= 1,
+        !result.close_attempts.is_empty(),
         "emergency close must attempt close during session termination"
     );
 }
@@ -80,7 +80,7 @@ fn test_emergency_close_allowed_during_watchdog_kill() {
     );
 
     assert!(
-        result.close_attempts.len() >= 1,
+        !result.close_attempts.is_empty(),
         "emergency close must attempt close during watchdog kill"
     );
 }
@@ -100,7 +100,7 @@ fn test_emergency_close_allowed_during_bunker_mode() {
     );
 
     assert!(
-        result.close_attempts.len() >= 1,
+        !result.close_attempts.is_empty(),
         "emergency close must attempt close during bunker mode"
     );
 }

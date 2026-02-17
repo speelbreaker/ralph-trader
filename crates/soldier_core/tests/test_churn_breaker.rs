@@ -12,7 +12,7 @@ fn test_key(strategy_id: &str, fingerprint: &str) -> ChurnKey {
 #[test]
 fn test_churn_breaker_blacklists_after_three_flattens_in_5m() {
     // GIVEN: 3 EmergencyFlattenGroup triggers for the same key within 5 minutes
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key = test_key("delta_neutral_btc", "BTC-PERP-delta0.5-legs2");
     let now = Instant::now();
 
@@ -41,7 +41,7 @@ fn test_churn_breaker_blacklists_after_three_flattens_in_5m() {
 #[test]
 fn test_churn_breaker_enforces_15m_ttl() {
     // GIVEN: 3 flattens triggering blacklist
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key = test_key("strategy1", "fingerprint1");
     let now = Instant::now();
 
@@ -72,7 +72,7 @@ fn test_churn_breaker_enforces_15m_ttl() {
 #[test]
 fn test_churn_breaker_allows_opens_when_inactive() {
     // GIVEN: churn breaker inactive (no flattens recorded)
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key = test_key("strategy1", "fingerprint1");
     let now = Instant::now();
 
@@ -87,7 +87,7 @@ fn test_churn_breaker_allows_opens_when_inactive() {
 #[test]
 fn test_churn_breaker_blocks_opens_for_blacklisted_keys() {
     // GIVEN: blacklist active (3 flattens)
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key = test_key("strategy1", "fingerprint1");
     let now = Instant::now();
 
@@ -106,7 +106,7 @@ fn test_churn_breaker_blocks_opens_for_blacklisted_keys() {
 #[test]
 fn test_churn_breaker_prunes_old_events() {
     // GIVEN: 2 flattens within window, 1 outside
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key = test_key("strategy1", "fingerprint1");
     let now = Instant::now();
 
@@ -127,7 +127,7 @@ fn test_churn_breaker_prunes_old_events() {
 #[test]
 fn test_churn_breaker_isolates_keys() {
     // GIVEN: key1 trips, key2 doesn't
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key1 = test_key("strat1", "BTC-PERP");
     let key2 = test_key("strat2", "ETH-PERP");
     let now = Instant::now();
@@ -150,7 +150,7 @@ fn test_churn_breaker_isolates_keys() {
 #[test]
 fn test_churn_breaker_trip_counter() {
     // GIVEN: multiple trips across different keys
-    let mut breaker = ChurnBreaker::new();
+    let breaker = ChurnBreaker::new();
     let key1 = test_key("strat1", "BTC-PERP");
     let key2 = test_key("strat2", "ETH-PERP");
     let now = Instant::now();
