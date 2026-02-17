@@ -412,3 +412,10 @@ Summary: Verified S8-008 GET /api/v1/health endpoint implementation is complete 
 Commands: bash plans/verify.sh full (FAIL: endpoint gate due to TEST_PATTERNS bug); fix plans/verify.sh and plans/workflow_acceptance.sh; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
 Evidence: crates/soldier_infra/src/http/health.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_health.rs; plans/verify.sh (bug fix); plans/workflow_acceptance.sh (regression guard); VERIFY OK (mode=full).
 Next: Mark S8-008 as passing.
+
+Story: S8-007
+Date: 2026-02-17
+Summary: Implemented GET /api/v1/status endpoint (CONTRACT.md §7.0). Created status.rs with StatusInputs (all CSP-minimum fields per schema), StatusState (http_status_calls_total counter), build_status_json() serializing all required fields, and handle_status() returning 200 JSON for GET/405 for non-GET. GOP extension keys returned as actual values when enforced_profile != CSP, NOT_ENFORCED when CSP (AT-967). f1_cert_expires_at = generated_ts_ms + freshness_window_s*1000 when parseable, null when missing (AT-003/PL-5). connectivity_degraded derived from bunker_mode_active or open_permission_reason_codes. open_permission_requires_reconcile matches latch state. Updated router.rs with PATH_STATUS constant. Created 21 integration tests covering AT-405 (schema_version=1), AT-023 (all CSP fields), AT-024 (Active=>mode_reasons=[]), AT-025 (tier-pure), AT-026 (ordered), AT-027 (latch invariants), AT-028 (last_policy_update_ts), AT-029 (snapshot_coverage_pct GOP), AT-407 (405 non-GET), AT-419 (rate-limit counters), AT-907 (WAL invariants), AT-927 (atomic_naked_events_24h), AT-967 (GOP keys), AT-003/PL-5 (f1_cert_expires_at). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_infra --test test_http_status (21/21 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt.
+Evidence: crates/soldier_infra/src/http/status.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_status.rs; all 21 tests passed; clippy clean.
+Next: Run ./plans/verify.sh full on clean tree.
