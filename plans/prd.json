@@ -4511,9 +4511,11 @@
         "PL-3"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs"
+        ],
+        "create": [
           "crates/soldier_core/tests/test_policy_guard.rs",
           "crates/soldier_core/tests/test_policy_freshness.rs",
           "crates/soldier_core/tests/test_order_cancel.rs",
@@ -4617,10 +4619,12 @@
         "PL-2"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs"
+        ],
         "create": [
           "crates/soldier_core/tests/fixtures/F1_CERT.json",
-          "crates/soldier_core/src/policy/guard.rs",
           "crates/soldier_core/tests/test_f1_gate.rs"
         ],
         "avoid": []
@@ -4709,11 +4713,14 @@
         "PL-1"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs"
+        ],
         "create": [
           "crates/soldier_core/src/analytics/evidence_chain_state.rs",
-          "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/tests/test_evidence_guard.rs"
+          "crates/soldier_core/tests/test_evidence_guard.rs",
+          "crates/soldier_core/src/analytics/mod.rs"
         ],
         "avoid": []
       },
@@ -4812,7 +4819,8 @@
         "create": [
           "crates/soldier_core/src/risk/network_jitter.rs",
           "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/tests/test_bunker_mode.rs"
+          "crates/soldier_core/tests/test_bunker_mode.rs",
+          "crates/soldier_core/src/policy/mod.rs"
         ],
         "avoid": []
       },
