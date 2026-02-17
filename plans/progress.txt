@@ -419,3 +419,10 @@ Summary: Implemented GET /api/v1/status endpoint (CONTRACT.md §7.0). Created st
 Commands: cargo test -p soldier_infra --test test_http_status (21/21 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt.
 Evidence: crates/soldier_infra/src/http/status.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_status.rs; all 21 tests passed; clippy clean.
 Next: Run ./plans/verify.sh full on clean tree.
+
+Story: S8-006
+Date: 2026-02-17
+Summary: Implemented POST /api/v1/emergency/reduce_only endpoint (CONTRACT.md §2.2, §3.2 Smart Watchdog). Created watchdog.rs in soldier_core/src/policy/ with EmergencyReduceOnlyState (emergency_reduceonly_until_ts_ms Arc<AtomicU64>, cooldown_ms, http_emergency_reduce_only_calls_total counter), handle_emergency_reduce_only_at() returning 200 JSON for POST/405 for non-POST, evaluate_emergency_reduceonly() canceling reduce_only==false orders and preserving closes/hedges (AT-203), check_watchdog() triggering on ws_silence_ms > 5000 (AT-237), maybe_clear_emergency_reduceonly() clearing latch when cooldown expired AND reconcile_safe. Hedge flag submitted when exposure_notional > limit. Updated router.rs with PATH_EMERGENCY_REDUCE_ONLY constant. Added test_http_emergency.rs with 17 tests covering all 5 acceptance criteria. Full verify GREEN. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_infra --test test_http_emergency (17/17 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_core/src/policy/watchdog.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_emergency.rs; plans/story_verify_allowlist.txt; 17/17 tests passed (AT-203/AT-237 and all 5 acceptance criteria); VERIFY OK (mode=full).
+Next: Mark S8-006 as passing.
