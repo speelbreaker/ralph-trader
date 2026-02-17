@@ -2921,7 +2921,8 @@ PROMPT
     done
   fi
 
-  DIRTY_STATUS="$(git status --porcelain 2>/dev/null || true)"
+  # Filter out auto-generated evidence files (regenerated with new timestamp on every test run)
+  DIRTY_STATUS="$(git status --porcelain 2>/dev/null | grep -v 'evidence/phase1/config_fail_closed/missing_keys_matrix.json' || true)"
   if [[ -n "$DIRTY_STATUS" ]]; then
     save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$HEAD_AFTER"
     BLOCK_DIR="$(write_blocked_with_state "dirty_worktree" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
@@ -3042,7 +3043,8 @@ PROMPT
       echo "Blocked: story verify changed HEAD in $BLOCK_DIR" | tee -a "$LOG_FILE"
       exit 1
     fi
-    STORY_VERIFY_DIRTY_STATUS="$(git status --porcelain 2>/dev/null || true)"
+    # Filter out auto-generated evidence files (regenerated with new timestamp on every test run)
+    STORY_VERIFY_DIRTY_STATUS="$(git status --porcelain 2>/dev/null | grep -v 'evidence/phase1/config_fail_closed/missing_keys_matrix.json' || true)"
     if [[ -n "$STORY_VERIFY_DIRTY_STATUS" ]]; then
       save_iter_after "$ITER_DIR" "$HEAD_BEFORE" "$STORY_VERIFY_HEAD"
       BLOCK_DIR="$(write_blocked_with_state "story_verify_dirty_worktree" "$NEXT_ID" "$NEXT_PRIORITY" "$NEXT_DESC" "$NEEDS_HUMAN_JSON" "$ITER_DIR")"
