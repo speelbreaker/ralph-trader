@@ -4517,14 +4517,13 @@
           "crates/soldier_core/src/analytics/mod.rs",
           "crates/soldier_core/src/analytics/evidence_chain_state.rs",
           "crates/soldier_core/src/lib.rs",
-          "crates/soldier_core/tests/fixtures/F1_CERT.json"
-        ],
-        "create": [
+          "crates/soldier_core/tests/fixtures/F1_CERT.json",
           "crates/soldier_core/tests/test_policy_guard.rs",
           "crates/soldier_core/tests/test_policy_freshness.rs",
           "crates/soldier_core/tests/test_order_cancel.rs",
           "crates/soldier_core/tests/test_profile_isolation.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -4546,7 +4545,7 @@
         "Add all required tests (14 ATs)",
         "Add observability: policy_age_sec gauge, policy_stale_reduceonly_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_policy_guard"
