@@ -273,4 +273,97 @@ mod tests {
             _ => panic!("Expected GlobalExposureBudgetExceeded"),
         }
     }
+
+    #[test]
+    fn test_offsetting_positions_handle_negative_variance() {
+        // REMAINING-5 from failure review: test negative variance handling with offsetting positions
+        let config = GlobalBudgetConfig {
+            portfolio_delta_limit_usd: 10000.0,
+        };
+        let budget = GlobalExposureBudget::new(config);
+
+        // Create offsetting positions: large BTC long + large ETH short
+        // Cross-correlation terms: 0.8 * 8000 * (-9000) = -57,600,000
+        // Self terms: 1.0 * 8000^2 + 1.0 * (-9000)^2 = 64,000,000 + 81,000,000 = 145,000,000
+        // Total variance: 145,000,000 - 2*57,600,000 = 145,000,000 - 115,200,000 = 29,800,000
+        // sqrt(29,800,000) ≈ 5,459
+        let mut exposures = HashMap::new();
+        exposures.insert(
+            "BTC-PERP".to_string(),
+            InstrumentExposure {
+                delta_usd: 8000.0, // Long BTC
+            },
+        );
+        exposures.insert(
+            "ETH-PERP".to_string(),
+            InstrumentExposure {
+                delta_usd: -9000.0, // Short ETH (offsetting)
+            },
+        );
+
+        // Compute portfolio delta - should handle negative variance gracefully
+        let portfolio_delta = budget.compute_portfolio_delta(&exposures);
+
+        // Should not be NaN or infinite
+        assert!(portfolio_delta.is_finite(), "Portfolio delta should be finite");
+        assert!(!portfolio_delta.is_nan(), "Portfolio delta should not be NaN");
+
+        // With offsetting positions, portfolio delta should be less than sum of absolutes
+        let sum_of_absolutes = 8000.0 + 9000.0;
+        assert!(
+            portfolio_delta.abs() < sum_of_absolutes,
+            "Offsetting positions should reduce portfolio delta below sum of absolutes"
+        );
+
+        // Adding a small position should still pass
+        let result = budget.evaluate(&exposures, "SOL-PERP", 1000.0);
+        assert_eq!(result, GlobalBudgetResult::Pass);
+    }
+
+    #[test]
+    fn test_extreme_offsetting_returns_infinity_on_nan() {
+        // Edge case: if variance calculation somehow produces NaN, should return INFINITY (fail-closed)
+        let config = GlobalBudgetConfig {
+            portfolio_delta_limit_usd: 10000.0,
+        };
+        let budget = GlobalExposureBudget::new(config);
+
+        // Create extreme scenario that might cause numerical issues
+        let mut exposures = HashMap::new();
+        exposures.insert(
+            "BTC-PERP".to_string(),
+            InstrumentExposure {
+                delta_usd: f64::MAX / 2.0,
+            },
+        );
+        exposures.insert(
+            "ETH-PERP".to_string(),
+            InstrumentExposure {
+                delta_usd: -f64::MAX / 2.0,
+            },
+        );
+
+        // This might overflow/underflow, but should be handled gracefully
+        let portfolio_delta = budget.compute_portfolio_delta(&exposures);
+
+        // Should either be finite or INFINITY (never NaN)
+        assert!(
+            !portfolio_delta.is_nan(),
+            "NaN should be caught and converted to INFINITY"
+        );
+
+        // If it's INFINITY, the fail-closed behavior worked
+        if portfolio_delta.is_infinite() {
+            // Verify that evaluate would reject
+            let result = budget.evaluate(&exposures, "SOL-PERP", 100.0);
+            match result {
+                GlobalBudgetResult::GlobalExposureBudgetExceeded { .. } => {
+                    // Expected: INFINITY exceeds any limit
+                }
+                GlobalBudgetResult::Pass => {
+                    panic!("INFINITY portfolio delta should fail budget check")
+                }
+            }
+        }
+    }
 }

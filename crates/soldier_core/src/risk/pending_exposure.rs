@@ -344,4 +344,36 @@ mod tests {
         let result_eth = tracker.reserve("intent-4".to_string(), "ETH-PERP", 8.0, 0.0);
         assert_eq!(result_eth, ReserveResult::Reserved);
     }
+
+    #[test]
+    fn test_unregistered_instrument_rejected_fail_closed() {
+        // REMAINING-2 from failure review: test fail-closed behavior for unregistered instruments
+        let tracker = PendingExposureTracker::new(None);
+        tracker.register_instrument("BTC-PERP".to_string(), Some(100.0));
+
+        // Attempt to reserve on unregistered instrument should be rejected
+        let result = tracker.reserve(
+            "intent-1".to_string(),
+            "UNKNOWN-PERP", // Not registered
+            10.0,
+            0.0,
+        );
+
+        // Should reject with BudgetExceeded (available=0)
+        match result {
+            ReserveResult::BudgetExceeded {
+                requested,
+                available,
+            } => {
+                assert_eq!(requested, 10.0);
+                assert_eq!(available, 0.0);
+            }
+            ReserveResult::Reserved => {
+                panic!("Unregistered instrument should be rejected (fail-closed)")
+            }
+        }
+
+        // Verify no pending delta was recorded
+        assert_eq!(tracker.get_pending_delta("UNKNOWN-PERP"), 0.0);
+    }
 }
