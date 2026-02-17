@@ -1483,6 +1483,17 @@ fi
     exit 1
   fi
 
+  # Endpoint gate pattern correctness: ENDPOINT_PATTERNS and TEST_PATTERNS must NOT
+  # contain literal single-quote characters (which would prevent Rust tests/ dir from matching).
+  if run_in_worktree grep -qF "ENDPOINT_PATTERNS:='" "plans/verify.sh"; then
+    echo "FAIL: ENDPOINT_PATTERNS in verify.sh contains literal single-quote; Rust tests/ dir will not match" >&2
+    exit 1
+  fi
+  if run_in_worktree grep -qF "TEST_PATTERNS:='" "plans/verify.sh"; then
+    echo "FAIL: TEST_PATTERNS in verify.sh contains literal single-quote; Rust tests/ dir will not match" >&2
+    exit 1
+  fi
+
   if ! run_in_worktree grep -q "contract_coverage_ci_strict" "plans/verify.sh"; then
     echo "FAIL: verify must gate CI strict coverage via sentinel file" >&2
     exit 1
