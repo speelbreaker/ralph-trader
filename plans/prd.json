@@ -4806,7 +4806,9 @@
         "S8.4"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_core/src/risk/mod.rs"
+        ],
         "create": [
           "crates/soldier_core/src/risk/network_jitter.rs",
           "crates/soldier_core/src/policy/guard.rs",
@@ -4981,11 +4983,12 @@
         "S8.6"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_core/src/risk/exchange_health.rs",
-          "crates/soldier_core/tests/test_exchange_health.rs"
+          "crates/soldier_core/tests/test_exchange_health.rs",
+          "crates/soldier_core/src/risk/mod.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -5002,7 +5005,7 @@
         "Add required tests (AT-204)",
         "Add observability for exchange health status"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_exchange_health"
