@@ -3569,8 +3569,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/inventory_skew.rs",
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/tests/test_inventory_skew.rs"
         ],
         "create": [],
@@ -3734,8 +3734,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/exposure_budget.rs",
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/tests/test_exposure_budget.rs"
         ],
         "create": [],
@@ -3817,10 +3817,10 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_infra/src/deribit/account_summary.rs",
-          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/margin_gate.rs",
-          "crates/soldier_core/tests/test_margin_gate.rs"
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/tests/test_margin_gate.rs",
+          "crates/soldier_infra/src/deribit/account_summary.rs"
         ],
         "create": [],
         "avoid": [
@@ -5364,12 +5364,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/basis_monitor.rs",
           "crates/soldier_core/tests/test_basis_monitor.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
