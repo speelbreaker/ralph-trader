@@ -4548,7 +4548,10 @@
       "passes": true,
       "verify": [
         "./plans/verify.sh",
-        "cargo test -p soldier_core --lib --test test_policy_guard"
+        "cargo test -p soldier_core --lib --test test_policy_guard",
+        "cargo test -p soldier_core --lib --test test_policy_freshness",
+        "cargo test -p soldier_core --lib --test test_order_cancel",
+        "cargo test -p soldier_core --lib --test test_profile_isolation"
       ],
       "evidence": [
         "crates/soldier_core/tests/test_policy_guard.rs"
