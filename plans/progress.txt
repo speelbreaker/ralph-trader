@@ -453,3 +453,10 @@ Summary: Implemented Reflexive Cortex (CONTRACT.md §2.3). Created cortex.rs in 
 Commands: cargo test -p soldier_core --test test_cortex (21/21 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt.
 Evidence: crates/soldier_core/src/reflex/cortex.rs; crates/soldier_core/tests/test_cortex.rs; 21/21 tests passed; clippy clean.
 Next: Run ./plans/verify.sh full on clean tree.
+
+Story: S8-001
+Date: 2026-02-17
+Summary: Implemented runtime F1 certification gate (CONTRACT.md §2.2.1, PL-2). Added F1Gate to crates/soldier_core/src/policy/guard.rs with pure-Rust SHA-256, canonical JSON serializer (sorted keys, no whitespace per AT-113), F1RuntimeBindings, F1GateConfig (freshness_window_s=86400), F1CertStatus enum (Valid/Missing/Fail/Stale/Invalid). evaluate() fail-closed logic: missing/unparseable=>Missing, status!=PASS=>Fail, stale (no last-known-good bypass per AT-021)=>Stale, binding mismatch (contract_version/build_id/runtime_config_hash per AT-020)=>Invalid. contract_version with 'v' prefix rejected (AT-012). policy_hash_at_cert_time ignored (AT-410). Observability: f1_cert_age_s gauge, f1_cert_gate_block_opens_total counter. Registered policy module in lib.rs, exported types from policy/mod.rs. Created tests/fixtures/F1_CERT.json and test_f1_gate.rs (13 tests). Full verify GREEN. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_f1_gate (13/13 passed); cargo fmt -p soldier_core; cargo clippy --tests -p soldier_core -- -D warnings (clean); git commit; bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/policy/guard.rs; crates/soldier_core/src/policy/mod.rs; crates/soldier_core/src/lib.rs; crates/soldier_core/tests/test_f1_gate.rs; crates/soldier_core/tests/fixtures/F1_CERT.json; 13/13 tests passed (AT-012/AT-020/AT-021/AT-113/AT-410); VERIFY OK (mode=full).
+Next: Mark S8-001 as passing.

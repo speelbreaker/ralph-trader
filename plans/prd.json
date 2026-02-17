@@ -4516,7 +4516,8 @@
           "crates/soldier_core/src/policy/mod.rs",
           "crates/soldier_core/src/analytics/mod.rs",
           "crates/soldier_core/src/analytics/evidence_chain_state.rs",
-          "crates/soldier_core/src/lib.rs"
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/fixtures/F1_CERT.json"
         ],
         "create": [
           "crates/soldier_core/tests/test_policy_guard.rs",
@@ -4627,12 +4628,11 @@
           "crates/soldier_core/src/policy/mod.rs",
           "crates/soldier_core/src/analytics/mod.rs",
           "crates/soldier_core/src/analytics/evidence_chain_state.rs",
-          "crates/soldier_core/src/lib.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/lib.rs",
           "crates/soldier_core/tests/fixtures/F1_CERT.json",
           "crates/soldier_core/tests/test_f1_gate.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -4653,7 +4653,7 @@
         "Add all required tests (5 exact names)",
         "Add observability: f1_cert_age_s gauge, f1_cert_gate_block_opens_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_f1_gate"
