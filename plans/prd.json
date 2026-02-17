@@ -5385,7 +5385,7 @@
         "Add all required tests (AT-951, AT-952, AT-954)",
         "Add observability: basis_trip_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_basis_monitor"
