@@ -4513,7 +4513,10 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/src/policy/mod.rs"
+          "crates/soldier_core/src/policy/mod.rs",
+          "crates/soldier_core/src/analytics/mod.rs",
+          "crates/soldier_core/src/analytics/evidence_chain_state.rs",
+          "crates/soldier_core/src/lib.rs"
         ],
         "create": [
           "crates/soldier_core/tests/test_policy_guard.rs",
@@ -4621,7 +4624,10 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/src/policy/mod.rs"
+          "crates/soldier_core/src/policy/mod.rs",
+          "crates/soldier_core/src/analytics/mod.rs",
+          "crates/soldier_core/src/analytics/evidence_chain_state.rs",
+          "crates/soldier_core/src/lib.rs"
         ],
         "create": [
           "crates/soldier_core/tests/fixtures/F1_CERT.json",
@@ -4715,13 +4721,13 @@
       "scope": {
         "touch": [
           "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/src/policy/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/policy/mod.rs",
           "crates/soldier_core/src/analytics/evidence_chain_state.rs",
           "crates/soldier_core/tests/test_evidence_guard.rs",
-          "crates/soldier_core/src/analytics/mod.rs"
+          "crates/soldier_core/src/analytics/mod.rs",
+          "crates/soldier_core/src/lib.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -4745,7 +4751,7 @@
         "Add all required tests including AT-005 non-fill attribution exception",
         "Add observability: evidence_chain_state gauge, evidence_guard_blocked_opens_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_evidence_guard"
