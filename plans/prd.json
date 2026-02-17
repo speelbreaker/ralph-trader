@@ -5062,12 +5062,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_infra/src/http/router.rs"
-        ],
-        "create": [
+          "crates/soldier_infra/src/http/router.rs",
           "crates/soldier_infra/tests/test_http_emergency.rs",
           "crates/soldier_core/src/policy/watchdog.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -5087,7 +5086,7 @@
         "Add required endpoint-level test",
         "Add observability: http_emergency_reduce_only_calls_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test --workspace"
