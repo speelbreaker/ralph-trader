@@ -432,3 +432,10 @@ Summary: Implemented Exchange Health Monitor (CONTRACT.md §2.3.1). Created exch
 Commands: cargo test -p soldier_core --lib --test test_exchange_health (16/16 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
 Evidence: crates/soldier_core/src/risk/exchange_health.rs; crates/soldier_core/tests/test_exchange_health.rs; crates/soldier_core/src/risk/mod.rs; all 16 tests passed (AT-232/AT-204); VERIFY OK (mode=full).
 Next: Mark S8-005 as passing.
+
+Story: S8-004
+Date: 2026-02-17
+Summary: Implemented Reflexive Cortex (CONTRACT.md §2.3). Created cortex.rs in crates/soldier_core/src/reflex/ with CortexConfig (defaults: spread_max_bps=25, spread_kill_bps=75, depth_min=300_000, depth_kill_min=100_000, cortex_kill_window_s=10, dvol_jump_pct=0.10, dvol_jump_window_s=60, dvol_cooldown_s=300, spread_depth_cooldown_s=120). Implemented CortexMonitor with stateful DVOL history and kill window tracking; rules: spread/depth kill window exceeds cortex_kill_window_s => ForceKill; DVOL jump >= dvol_jump_pct within dvol_jump_window_s => ForceReduceOnly{dvol_cooldown_s}; spread > spread_max_bps OR depth < depth_min => ForceReduceOnly{spread_depth_cooldown_s}; fail-closed on missing inputs. evaluate_cancel_replace() for AT-119 ws_gap enforcement. compute_depth_top_n() for AT-420. Test file uses #[path] to include cortex.rs directly without lib.rs changes. 21 integration tests covering AT-231, AT-045, AT-119, AT-418, AT-420, AT-284, AT-285, AT-286, AT-288, AT-289, AT-290, AT-291, and required named aliases test_cortex_spread_max_bps_forces_reduceonly + test_cortex_depth_min_forces_reduceonly. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_cortex (21/21 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt.
+Evidence: crates/soldier_core/src/reflex/cortex.rs; crates/soldier_core/tests/test_cortex.rs; 21/21 tests passed; clippy clean.
+Next: Run ./plans/verify.sh full on clean tree.
