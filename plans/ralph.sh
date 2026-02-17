@@ -1842,7 +1842,8 @@ is_ignored_file() {
     plans/prd.json|plans/progress.txt|plans/progress_archive.txt) return 0 ;;
     reviews/postmortems/*) return 0 ;;
     .ralph/*|plans/logs/*) return 0 ;;
-    reviews/postmortems/*) return 0 ;;
+    # Auto-generated evidence files (timestamp updated on every test run)
+    evidence/phase1/config_fail_closed/missing_keys_matrix.json) return 0 ;;
   esac
   return 1
 }
