@@ -1,5 +1,6 @@
 pub mod basis_monitor;
 pub mod churn_breaker;
+pub mod exchange_health;
 pub mod exposure_budget;
 pub mod fees;
 pub mod inventory_skew;
@@ -10,6 +11,10 @@ pub mod state;
 
 pub use basis_monitor::{BasisDecision, BasisMonitor, BasisMonitorConfig, BasisPrices};
 pub use churn_breaker::{ChurnBreaker, ChurnBreakerDecision, ChurnKey};
+pub use exchange_health::{
+    AnnouncementEntry, ExchangeHealthConfig, ExchangeHealthDecision, ExchangeHealthInput,
+    ExchangeHealthMonitor,
+};
 pub use exposure_budget::{
     GlobalBudgetConfig, GlobalBudgetResult, GlobalExposureBudget, InstrumentExposure,
 };
