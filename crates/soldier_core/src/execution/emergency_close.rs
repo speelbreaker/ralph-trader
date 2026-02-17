@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn test_emergency_close_buffer_doubling_sequence() {
         let buffers = [
-            INITIAL_BUFFER_TICKS, // 5
+            INITIAL_BUFFER_TICKS,     // 5
             INITIAL_BUFFER_TICKS * 2, // 10
             INITIAL_BUFFER_TICKS * 4, // 20
         ];
