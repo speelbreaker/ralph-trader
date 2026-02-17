@@ -203,6 +203,13 @@ Commands: append progress only (placeholder text to satisfy gate length; no real
 Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
 Next: proceed with subsequent acceptance steps in the workflow acceptance suite
 
+Story: S8-002
+Date: 2026-02-17
+Summary: Implemented EvidenceGuard (CONTRACT.md §2.2.2) — No Evidence → No Opens. Created analytics/evidence_chain_state.rs with EvidenceGuard using CounterTracker rolling window, strict parquet_queue_depth_pct > trip_pct comparator (NOT >=), fail-closed on missing/stale counters, 60s window default, hysteresis clear at 120s. Profile gating: NOT_ENFORCED when enforced_profile == CSP. Created analytics/mod.rs; exposed module in lib.rs; re-exported EvidenceGuard types from policy/mod.rs (§2.2.2 enforcement point). 16 integration tests cover all 7 PRD acceptance criteria: AC1 (>0.90 for >=5s trips), AC2 (==0.90 strict comparator does NOT trip), AC3 (0.9001 for >=5s trips), AC4 (NOT GREEN blocks OPEN), AC5 (recovery after cooldown), AC6 (AT-005 zero fills no attribution required), AC7 (CSP NOT_ENFORCED). Also AT-105 (window boundary), AT-107 (WAL errors), AT-334 (snapshot errors), AT-335 (missing metrics), AT-422 (configurable thresholds), stale counters, gauge observability. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_evidence_guard (16/16 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/analytics/evidence_chain_state.rs; crates/soldier_core/src/analytics/mod.rs; crates/soldier_core/tests/test_evidence_guard.rs; crates/soldier_core/src/lib.rs; crates/soldier_core/src/policy/mod.rs; all 16 tests passed (AT-005/AT-105/AT-107 and all acceptance criteria); VERIFY OK (mode=full, clean tree).
+Next: Mark S8-002 as passing.
+
 Story: S8-003
 Date: 2026-02-17
 Summary: Implemented Network Jitter Monitor (Bunker Mode Override) per CONTRACT.md §2.3.2. Created network_jitter.rs with NetworkJitterMonitor, NetworkJitterConfig, JitterInputs: fail-closed on missing metrics (AT-205), ws_event_lag_ms > 2000 immediate trip, http_p95_ms > 750 for 3 consecutive windows (AT-345), request_timeout_rate > 0.02 immediate trip, 120s stable exit (AT-115), bunker_mode_trip_total counter. Created policy/guard.rs (self-contained BunkerModeGuard) and policy/mod.rs. Registered network_jitter in risk/mod.rs with pub use exports. 15 integration tests all pass. Full verify GREEN on clean tree. Acknowledged AGENTS.md and plans/progress.txt.
