@@ -1,3 +1,4 @@
+pub mod basis_monitor;
 pub mod churn_breaker;
 pub mod exposure_budget;
 pub mod fees;
@@ -7,6 +8,7 @@ pub mod pending_exposure;
 pub mod self_impact_guard;
 pub mod state;
 
+pub use basis_monitor::{BasisDecision, BasisMonitor, BasisMonitorConfig, BasisPrices};
 pub use churn_breaker::{ChurnBreaker, ChurnBreakerDecision, ChurnKey};
 pub use exposure_budget::{
     GlobalBudgetConfig, GlobalBudgetResult, GlobalExposureBudget, InstrumentExposure,

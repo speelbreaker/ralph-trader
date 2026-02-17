@@ -363,3 +363,10 @@ Summary: Implemented Margin Headroom Gate (§1.4.3) with mm_util thresholds for 
 Commands: cargo test -p soldier_core --test test_margin_gate; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/risk/margin_gate.rs; crates/soldier_core/tests/test_margin_gate.rs; crates/soldier_core/src/risk/mod.rs; crates/soldier_infra/src/deribit/account_summary.rs; all 11 tests passed; VERIFY OK (mode=quick).
 Next: Mark S6-010 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Implemented BasisMonitor (CONTRACT.md §2.3.3) — Mark/Index/Last Liquidation Reality Guard. Created basis_monitor.rs with BasisMonitorConfig, BasisPrices, BasisDecision enum (Normal/ForceReduceOnly/ForceKill), and stateful window-trip logic. Fail-closed: missing or stale prices (age > basis_price_max_age_ms) emit ForceReduceOnly immediately. Kill trip: max(basis_mark_last_bps, basis_mark_index_bps) >= basis_kill_bps for basis_kill_window_s. ReduceOnly trip: max() >= basis_reduceonly_bps for basis_reduceonly_window_s. basis_trip_total counter for observability. 13 integration tests covering AT-951, AT-952, AT-954, AT-963. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_basis_monitor; cargo clippy --tests -p soldier_core -- -D warnings; cargo fmt -p soldier_core.
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed; clippy clean; fmt applied.
+Next: Run ./plans/verify.sh full to confirm green before marking pass.
