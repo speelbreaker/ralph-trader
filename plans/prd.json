@@ -5061,10 +5061,11 @@
         "S8.7"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_infra/src/http/router.rs"
+        ],
         "create": [
           "crates/soldier_infra/tests/test_http_emergency.rs",
-          "crates/soldier_infra/src/http/router.rs",
           "crates/soldier_core/src/policy/watchdog.rs"
         ],
         "avoid": []
@@ -5152,11 +5153,12 @@
         "PL-5"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_infra/src/http/router.rs"
+        ],
         "create": [
           "crates/soldier_infra/src/http/status.rs",
-          "crates/soldier_infra/tests/test_http_status.rs",
-          "crates/soldier_infra/src/http/router.rs"
+          "crates/soldier_infra/tests/test_http_status.rs"
         ],
         "avoid": []
       },
