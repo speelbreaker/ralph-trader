@@ -305,8 +305,14 @@ mod tests {
         let portfolio_delta = budget.compute_portfolio_delta(&exposures);
 
         // Should not be NaN or infinite
-        assert!(portfolio_delta.is_finite(), "Portfolio delta should be finite");
-        assert!(!portfolio_delta.is_nan(), "Portfolio delta should not be NaN");
+        assert!(
+            portfolio_delta.is_finite(),
+            "Portfolio delta should be finite"
+        );
+        assert!(
+            !portfolio_delta.is_nan(),
+            "Portfolio delta should not be NaN"
+        );
 
         // With offsetting positions, portfolio delta should be less than sum of absolutes
         let sum_of_absolutes = 8000.0 + 9000.0;
