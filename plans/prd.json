@@ -5280,12 +5280,12 @@
         "S8.9"
       ],
       "scope": {
-        "touch": [],
-        "create": [
+        "touch": [
           "crates/soldier_infra/src/http/health.rs",
           "crates/soldier_infra/tests/test_http_health.rs",
           "crates/soldier_infra/src/http/router.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -5300,7 +5300,7 @@
         "Add required endpoint-level test (AT-022)",
         "Add observability: http_health_calls_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_http_health"
