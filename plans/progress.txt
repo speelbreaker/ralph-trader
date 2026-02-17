@@ -426,3 +426,9 @@ Summary: Implemented POST /api/v1/emergency/reduce_only endpoint (CONTRACT.md §
 Commands: cargo test -p soldier_infra --test test_http_emergency (17/17 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
 Evidence: crates/soldier_core/src/policy/watchdog.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_emergency.rs; plans/story_verify_allowlist.txt; 17/17 tests passed (AT-203/AT-237 and all 5 acceptance criteria); VERIFY OK (mode=full).
 Next: Mark S8-006 as passing.
+Story: S8-005
+Date: 2026-02-17
+Summary: Implemented Exchange Health Monitor (CONTRACT.md §2.3.1). Created exchange_health.rs with ExchangeHealthConfig (exchange_health_stale_s=180s, maintenance_lookahead_s=3600s), AnnouncementEntry, ExchangeHealthInput, ExchangeHealthDecision enum (Normal/MaintenanceImminent/ForceReduceOnly), and ExchangeHealthMonitor. Maintenance within 60m causes RiskState::Maintenance, PolicyGuard computes TradingMode::ReduceOnly. Stale/unreachable announcements for >= exchange_health_stale_s causes cortex_override=ForceReduceOnly (fail-closed). 16 integration tests covering AT-232 (maintenance 30m, blocks opens, allows closes) and AT-204 (never-polled, stale 181s, exact boundary 180s). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_exchange_health (16/16 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_core/src/risk/exchange_health.rs; crates/soldier_core/tests/test_exchange_health.rs; crates/soldier_core/src/risk/mod.rs; all 16 tests passed (AT-232/AT-204); VERIFY OK (mode=full).
+Next: Mark S8-005 as passing.
