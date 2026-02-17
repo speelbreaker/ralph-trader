@@ -5305,7 +5305,7 @@
       "passes": true,
       "verify": [
         "./plans/verify.sh",
-        "cargo test -p soldier_core --lib --test test_http_health"
+        "cargo test -p soldier_infra --test test_http_health"
       ],
       "evidence": [
         "crates/soldier_infra/tests/test_http_health.rs"
