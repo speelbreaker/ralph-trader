@@ -5154,12 +5154,11 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_infra/src/http/router.rs"
-        ],
-        "create": [
+          "crates/soldier_infra/src/http/router.rs",
           "crates/soldier_infra/src/http/status.rs",
           "crates/soldier_infra/tests/test_http_status.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -5184,10 +5183,10 @@
         "Add 16 required endpoint-level tests",
         "Add observability: http_status_calls_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
-        "cargo test -p soldier_core --lib --test test_http_status"
+        "cargo test -p soldier_infra --test test_http_status"
       ],
       "evidence": [
         "crates/soldier_infra/tests/test_http_status.rs"
