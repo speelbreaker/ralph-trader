@@ -405,3 +405,10 @@ Summary: Implemented GET /api/v1/health endpoint (CONTRACT.md §7.0 AT-022). Cre
 Commands: cargo test -p soldier_infra --test test_http_health (10/10 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt -p soldier_infra.
 Evidence: crates/soldier_infra/src/http/health.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_health.rs; 10/10 tests passed (AT-022/AT-407); clippy clean.
 Next: Commit and run ./plans/verify.sh full on clean tree.
+
+Story: S8-008
+Date: 2026-02-17
+Summary: Verified S8-008 GET /api/v1/health endpoint implementation is complete and passing all gates. Discovered and fixed latent bug in plans/verify.sh: ENDPOINT_PATTERNS and TEST_PATTERNS had spurious literal single-quote characters that prevented Rust tests/ directories from matching the test detection pattern. Fixed by removing quotes; added workflow_acceptance.sh assertion to prevent regression. After fix, full verify GREEN. Implementation: health.rs with HealthState (watchdog_last_heartbeat_ts_ms, http_health_calls_total, build_id), handle_health() returning 200 JSON for GET and 405 for non-GET; router.rs with PATH_HEALTH constant; 10 integration tests covering AT-022 (HTTP 200, ok=true, build_id, contract_version), watchdog heartbeat update, AT-407 (POST/PUT/DELETE → 405), counter increment, contract_version=5.2. Full verify VERIFY OK (mode=full).
+Commands: bash plans/verify.sh full (FAIL: endpoint gate due to TEST_PATTERNS bug); fix plans/verify.sh and plans/workflow_acceptance.sh; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_infra/src/http/health.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_health.rs; plans/verify.sh (bug fix); plans/workflow_acceptance.sh (regression guard); VERIFY OK (mode=full).
+Next: Mark S8-008 as passing.
