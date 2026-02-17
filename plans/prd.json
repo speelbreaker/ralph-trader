@@ -4511,14 +4511,15 @@
         "PL-3"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs"
+        ],
         "create": [
           "crates/soldier_core/tests/test_policy_guard.rs",
           "crates/soldier_core/tests/test_policy_freshness.rs",
           "crates/soldier_core/tests/test_order_cancel.rs",
-          "crates/soldier_core/tests/test_profile_isolation.rs",
-          "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/src/policy/mod.rs"
+          "crates/soldier_core/tests/test_profile_isolation.rs"
         ],
         "avoid": []
       },
@@ -4618,12 +4619,13 @@
         "PL-2"
       ],
       "scope": {
-        "touch": [],
-        "create": [
-          "crates/soldier_core/tests/fixtures/F1_CERT.json",
-          "crates/soldier_core/tests/test_f1_gate.rs",
+        "touch": [
           "crates/soldier_core/src/policy/guard.rs",
           "crates/soldier_core/src/policy/mod.rs"
+        ],
+        "create": [
+          "crates/soldier_core/tests/fixtures/F1_CERT.json",
+          "crates/soldier_core/tests/test_f1_gate.rs"
         ],
         "avoid": []
       },
@@ -4711,13 +4713,14 @@
         "PL-1"
       ],
       "scope": {
-        "touch": [],
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs"
+        ],
         "create": [
           "crates/soldier_core/src/analytics/evidence_chain_state.rs",
           "crates/soldier_core/tests/test_evidence_guard.rs",
-          "crates/soldier_core/src/analytics/mod.rs",
-          "crates/soldier_core/src/policy/guard.rs",
-          "crates/soldier_core/src/policy/mod.rs"
+          "crates/soldier_core/src/analytics/mod.rs"
         ],
         "avoid": []
       },
@@ -4811,14 +4814,13 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/network_jitter.rs",
           "crates/soldier_core/src/policy/guard.rs",
           "crates/soldier_core/tests/test_bunker_mode.rs",
           "crates/soldier_core/src/policy/mod.rs"
         ],
+        "create": [],
         "avoid": []
       },
       "acceptance": [
@@ -4837,7 +4839,7 @@
         "Add all required tests (AT-115, AT-205, AT-345)",
         "Add observability: ws_event_lag_ms gauge, deribit_http_p95_ms gauge, bunker_mode_trip_total counter"
       ],
-      "passes": false,
+      "passes": true,
       "verify": [
         "./plans/verify.sh",
         "cargo test -p soldier_core --lib --test test_bunker_mode"
