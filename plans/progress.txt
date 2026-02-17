@@ -202,6 +202,13 @@ Summary: acceptance mark pass meta only with extra detail to satisfy progress ga
 Commands: append progress only (placeholder text to satisfy gate length; no real commands executed in this stub)
 Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
 Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+
+Story: S8-003
+Date: 2026-02-17
+Summary: Implemented Network Jitter Monitor (Bunker Mode Override) per CONTRACT.md §2.3.2. Created network_jitter.rs with NetworkJitterMonitor, NetworkJitterConfig, JitterInputs: fail-closed on missing metrics (AT-205), ws_event_lag_ms > 2000 immediate trip, http_p95_ms > 750 for 3 consecutive windows (AT-345), request_timeout_rate > 0.02 immediate trip, 120s stable exit (AT-115), bunker_mode_trip_total counter. Created policy/guard.rs (self-contained BunkerModeGuard) and policy/mod.rs. Registered network_jitter in risk/mod.rs with pub use exports. 15 integration tests all pass. Full verify GREEN on clean tree. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_bunker_mode (15/15 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_core/src/risk/network_jitter.rs; crates/soldier_core/src/policy/guard.rs; crates/soldier_core/src/policy/mod.rs; crates/soldier_core/src/risk/mod.rs; crates/soldier_core/tests/test_bunker_mode.rs; 15/15 tests passed (AT-115/AT-205/AT-345); VERIFY OK (mode=full, clean tree).
+Next: Mark S8-003 as passing.
 2026-01-31 - S1-002
 Summary: acceptance mention complete including extra detail to satisfy progress gate length requirements for workflow acceptance tests
 Commands: none (placeholder text to satisfy gate length; no real commands executed in this stub)
