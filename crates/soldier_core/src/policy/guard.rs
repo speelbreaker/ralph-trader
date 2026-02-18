@@ -1113,7 +1113,7 @@ fn collect_mode_reasons(
             if inputs.basis_decision == PolicyBasisDecision::ForceReduceOnly {
                 reasons.push(ModeReasonCode::ReduceOnlyBasisMonitor);
             }
-            // 8. REDUCEONLY_FEE_MODEL_HARD_STALE
+            // 9. REDUCEONLY_FEE_MODEL_HARD_STALE
             if inputs
                 .fee_model_cache_age_s
                 .map(|age| age > config.fee_model_hard_stale_s)
@@ -1121,15 +1121,15 @@ fn collect_mode_reasons(
             {
                 reasons.push(ModeReasonCode::ReduceOnlyFeeModelHardStale);
             }
-            // 9. REDUCEONLY_RISKSTATE_DEGRADED
+            // 10. REDUCEONLY_RISKSTATE_DEGRADED
             if inputs.risk_state == PolicyRiskState::Degraded {
                 reasons.push(ModeReasonCode::ReduceOnlyRiskstateDegraded);
             }
-            // 10. REDUCEONLY_POLICY_STALE
+            // 11. REDUCEONLY_POLICY_STALE
             if inputs.policy_age_sec > config.max_policy_age_sec {
                 reasons.push(ModeReasonCode::ReduceOnlyPolicyStale);
             }
-            // 11. REDUCEONLY_MARGIN_MM_UTIL_HIGH
+            // 12. REDUCEONLY_MARGIN_MM_UTIL_HIGH
             let mm_warning = inputs
                 .mm_util
                 .map(|v| v >= config.mm_util_reduceonly && v < config.mm_util_kill)
@@ -1137,19 +1137,19 @@ fn collect_mode_reasons(
             if mm_warning {
                 reasons.push(ModeReasonCode::ReduceOnlyMarginMmUtilHigh);
             }
-            // 12. REDUCEONLY_INPUT_MISSING_OR_STALE
+            // 13. REDUCEONLY_INPUT_MISSING_OR_STALE
             if critical_inputs_missing_or_stale(inputs, config) {
                 reasons.push(ModeReasonCode::ReduceOnlyInputMissingOrStale);
             }
-            // 13. REDUCEONLY_WATCHDOG_UNCONFIRMED
+            // 14. REDUCEONLY_WATCHDOG_UNCONFIRMED
             if kp.watchdog_unconfirmed() {
                 reasons.push(ModeReasonCode::ReduceOnlyWatchdogUnconfirmed);
             }
-            // 14. REDUCEONLY_DISK_KILL_UNCONFIRMED
+            // 15. REDUCEONLY_DISK_KILL_UNCONFIRMED
             if kp.disk_unconfirmed() {
                 reasons.push(ModeReasonCode::ReduceOnlyDiskKillUnconfirmed);
             }
-            // 15. REDUCEONLY_SESSION_KILL_UNCONFIRMED
+            // 16. REDUCEONLY_SESSION_KILL_UNCONFIRMED
             if kp.session_unconfirmed() {
                 reasons.push(ModeReasonCode::ReduceOnlySessionKillUnconfirmed);
             }
