@@ -418,6 +418,12 @@ fn count_unescaped_quotes(s: &str) -> usize {
 ///
 /// Uses unescaped-quote counting to verify that the found `"key"` is at an object-key
 /// position (even number of preceding quotes) rather than inside a string value.
+///
+/// **Limitation:** `\uXXXX` Unicode escape sequences are not decoded — they are left as
+/// the literal 6-char sequence `\uXXXX`. For F1 cert fields this is intentional: any cert
+/// value containing `\uXXXX` would fail the equality check (e.g. `"VALID"` != `"\u0056ALID"`),
+/// which is fail-closed (cert appears invalid → ReduceOnly). Well-formed certs from the
+/// production issuer do not use Unicode escapes in ASCII fields.
 fn extract_json_str(json: &str, key: &str) -> Option<String> {
     let search = format!("\"{}\"", key);
     let mut start = 0;
@@ -782,7 +788,12 @@ pub struct PolicyGuardInputs {
     /// BasisMonitor decision (§2.3.3): Normal | ForceReduceOnly | ForceKill.
     /// ForceReduceOnly → SystemIntegrityAxis::Degraded; ForceKill → CapitalRiskAxis::Critical.
     pub basis_decision: PolicyBasisDecision,
-    /// Fee model cache age in seconds (§4.2). None = not tracked.
+    /// Fee model cache age in seconds (§4.2).
+    /// `None` = fee model cache age not available (opt-in check). Unlike `mm_util` or disk
+    /// inputs (which fail-closed on `None`), a missing fee model age does NOT trigger
+    /// ReduceOnly — the check is treated as not-enforced. This is intentional: fee model
+    /// staleness is a soft gate, not a critical freshness requirement. Set `Some(age)` only
+    /// when the fee model cache is actively monitored.
     pub fee_model_cache_age_s: Option<u64>,
     /// Policy age in seconds (derived from python_policy_generated_ts_ms).
     pub policy_age_sec: u64,

@@ -15,13 +15,18 @@
 
 /// Enforcement profile — determines whether EvidenceGuard is active.
 /// Using an enum prevents typo-based bypasses (e.g. "csp" vs "CSP").
+///
+/// **Note:** `guard.rs` has a parallel `EnforcedProfile` enum with identical variants.
+/// They exist separately because `guard.rs` is `#[path]`-included directly by tests
+/// (no crate module system), preventing a shared import. They must be kept in sync.
+/// Unification is deferred to Slice 9+ when integration wiring is added.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EvidenceEnforcedProfile {
     /// Contract Safety Profile only — EvidenceGuard is NOT enforced.
     Csp,
     /// General Operational Profile — EvidenceGuard IS enforced.
     Gop,
-    /// Full profile — EvidenceGuard IS enforced.
+    /// Full profile — EvidenceGuard IS enforced (same semantics as Gop for guard purposes).
     Full,
 }
 

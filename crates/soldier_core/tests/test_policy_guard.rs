@@ -12,6 +12,7 @@
 //!   AT-1067 — disk kill unconfirmed → REDUCEONLY_DISK_KILL_UNCONFIRMED
 //!   AT-1068 — session kill unconfirmed → REDUCEONLY_SESSION_KILL_UNCONFIRMED
 //!   AT-1069 — confirmed kill predicates → Kill
+//!   §2.3.3   — BasisMonitor pathway: ForceKill → Kill, ForceReduceOnly → ReduceOnly
 
 #[path = "../src/policy/guard.rs"]
 mod guard;
@@ -654,4 +655,74 @@ fn test_cortex_force_kill_gives_kill() {
             .mode_reasons
             .contains(&ModeReasonCode::KillCortexForceKill)
     );
+}
+
+// ─── §2.3.3 BasisMonitor pathway ─────────────────────────────────────────────
+// basis_decision is the integration seam for BasisMonitor (mark/index/last price
+// divergence). These tests prove causality: only basis_decision differs from the
+// clean baseline, so it is the sole cause of the mode change.
+
+#[test]
+fn test_basis_decision_force_kill_trips_kill_mode() {
+    let now_ms = 1_000_000_u64;
+    let config = PolicyGuardConfig::default();
+    let mut resolver = AxisResolver::new();
+
+    // Only basis_decision differs from clean baseline — sole cause.
+    let inputs = PolicyGuardInputs {
+        basis_decision: PolicyBasisDecision::ForceKill,
+        ..clean_inputs(now_ms)
+    };
+
+    let result = resolver.get_effective_mode(&inputs, &config);
+    assert_eq!(
+        result.trading_mode,
+        PolicyTradingMode::Kill,
+        "PolicyBasisDecision::ForceKill must produce Kill mode"
+    );
+    assert!(
+        result
+            .mode_reasons
+            .contains(&ModeReasonCode::KillCortexForceKill),
+        "KillCortexForceKill reason must be present for ForceKill basis, got {:?}",
+        result.mode_reasons
+    );
+}
+
+#[test]
+fn test_basis_decision_force_reduceonly_trips_reduceonly_mode() {
+    let now_ms = 1_000_000_u64;
+    let config = PolicyGuardConfig::default();
+    let mut resolver = AxisResolver::new();
+
+    // Only basis_decision differs from clean baseline — sole cause.
+    let inputs = PolicyGuardInputs {
+        basis_decision: PolicyBasisDecision::ForceReduceOnly,
+        ..clean_inputs(now_ms)
+    };
+
+    let result = resolver.get_effective_mode(&inputs, &config);
+    assert_eq!(
+        result.trading_mode,
+        PolicyTradingMode::ReduceOnly,
+        "PolicyBasisDecision::ForceReduceOnly must produce ReduceOnly mode"
+    );
+    assert!(
+        result
+            .mode_reasons
+            .contains(&ModeReasonCode::ReduceOnlyCortexForceReduceOnly),
+        "ReduceOnlyCortexForceReduceOnly reason must be present for ForceReduceOnly basis, got {:?}",
+        result.mode_reasons
+    );
+}
+
+#[test]
+fn test_basis_decision_normal_does_not_trip() {
+    // Baseline check: Normal basis_decision must not change TradingMode.
+    let now_ms = 1_000_000_u64;
+    let config = PolicyGuardConfig::default();
+    let mut resolver = AxisResolver::new();
+
+    let result = resolver.get_effective_mode(&clean_inputs(now_ms), &config);
+    assert_eq!(result.trading_mode, PolicyTradingMode::Active);
 }
