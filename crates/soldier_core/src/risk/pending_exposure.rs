@@ -107,12 +107,15 @@ impl PendingExposureTracker {
 
     /// Register an instrument with its delta limit
     pub fn register_instrument(&self, instrument_id: String, delta_limit: Option<DeltaContracts>) {
+        if delta_limit.is_none() {
+            eprintln!(
+                "[WARN] pending_exposure: instrument '{}' registered with no delta limit — all reservations will be allowed (fail-open)",
+                instrument_id
+            );
+        }
         let mut instruments = match self.instruments.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("pending_exposure lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
         };
         instruments.insert(instrument_id, InstrumentPending::new(delta_limit));
     }
@@ -148,10 +151,7 @@ impl PendingExposureTracker {
 
         let mut instruments = match self.instruments.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("pending_exposure lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
         };
 
         // Get instrument tracker - fail-closed: reject unregistered instruments
@@ -197,10 +197,7 @@ impl PendingExposureTracker {
     pub fn release(&self, reservation_id: &ReservationId, instrument_id: &str) -> bool {
         let mut instruments = match self.instruments.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("pending_exposure lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
         };
 
         if let Some(inst) = instruments.get_mut(instrument_id) {
@@ -214,10 +211,7 @@ impl PendingExposureTracker {
     pub fn get_pending_delta(&self, instrument_id: &str) -> DeltaContracts {
         let instruments = match self.instruments.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("pending_exposure lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
         };
         instruments
             .get(instrument_id)
@@ -229,10 +223,7 @@ impl PendingExposureTracker {
     pub fn get_global_pending_delta(&self) -> DeltaContracts {
         let instruments = match self.instruments.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("pending_exposure lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
         };
         instruments.values().map(|inst| inst.pending_delta).sum()
     }

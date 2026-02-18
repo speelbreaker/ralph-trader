@@ -189,7 +189,14 @@ fn json_bool(b: bool) -> &'static str {
 }
 
 fn json_f64(v: f64) -> String {
-    format!("{}", v)
+    if !v.is_finite() {
+        return "null".to_string();
+    }
+    if v.fract() == 0.0 {
+        format!("{v:.1}")
+    } else {
+        format!("{v}")
+    }
 }
 
 fn json_str_array(arr: &[String]) -> String {

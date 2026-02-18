@@ -683,8 +683,8 @@ fn test_basis_decision_force_kill_trips_kill_mode() {
     assert!(
         result
             .mode_reasons
-            .contains(&ModeReasonCode::KillCortexForceKill),
-        "KillCortexForceKill reason must be present for ForceKill basis, got {:?}",
+            .contains(&ModeReasonCode::KillBasisMonitor),
+        "KillBasisMonitor reason must be present for ForceKill basis, got {:?}",
         result.mode_reasons
     );
 }
@@ -710,8 +710,8 @@ fn test_basis_decision_force_reduceonly_trips_reduceonly_mode() {
     assert!(
         result
             .mode_reasons
-            .contains(&ModeReasonCode::ReduceOnlyCortexForceReduceOnly),
-        "ReduceOnlyCortexForceReduceOnly reason must be present for ForceReduceOnly basis, got {:?}",
+            .contains(&ModeReasonCode::ReduceOnlyBasisMonitor),
+        "ReduceOnlyBasisMonitor reason must be present for ForceReduceOnly basis, got {:?}",
         result.mode_reasons
     );
 }

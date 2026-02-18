@@ -624,6 +624,7 @@ pub enum ModeReasonCode {
     KillRateLimitSessionTermination,
     KillDiskWatermarkKill,
     KillCortexForceKill,
+    KillBasisMonitor,
     // ReduceOnly-tier (in canonical order):
     ReduceOnlyRiskstateMaintenance,
     ReduceOnlyEmergencyReduceOnlyActive,
@@ -632,6 +633,7 @@ pub enum ModeReasonCode {
     ReduceOnlyF1CertInvalid,
     ReduceOnlyEvidenceChainNotGreen,
     ReduceOnlyCortexForceReduceOnly,
+    ReduceOnlyBasisMonitor,
     ReduceOnlyFeeModelHardStale,
     ReduceOnlyRiskstateDegraded,
     ReduceOnlyPolicyStale,
@@ -652,6 +654,7 @@ impl ModeReasonCode {
                 | ModeReasonCode::KillRateLimitSessionTermination
                 | ModeReasonCode::KillDiskWatermarkKill
                 | ModeReasonCode::KillCortexForceKill
+                | ModeReasonCode::KillBasisMonitor
         )
     }
 
@@ -668,21 +671,23 @@ impl ModeReasonCode {
             ModeReasonCode::KillRateLimitSessionTermination => 3,
             ModeReasonCode::KillDiskWatermarkKill => 4,
             ModeReasonCode::KillCortexForceKill => 5,
-            ModeReasonCode::ReduceOnlyRiskstateMaintenance => 6,
-            ModeReasonCode::ReduceOnlyEmergencyReduceOnlyActive => 7,
-            ModeReasonCode::ReduceOnlyOpenPermissionLatched => 8,
-            ModeReasonCode::ReduceOnlyBunkerModeActive => 9,
-            ModeReasonCode::ReduceOnlyF1CertInvalid => 10,
-            ModeReasonCode::ReduceOnlyEvidenceChainNotGreen => 11,
-            ModeReasonCode::ReduceOnlyCortexForceReduceOnly => 12,
-            ModeReasonCode::ReduceOnlyFeeModelHardStale => 13,
-            ModeReasonCode::ReduceOnlyRiskstateDegraded => 14,
-            ModeReasonCode::ReduceOnlyPolicyStale => 15,
-            ModeReasonCode::ReduceOnlyMarginMmUtilHigh => 16,
-            ModeReasonCode::ReduceOnlyInputMissingOrStale => 17,
-            ModeReasonCode::ReduceOnlyWatchdogUnconfirmed => 18,
-            ModeReasonCode::ReduceOnlyDiskKillUnconfirmed => 19,
-            ModeReasonCode::ReduceOnlySessionKillUnconfirmed => 20,
+            ModeReasonCode::KillBasisMonitor => 6,
+            ModeReasonCode::ReduceOnlyRiskstateMaintenance => 7,
+            ModeReasonCode::ReduceOnlyEmergencyReduceOnlyActive => 8,
+            ModeReasonCode::ReduceOnlyOpenPermissionLatched => 9,
+            ModeReasonCode::ReduceOnlyBunkerModeActive => 10,
+            ModeReasonCode::ReduceOnlyF1CertInvalid => 11,
+            ModeReasonCode::ReduceOnlyEvidenceChainNotGreen => 12,
+            ModeReasonCode::ReduceOnlyCortexForceReduceOnly => 13,
+            ModeReasonCode::ReduceOnlyBasisMonitor => 14,
+            ModeReasonCode::ReduceOnlyFeeModelHardStale => 15,
+            ModeReasonCode::ReduceOnlyRiskstateDegraded => 16,
+            ModeReasonCode::ReduceOnlyPolicyStale => 17,
+            ModeReasonCode::ReduceOnlyMarginMmUtilHigh => 18,
+            ModeReasonCode::ReduceOnlyInputMissingOrStale => 19,
+            ModeReasonCode::ReduceOnlyWatchdogUnconfirmed => 20,
+            ModeReasonCode::ReduceOnlyDiskKillUnconfirmed => 21,
+            ModeReasonCode::ReduceOnlySessionKillUnconfirmed => 22,
         }
     }
 }
@@ -1065,10 +1070,12 @@ fn collect_mode_reasons(
                 reasons.push(ModeReasonCode::KillDiskWatermarkKill);
             }
             // 6. KILL_CORTEX_FORCE_KILL
-            if inputs.cortex_override == CortexOverride::ForceKill
-                || inputs.basis_decision == PolicyBasisDecision::ForceKill
-            {
+            if inputs.cortex_override == CortexOverride::ForceKill {
                 reasons.push(ModeReasonCode::KillCortexForceKill);
+            }
+            // 7. KILL_BASIS_MONITOR
+            if inputs.basis_decision == PolicyBasisDecision::ForceKill {
+                reasons.push(ModeReasonCode::KillBasisMonitor);
             }
         }
         PolicyTradingMode::ReduceOnly => {
@@ -1098,11 +1105,13 @@ fn collect_mode_reasons(
             {
                 reasons.push(ModeReasonCode::ReduceOnlyEvidenceChainNotGreen);
             }
-            // 7. REDUCEONLY_CORTEX_FORCE_REDUCE_ONLY (also covers basis ForceReduceOnly)
-            if inputs.cortex_override == CortexOverride::ForceReduceOnly
-                || inputs.basis_decision == PolicyBasisDecision::ForceReduceOnly
-            {
+            // 7. REDUCEONLY_CORTEX_FORCE_REDUCE_ONLY
+            if inputs.cortex_override == CortexOverride::ForceReduceOnly {
                 reasons.push(ModeReasonCode::ReduceOnlyCortexForceReduceOnly);
+            }
+            // 8. REDUCEONLY_BASIS_MONITOR
+            if inputs.basis_decision == PolicyBasisDecision::ForceReduceOnly {
+                reasons.push(ModeReasonCode::ReduceOnlyBasisMonitor);
             }
             // 8. REDUCEONLY_FEE_MODEL_HARD_STALE
             if inputs

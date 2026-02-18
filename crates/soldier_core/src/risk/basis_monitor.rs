@@ -115,6 +115,11 @@ impl BasisMonitor {
     ///   2. Kill threshold exceeded for kill_window → ForceKill
     ///   3. ReduceOnly threshold exceeded for reduceonly_window → ForceReduceOnly
     ///   4. Otherwise → Normal
+    ///
+    /// **`now_ms` must be monotonically non-decreasing across calls.** A non-monotonic
+    /// clock (e.g. NTP step-back) will NOT reset `trip_start_ms` and may cause the
+    /// window check to stall until the clock catches up. The caller is responsible
+    /// for providing a monotonic time source.
     pub fn evaluate(
         &mut self,
         prices: BasisPrices,

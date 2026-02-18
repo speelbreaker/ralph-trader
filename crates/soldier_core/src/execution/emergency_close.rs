@@ -242,11 +242,13 @@ fn now_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
         .unwrap_or_else(|e| {
-            eprintln!("now_ms: system time before UNIX_EPOCH: {}, using 0", e);
-            std::time::Duration::from_secs(0)
+            // Clock jumped before epoch — OS anomaly. incident_ts_ms will be 0 (epoch).
+            // This does NOT affect time_to_neutral_ms, which uses Instant::now() (monotonic).
+            eprintln!("[WARN] now_ms: system clock before UNIX_EPOCH: {e}; incident_ts_ms=0");
+            0
         })
-        .as_millis() as u64
 }
 
 fn record_close_attempt_metric(attempt: u8, buffer: i32) {
