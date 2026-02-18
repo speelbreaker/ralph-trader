@@ -937,7 +937,10 @@ impl KillPredicates {
     }
 }
 
-fn compute_kill_predicates(inputs: &PolicyGuardInputs, config: &PolicyGuardConfig) -> KillPredicates {
+fn compute_kill_predicates(
+    inputs: &PolicyGuardInputs,
+    config: &PolicyGuardConfig,
+) -> KillPredicates {
     let watchdog_heartbeat_stale = inputs
         .watchdog_last_heartbeat_ts_ms
         .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)

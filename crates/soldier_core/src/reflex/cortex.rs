@@ -228,7 +228,9 @@ impl CortexMonitor {
         self.dvol_history
             .retain(|s| now_ms.saturating_sub(s.ts_ms) <= window_ms);
         // Safety cap: at most 10 samples/s × window_s. Removes oldest if still over limit.
-        let max_samples = (config.dvol_jump_window_s as usize).saturating_mul(10).max(128);
+        let max_samples = (config.dvol_jump_window_s as usize)
+            .saturating_mul(10)
+            .max(128);
         if self.dvol_history.len() > max_samples {
             let drain = self.dvol_history.len() - max_samples;
             self.dvol_history.drain(..drain);

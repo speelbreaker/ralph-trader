@@ -13,8 +13,8 @@ mod guard;
 
 use guard::{
     AxisResolver, CortexOverride, EnforcedProfile, F1CertStatus, ModeReasonCode,
-    PolicyBasisDecision, PolicyEvidenceState, PolicyGuardConfig, PolicyGuardInputs, PolicyRiskState,
-    PolicyTradingMode,
+    PolicyBasisDecision, PolicyEvidenceState, PolicyGuardConfig, PolicyGuardInputs,
+    PolicyRiskState, PolicyTradingMode,
 };
 
 fn base_inputs(now_ms: u64, profile: EnforcedProfile) -> PolicyGuardInputs {
