@@ -64,3 +64,16 @@ cargo test -p soldier_core --test test_inventory_skew
 cargo test -p soldier_core --test test_pending_exposure
 cargo test -p soldier_core --test test_exposure_budget
 cargo test -p soldier_core --test test_margin_gate
+cargo test -p soldier_core --lib --test test_basis_monitor
+cargo test -p soldier_core --lib --test test_bunker_mode
+cargo test -p soldier_core --lib --test test_cortex
+cargo test -p soldier_core --lib --test test_evidence_guard
+cargo test -p soldier_core --lib --test test_exchange_health
+cargo test -p soldier_core --lib --test test_f1_gate
+cargo test -p soldier_infra --test test_http_health
+cargo test -p soldier_infra --test test_http_status
+cargo test -p soldier_core --lib --test test_policy_guard
+cargo test -p soldier_core --lib --test test_policy_freshness
+cargo test -p soldier_core --lib --test test_order_cancel
+cargo test -p soldier_core --lib --test test_profile_isolation
+cargo test -p soldier_infra --test test_http_emergency

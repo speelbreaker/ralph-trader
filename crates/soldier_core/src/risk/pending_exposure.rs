@@ -107,7 +107,16 @@ impl PendingExposureTracker {
 
     /// Register an instrument with its delta limit
     pub fn register_instrument(&self, instrument_id: String, delta_limit: Option<DeltaContracts>) {
-        let mut instruments = self.instruments.lock().unwrap();
+        if delta_limit.is_none() {
+            eprintln!(
+                "[WARN] pending_exposure: instrument '{}' registered with no delta limit — all reservations will be allowed (fail-open)",
+                instrument_id
+            );
+        }
+        let mut instruments = match self.instruments.lock() {
+            Ok(guard) => guard,
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
+        };
         instruments.insert(instrument_id, InstrumentPending::new(delta_limit));
     }
 
@@ -129,15 +138,36 @@ impl PendingExposureTracker {
         delta_impact_est: DeltaContracts,
         current_delta: DeltaContracts,
     ) -> ReserveResult {
-        // Note: unwrap() on Mutex::lock() is acceptable here - lock poisoning
-        // indicates a panic in another thread while holding the lock, which is
-        // a fatal error that should propagate
-        let mut instruments = self.instruments.lock().unwrap();
+        // Defensive: clamp negative delta_impact_est to absolute value
+        let delta_impact_est = if delta_impact_est < 0.0 {
+            eprintln!(
+                "pending_exposure: negative delta_impact_est={}, using absolute value",
+                delta_impact_est
+            );
+            delta_impact_est.abs()
+        } else {
+            delta_impact_est
+        };
 
-        // Get or create instrument tracker
-        let inst = instruments
-            .entry(instrument_id.to_string())
-            .or_insert_with(|| InstrumentPending::new(None));
+        let mut instruments = match self.instruments.lock() {
+            Ok(guard) => guard,
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
+        };
+
+        // Get instrument tracker - fail-closed: reject unregistered instruments
+        let inst = match instruments.get_mut(instrument_id) {
+            Some(inst) => inst,
+            None => {
+                eprintln!(
+                    "pending_exposure: instrument '{}' not registered, rejecting (fail-closed)",
+                    instrument_id
+                );
+                return ReserveResult::BudgetExceeded {
+                    requested: delta_impact_est.abs(),
+                    available: 0.0,
+                };
+            }
+        };
 
         // Check if reservation would breach budget
         if !inst.can_reserve(delta_impact_est, current_delta) {
@@ -165,7 +195,10 @@ impl PendingExposureTracker {
     /// # Returns
     /// `true` if reservation was found and released, `false` if not found
     pub fn release(&self, reservation_id: &ReservationId, instrument_id: &str) -> bool {
-        let mut instruments = self.instruments.lock().unwrap();
+        let mut instruments = match self.instruments.lock() {
+            Ok(guard) => guard,
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
+        };
 
         if let Some(inst) = instruments.get_mut(instrument_id) {
             inst.release(reservation_id)
@@ -176,7 +209,10 @@ impl PendingExposureTracker {
 
     /// Get current pending delta for an instrument
     pub fn get_pending_delta(&self, instrument_id: &str) -> DeltaContracts {
-        let instruments = self.instruments.lock().unwrap();
+        let instruments = match self.instruments.lock() {
+            Ok(guard) => guard,
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
+        };
         instruments
             .get(instrument_id)
             .map(|inst| inst.pending_delta)
@@ -185,7 +221,10 @@ impl PendingExposureTracker {
 
     /// Get total global pending delta across all instruments
     pub fn get_global_pending_delta(&self) -> DeltaContracts {
-        let instruments = self.instruments.lock().unwrap();
+        let instruments = match self.instruments.lock() {
+            Ok(guard) => guard,
+            Err(e) => panic!("pending_exposure lock poisoned: {e}"),
+        };
         instruments.values().map(|inst| inst.pending_delta).sum()
     }
 }
@@ -295,5 +334,37 @@ mod tests {
 
         let result_eth = tracker.reserve("intent-4".to_string(), "ETH-PERP", 8.0, 0.0);
         assert_eq!(result_eth, ReserveResult::Reserved);
+    }
+
+    #[test]
+    fn test_unregistered_instrument_rejected_fail_closed() {
+        // REMAINING-2 from failure review: test fail-closed behavior for unregistered instruments
+        let tracker = PendingExposureTracker::new(None);
+        tracker.register_instrument("BTC-PERP".to_string(), Some(100.0));
+
+        // Attempt to reserve on unregistered instrument should be rejected
+        let result = tracker.reserve(
+            "intent-1".to_string(),
+            "UNKNOWN-PERP", // Not registered
+            10.0,
+            0.0,
+        );
+
+        // Should reject with BudgetExceeded (available=0)
+        match result {
+            ReserveResult::BudgetExceeded {
+                requested,
+                available,
+            } => {
+                assert_eq!(requested, 10.0);
+                assert_eq!(available, 0.0);
+            }
+            ReserveResult::Reserved => {
+                panic!("Unregistered instrument should be rejected (fail-closed)")
+            }
+        }
+
+        // Verify no pending delta was recorded
+        assert_eq!(tracker.get_pending_delta("UNKNOWN-PERP"), 0.0);
     }
 }

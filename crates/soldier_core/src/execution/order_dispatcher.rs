@@ -140,6 +140,12 @@ impl ProductionDispatcher {
     }
 }
 
+impl Default for ProductionDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OrderDispatcher for ProductionDispatcher {
     fn dispatch_close(&self, _request: &CloseOrderRequest) -> Result<OrderResult, DispatchError> {
         Err(DispatchError::new(

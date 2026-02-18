@@ -22,3 +22,4 @@ audit/
 proxy.log
 proxy_bridge.py
 plans/prd.json.bak
+evidence/phase1/config_fail_closed/missing_keys_matrix.json

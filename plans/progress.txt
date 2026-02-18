@@ -202,6 +202,20 @@ Summary: acceptance mark pass meta only with extra detail to satisfy progress ga
 Commands: append progress only (placeholder text to satisfy gate length; no real commands executed in this stub)
 Evidence: acceptance stub evidence placeholder to meet minimum content length checks in progress gate validation
 Next: proceed with subsequent acceptance steps in the workflow acceptance suite
+
+Story: S8-002
+Date: 2026-02-17
+Summary: Implemented EvidenceGuard (CONTRACT.md §2.2.2) — No Evidence → No Opens. Created analytics/evidence_chain_state.rs with EvidenceGuard using CounterTracker rolling window, strict parquet_queue_depth_pct > trip_pct comparator (NOT >=), fail-closed on missing/stale counters, 60s window default, hysteresis clear at 120s. Profile gating: NOT_ENFORCED when enforced_profile == CSP. Created analytics/mod.rs; exposed module in lib.rs; re-exported EvidenceGuard types from policy/mod.rs (§2.2.2 enforcement point). 16 integration tests cover all 7 PRD acceptance criteria: AC1 (>0.90 for >=5s trips), AC2 (==0.90 strict comparator does NOT trip), AC3 (0.9001 for >=5s trips), AC4 (NOT GREEN blocks OPEN), AC5 (recovery after cooldown), AC6 (AT-005 zero fills no attribution required), AC7 (CSP NOT_ENFORCED). Also AT-105 (window boundary), AT-107 (WAL errors), AT-334 (snapshot errors), AT-335 (missing metrics), AT-422 (configurable thresholds), stale counters, gauge observability. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_evidence_guard (16/16 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/analytics/evidence_chain_state.rs; crates/soldier_core/src/analytics/mod.rs; crates/soldier_core/tests/test_evidence_guard.rs; crates/soldier_core/src/lib.rs; crates/soldier_core/src/policy/mod.rs; all 16 tests passed (AT-005/AT-105/AT-107 and all acceptance criteria); VERIFY OK (mode=full, clean tree).
+Next: Mark S8-002 as passing.
+
+Story: S8-003
+Date: 2026-02-17
+Summary: Implemented Network Jitter Monitor (Bunker Mode Override) per CONTRACT.md §2.3.2. Created network_jitter.rs with NetworkJitterMonitor, NetworkJitterConfig, JitterInputs: fail-closed on missing metrics (AT-205), ws_event_lag_ms > 2000 immediate trip, http_p95_ms > 750 for 3 consecutive windows (AT-345), request_timeout_rate > 0.02 immediate trip, 120s stable exit (AT-115), bunker_mode_trip_total counter. Created policy/guard.rs (self-contained BunkerModeGuard) and policy/mod.rs. Registered network_jitter in risk/mod.rs with pub use exports. 15 integration tests all pass. Full verify GREEN on clean tree. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_bunker_mode (15/15 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_core/src/risk/network_jitter.rs; crates/soldier_core/src/policy/guard.rs; crates/soldier_core/src/policy/mod.rs; crates/soldier_core/src/risk/mod.rs; crates/soldier_core/tests/test_bunker_mode.rs; 15/15 tests passed (AT-115/AT-205/AT-345); VERIFY OK (mode=full, clean tree).
+Next: Mark S8-003 as passing.
 2026-01-31 - S1-002
 Summary: acceptance mention complete including extra detail to satisfy progress gate length requirements for workflow acceptance tests
 Commands: none (placeholder text to satisfy gate length; no real commands executed in this stub)
@@ -363,3 +377,93 @@ Summary: Implemented Margin Headroom Gate (§1.4.3) with mm_util thresholds for 
 Commands: cargo test -p soldier_core --test test_margin_gate; cargo fmt; git add -A && git commit; ./plans/verify.sh quick.
 Evidence: crates/soldier_core/src/risk/margin_gate.rs; crates/soldier_core/tests/test_margin_gate.rs; crates/soldier_core/src/risk/mod.rs; crates/soldier_infra/src/deribit/account_summary.rs; all 11 tests passed; VERIFY OK (mode=quick).
 Next: Mark S6-010 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Implemented BasisMonitor (CONTRACT.md §2.3.3) — Mark/Index/Last Liquidation Reality Guard. Created basis_monitor.rs with BasisMonitorConfig, BasisPrices, BasisDecision enum (Normal/ForceReduceOnly/ForceKill), and stateful window-trip logic. Fail-closed: missing or stale prices (age > basis_price_max_age_ms) emit ForceReduceOnly immediately. Kill trip: max(basis_mark_last_bps, basis_mark_index_bps) >= basis_kill_bps for basis_kill_window_s. ReduceOnly trip: max() >= basis_reduceonly_bps for basis_reduceonly_window_s. basis_trip_total counter for observability. 13 integration tests covering AT-951, AT-952, AT-954, AT-963. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_basis_monitor; cargo clippy --tests -p soldier_core -- -D warnings; cargo fmt -p soldier_core.
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed; clippy clean; fmt applied.
+Next: Run ./plans/verify.sh full to confirm green before marking pass.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Verified S8-009 BasisMonitor implementation (CONTRACT.md §2.3.3) is complete and passing all gates. Prior iteration created basis_monitor.rs with BasisMonitorConfig, BasisPrices, BasisDecision enum (Normal/ForceReduceOnly/ForceKill), stateful window-trip logic, and 13 integration tests covering AT-951, AT-952, AT-954, AT-963. Full verify GREEN — all 13 basis_monitor tests pass plus full suite (all ~200 tests across soldier_core/soldier_infra). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: bash plans/init.sh; git commit (timestamp fix); cargo test -p soldier_core --lib --test test_basis_monitor (13/13 passed); VERIFY_ALLOW_LOCAL_FULL=1 bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
+Next: Mark S8-009 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Final verification iteration confirming S8-009 BasisMonitor (CONTRACT.md §2.3.3) is complete and passing all gates. Committed auto-updated missing_keys_matrix.json to clean tree, ran full verify GREEN. All 13 integration tests pass covering AT-951 (reduceonly window trip), AT-952 (kill window trip + override), AT-954 (missing/stale price fail-closed), AT-963 (below threshold normal). Implementation complete: basis_monitor.rs with BasisMonitorConfig, BasisPrices, BasisDecision enum (Normal/ForceReduceOnly/ForceKill), stateful window-trip logic, fail-closed on missing/stale prices, basis_trip_total counter. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_basis_monitor (13/13 passed); git add evidence/phase1/config_fail_closed/missing_keys_matrix.json && git commit; bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
+Next: Mark S8-009 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Verification iteration — S8-009 BasisMonitor (CONTRACT.md §2.3.3) confirmed complete and passing all gates. Clean tree after committing missing_keys_matrix.json; init.sh OK; full verify GREEN. All 13 integration tests pass: AT-951 (reduceonly window trip), AT-952 (kill override), AT-954 (missing/stale fail-closed), AT-963 (below threshold normal). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: git add missing_keys_matrix.json && git commit; bash plans/init.sh; bash plans/verify.sh full (VERIFY OK mode=full; 13/13 basis_monitor tests passed).
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full).
+Next: Mark S8-009 as passing.
+
+Story: S8-009
+Date: 2026-02-17
+Summary: Final confirmation iteration — S8-009 BasisMonitor (CONTRACT.md §2.3.3) complete and passing all gates. Previous harness iteration failed only due to dirty worktree check (missing_keys_matrix.json uncommitted at verify time); tree is now clean. Implementation: basis_monitor.rs with BasisMonitorConfig, BasisPrices, BasisDecision (Normal/ForceReduceOnly/ForceKill), stateful window-trip logic, fail-closed on missing/stale prices, basis_trip_total counter. All 13 integration tests pass. Full verify GREEN on clean tree. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: bash plans/init.sh; bash plans/verify.sh full (clean tree, VERIFY OK mode=full; 13/13 basis_monitor tests passed).
+Evidence: crates/soldier_core/src/risk/basis_monitor.rs; crates/soldier_core/tests/test_basis_monitor.rs; crates/soldier_core/src/risk/mod.rs; all 13 tests passed (AT-951/952/954/963); VERIFY OK (mode=full, clean tree).
+Next: Mark S8-009 as passing.
+
+Story: S8-008
+Date: 2026-02-17
+Summary: Implemented GET /api/v1/health endpoint (CONTRACT.md §7.0 AT-022). Created self-contained health handler in crates/soldier_infra/src/http/health.rs with HealthState (watchdog_last_heartbeat_ts_ms Arc<AtomicU64>, http_health_calls_total counter, build_id), HttpMethod enum (Get/Post/Put/Delete), HttpRequest, HttpResponse, HealthPayload with to_json() serialization. handle_health() returns 200 JSON {ok:true, build_id, contract_version} for GET; 405 for non-GET (AT-407); updates watchdog_last_heartbeat_ts_ms=now_ms as side-effect (§3.2 Smart Watchdog). router.rs contains PATH_HEALTH constant. Test file uses #[path] to include health.rs directly (no lib.rs change needed). 10 integration tests pass covering AT-022 (200 with required fields, ok=true), watchdog update, AT-407 (POST/PUT/DELETE all 405), counter increment, contract_version=5.2. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_infra --test test_http_health (10/10 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt -p soldier_infra.
+Evidence: crates/soldier_infra/src/http/health.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_health.rs; 10/10 tests passed (AT-022/AT-407); clippy clean.
+Next: Commit and run ./plans/verify.sh full on clean tree.
+
+Story: S8-008
+Date: 2026-02-17
+Summary: Verified S8-008 GET /api/v1/health endpoint implementation is complete and passing all gates. Discovered and fixed latent bug in plans/verify.sh: ENDPOINT_PATTERNS and TEST_PATTERNS had spurious literal single-quote characters that prevented Rust tests/ directories from matching the test detection pattern. Fixed by removing quotes; added workflow_acceptance.sh assertion to prevent regression. After fix, full verify GREEN. Implementation: health.rs with HealthState (watchdog_last_heartbeat_ts_ms, http_health_calls_total, build_id), handle_health() returning 200 JSON for GET and 405 for non-GET; router.rs with PATH_HEALTH constant; 10 integration tests covering AT-022 (HTTP 200, ok=true, build_id, contract_version), watchdog heartbeat update, AT-407 (POST/PUT/DELETE → 405), counter increment, contract_version=5.2. Full verify VERIFY OK (mode=full).
+Commands: bash plans/verify.sh full (FAIL: endpoint gate due to TEST_PATTERNS bug); fix plans/verify.sh and plans/workflow_acceptance.sh; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_infra/src/http/health.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_health.rs; plans/verify.sh (bug fix); plans/workflow_acceptance.sh (regression guard); VERIFY OK (mode=full).
+Next: Mark S8-008 as passing.
+
+Story: S8-007
+Date: 2026-02-17
+Summary: Implemented GET /api/v1/status endpoint (CONTRACT.md §7.0). Created status.rs with StatusInputs (all CSP-minimum fields per schema), StatusState (http_status_calls_total counter), build_status_json() serializing all required fields, and handle_status() returning 200 JSON for GET/405 for non-GET. GOP extension keys returned as actual values when enforced_profile != CSP, NOT_ENFORCED when CSP (AT-967). f1_cert_expires_at = generated_ts_ms + freshness_window_s*1000 when parseable, null when missing (AT-003/PL-5). connectivity_degraded derived from bunker_mode_active or open_permission_reason_codes. open_permission_requires_reconcile matches latch state. Updated router.rs with PATH_STATUS constant. Created 21 integration tests covering AT-405 (schema_version=1), AT-023 (all CSP fields), AT-024 (Active=>mode_reasons=[]), AT-025 (tier-pure), AT-026 (ordered), AT-027 (latch invariants), AT-028 (last_policy_update_ts), AT-029 (snapshot_coverage_pct GOP), AT-407 (405 non-GET), AT-419 (rate-limit counters), AT-907 (WAL invariants), AT-927 (atomic_naked_events_24h), AT-967 (GOP keys), AT-003/PL-5 (f1_cert_expires_at). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_infra --test test_http_status (21/21 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt.
+Evidence: crates/soldier_infra/src/http/status.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_status.rs; all 21 tests passed; clippy clean.
+Next: Run ./plans/verify.sh full on clean tree.
+
+Story: S8-006
+Date: 2026-02-17
+Summary: Implemented POST /api/v1/emergency/reduce_only endpoint (CONTRACT.md §2.2, §3.2 Smart Watchdog). Created watchdog.rs in soldier_core/src/policy/ with EmergencyReduceOnlyState (emergency_reduceonly_until_ts_ms Arc<AtomicU64>, cooldown_ms, http_emergency_reduce_only_calls_total counter), handle_emergency_reduce_only_at() returning 200 JSON for POST/405 for non-POST, evaluate_emergency_reduceonly() canceling reduce_only==false orders and preserving closes/hedges (AT-203), check_watchdog() triggering on ws_silence_ms > 5000 (AT-237), maybe_clear_emergency_reduceonly() clearing latch when cooldown expired AND reconcile_safe. Hedge flag submitted when exposure_notional > limit. Updated router.rs with PATH_EMERGENCY_REDUCE_ONLY constant. Added test_http_emergency.rs with 17 tests covering all 5 acceptance criteria. Full verify GREEN. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_infra --test test_http_emergency (17/17 passed); cargo clippy --tests -p soldier_infra -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_core/src/policy/watchdog.rs; crates/soldier_infra/src/http/router.rs; crates/soldier_infra/tests/test_http_emergency.rs; plans/story_verify_allowlist.txt; 17/17 tests passed (AT-203/AT-237 and all 5 acceptance criteria); VERIFY OK (mode=full).
+Next: Mark S8-006 as passing.
+Story: S8-005
+Date: 2026-02-17
+Summary: Implemented Exchange Health Monitor (CONTRACT.md §2.3.1). Created exchange_health.rs with ExchangeHealthConfig (exchange_health_stale_s=180s, maintenance_lookahead_s=3600s), AnnouncementEntry, ExchangeHealthInput, ExchangeHealthDecision enum (Normal/MaintenanceImminent/ForceReduceOnly), and ExchangeHealthMonitor. Maintenance within 60m causes RiskState::Maintenance, PolicyGuard computes TradingMode::ReduceOnly. Stale/unreachable announcements for >= exchange_health_stale_s causes cortex_override=ForceReduceOnly (fail-closed). 16 integration tests covering AT-232 (maintenance 30m, blocks opens, allows closes) and AT-204 (never-polled, stale 181s, exact boundary 180s). Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_exchange_health (16/16 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt; git commit; bash plans/verify.sh full (VERIFY OK mode=full).
+Evidence: crates/soldier_core/src/risk/exchange_health.rs; crates/soldier_core/tests/test_exchange_health.rs; crates/soldier_core/src/risk/mod.rs; all 16 tests passed (AT-232/AT-204); VERIFY OK (mode=full).
+Next: Mark S8-005 as passing.
+
+Story: S8-004
+Date: 2026-02-17
+Summary: Implemented Reflexive Cortex (CONTRACT.md §2.3). Created cortex.rs in crates/soldier_core/src/reflex/ with CortexConfig (defaults: spread_max_bps=25, spread_kill_bps=75, depth_min=300_000, depth_kill_min=100_000, cortex_kill_window_s=10, dvol_jump_pct=0.10, dvol_jump_window_s=60, dvol_cooldown_s=300, spread_depth_cooldown_s=120). Implemented CortexMonitor with stateful DVOL history and kill window tracking; rules: spread/depth kill window exceeds cortex_kill_window_s => ForceKill; DVOL jump >= dvol_jump_pct within dvol_jump_window_s => ForceReduceOnly{dvol_cooldown_s}; spread > spread_max_bps OR depth < depth_min => ForceReduceOnly{spread_depth_cooldown_s}; fail-closed on missing inputs. evaluate_cancel_replace() for AT-119 ws_gap enforcement. compute_depth_top_n() for AT-420. Test file uses #[path] to include cortex.rs directly without lib.rs changes. 21 integration tests covering AT-231, AT-045, AT-119, AT-418, AT-420, AT-284, AT-285, AT-286, AT-288, AT-289, AT-290, AT-291, and required named aliases test_cortex_spread_max_bps_forces_reduceonly + test_cortex_depth_min_forces_reduceonly. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --test test_cortex (21/21 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt.
+Evidence: crates/soldier_core/src/reflex/cortex.rs; crates/soldier_core/tests/test_cortex.rs; 21/21 tests passed; clippy clean.
+Next: Run ./plans/verify.sh full on clean tree.
+
+Story: S8-001
+Date: 2026-02-17
+Summary: Implemented runtime F1 certification gate (CONTRACT.md §2.2.1, PL-2). Added F1Gate to crates/soldier_core/src/policy/guard.rs with pure-Rust SHA-256, canonical JSON serializer (sorted keys, no whitespace per AT-113), F1RuntimeBindings, F1GateConfig (freshness_window_s=86400), F1CertStatus enum (Valid/Missing/Fail/Stale/Invalid). evaluate() fail-closed logic: missing/unparseable=>Missing, status!=PASS=>Fail, stale (no last-known-good bypass per AT-021)=>Stale, binding mismatch (contract_version/build_id/runtime_config_hash per AT-020)=>Invalid. contract_version with 'v' prefix rejected (AT-012). policy_hash_at_cert_time ignored (AT-410). Observability: f1_cert_age_s gauge, f1_cert_gate_block_opens_total counter. Registered policy module in lib.rs, exported types from policy/mod.rs. Created tests/fixtures/F1_CERT.json and test_f1_gate.rs (13 tests). Full verify GREEN. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo test -p soldier_core --lib --test test_f1_gate (13/13 passed); cargo fmt -p soldier_core; cargo clippy --tests -p soldier_core -- -D warnings (clean); git commit; bash plans/verify.sh full.
+Evidence: crates/soldier_core/src/policy/guard.rs; crates/soldier_core/src/policy/mod.rs; crates/soldier_core/src/lib.rs; crates/soldier_core/tests/test_f1_gate.rs; crates/soldier_core/tests/fixtures/F1_CERT.json; 13/13 tests passed (AT-012/AT-020/AT-021/AT-113/AT-410); VERIFY OK (mode=full).
+Next: Mark S8-001 as passing.
+
+Story: S8-000
+Date: 2026-02-17
+Summary: Implemented PolicyGuard Critical Input Freshness (§2.2.1.1), full 3-axis resolver (§2.2.3), 27-state deterministic TradingMode computation, corroboration inputs for Kill signals (§2.2.3.1.2), Non-Active OPEN Cancellation (§2.2.3.4.1), and profile isolation (§0.Z.7). Added AxisResolver, PolicyGuardInputs, PolicyGuardConfig, PolicyTradingMode, CapitalRiskAxis, MarketIntegrityAxis, SystemIntegrityAxis, ModeReasonCode enum (21 reason codes), resolve_trading_mode() pure function, compute_cancel_batch(), is_open_intent() to guard.rs. Critical input freshness checks: mm_util, disk_used_pct, rate_limit_session_kill_active, watchdog must all be present/fresh or ReduceOnly with REDUCEONLY_INPUT_MISSING_OR_STALE. Corroboration: watchdog kill requires both heartbeat + loop_tick stale; disk kill requires primary+secondary both >= kill; session kill requires flag + 10028_count >= 3. Profile isolation: GOP-only inputs (evidence_chain_state) ignored when enforced_profile==CSP. Added 4 test files: test_policy_guard.rs (22 tests, AT-1048/1050/1051/1052/1053/1055/1065/1066/1067/1068/1069), test_policy_freshness.rs (13 tests, AT-001/112/1054), test_order_cancel.rs (10 tests, AT-1065), test_profile_isolation.rs (8 tests, AT-991/992). 53 total tests pass. Acknowledged AGENTS.md and plans/progress.txt.
+Commands: cargo build -p soldier_core (clean); cargo test 4 test files (53/53 passed); cargo clippy --tests -p soldier_core -- -D warnings (clean); cargo fmt -p soldier_core.
+Evidence: crates/soldier_core/src/policy/guard.rs; crates/soldier_core/tests/test_policy_guard.rs; crates/soldier_core/tests/test_policy_freshness.rs; crates/soldier_core/tests/test_order_cancel.rs; crates/soldier_core/tests/test_profile_isolation.rs; plans/story_verify_allowlist.txt (added 3 new test entries); 53/53 tests passed; clippy clean.
+Next: Run ./plans/verify.sh full to confirm GREEN baseline.

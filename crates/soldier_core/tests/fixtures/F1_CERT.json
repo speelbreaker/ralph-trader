@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "generated_ts_ms": 1000000000,
+  "build_id": "test-build-001",
+  "runtime_config_hash": "abc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+  "contract_version": "5.2"
+}

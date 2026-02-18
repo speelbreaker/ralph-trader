@@ -1,6 +1,5 @@
-use soldier_core::execution::sequencer::{
-    ExecutionStep, IntentKind, RiskState, SequenceError, Sequencer,
-};
+use soldier_core::execution::sequencer::{ExecutionStep, IntentKind, SequenceError, Sequencer};
+use soldier_core::risk::RiskState;
 
 #[test]
 fn test_sequencer_close_then_hedge_ordering() {

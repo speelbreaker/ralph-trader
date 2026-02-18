@@ -6,7 +6,7 @@ use std::time::Instant;
 /// AT-953: Stale trade feed => Degraded + latch + block opens
 #[test]
 fn test_self_impact_stale_feed_sets_latch() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),
@@ -46,7 +46,7 @@ fn test_self_impact_stale_feed_sets_latch() {
 /// AT-953: Missing trade feed => Degraded + latch + block opens
 #[test]
 fn test_self_impact_missing_feed_sets_latch() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),
@@ -77,7 +77,7 @@ fn test_self_impact_missing_feed_sets_latch() {
 /// AT-955: self_fraction trip => reject with FeedbackLoopGuardActive
 #[test]
 fn test_self_impact_fraction_trip_rejects() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),
@@ -113,7 +113,7 @@ fn test_self_impact_fraction_trip_rejects() {
         result
             .reject_reason
             .as_ref()
-            .map_or(false, |r| r.contains("FeedbackLoopGuardActive")),
+            .is_some_and(|r| r.contains("FeedbackLoopGuardActive")),
         "Reject reason should be FeedbackLoopGuardActive, got: {:?}",
         result.reject_reason
     );
@@ -122,7 +122,7 @@ fn test_self_impact_fraction_trip_rejects() {
 /// AT-956: self_notional trip => reject with FeedbackLoopGuardActive
 #[test]
 fn test_self_impact_notional_trip_rejects() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),
@@ -158,7 +158,7 @@ fn test_self_impact_notional_trip_rejects() {
         result
             .reject_reason
             .as_ref()
-            .map_or(false, |r| r.contains("FeedbackLoopGuardActive")),
+            .is_some_and(|r| r.contains("FeedbackLoopGuardActive")),
         "Reject reason should be FeedbackLoopGuardActive, got: {:?}",
         result.reject_reason
     );
@@ -167,7 +167,7 @@ fn test_self_impact_notional_trip_rejects() {
 /// AT-957: Below threshold => allow OPEN
 #[test]
 fn test_self_impact_below_threshold_allows() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),
@@ -205,7 +205,7 @@ fn test_self_impact_below_threshold_allows() {
 /// Test cooldown behavior: after trip, subsequent OPENs are blocked during cooldown
 #[test]
 fn test_self_impact_cooldown_blocks_subsequent_opens() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),
@@ -257,7 +257,7 @@ fn test_self_impact_cooldown_blocks_subsequent_opens() {
 /// Test trip counter metric
 #[test]
 fn test_self_impact_trip_counter_increments() {
-    let mut guard = SelfImpactGuard::new();
+    let guard = SelfImpactGuard::new();
     let key1 = SelfImpactKey {
         strategy_id: "s1".to_string(),
         structure_fingerprint: "struct1".to_string(),

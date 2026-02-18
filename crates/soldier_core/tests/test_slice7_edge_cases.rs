@@ -1,11 +1,11 @@
 /// Edge case tests for Slice 7 implementation
 /// Tests failure modes found in code review
-use soldier_core::execution::atomic_group_executor::{AtomicGroupExecutor, RescueAction};
+use soldier_core::execution::atomic_group_executor::AtomicGroupExecutor;
 use soldier_core::execution::group::{AtomicGroup, GroupState, LegOutcome, LegState};
 use soldier_core::risk::RiskState;
 use soldier_core::risk::churn_breaker::{ChurnBreaker, ChurnBreakerDecision, ChurnKey};
 use soldier_core::risk::self_impact_guard::{
-    SelfImpactConfig, SelfImpactEvaluation, SelfImpactGuard, SelfImpactKey, TradeAggregates,
+    SelfImpactConfig, SelfImpactGuard, SelfImpactKey, TradeAggregates,
 };
 use std::sync::Arc;
 use std::thread;

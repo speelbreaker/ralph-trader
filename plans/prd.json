@@ -3569,8 +3569,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/inventory_skew.rs",
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/tests/test_inventory_skew.rs"
         ],
         "create": [],
@@ -3734,8 +3734,8 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/src/risk/exposure_budget.rs",
+          "crates/soldier_core/src/risk/mod.rs",
           "crates/soldier_core/tests/test_exposure_budget.rs"
         ],
         "create": [],
@@ -3817,13 +3817,12 @@
       ],
       "scope": {
         "touch": [
-          "crates/soldier_infra/src/deribit/account_summary.rs",
-          "crates/soldier_core/src/risk/mod.rs"
-        ],
-        "create": [
           "crates/soldier_core/src/risk/margin_gate.rs",
-          "crates/soldier_core/tests/test_margin_gate.rs"
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/tests/test_margin_gate.rs",
+          "crates/soldier_infra/src/deribit/account_summary.rs"
         ],
+        "create": [],
         "avoid": [
           "plans/**"
         ]
@@ -4477,6 +4476,978 @@
       "implementation_tests": [
         "crates/soldier_core/tests/test_self_impact.rs"
       ]
+    },
+    {
+      "id": "S8-000",
+      "priority": 800,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.1 \u2014 PolicyGuard precedence + staleness handling",
+      "category": "policy",
+      "description": "Implement PolicyGuard Critical Input Freshness (\u00a72.2.1.1), full precedence ladder, 27-state axis resolver, corroboration inputs, and Non-Active OPEN cancellation. Includes PL-3 axis resolver tests.",
+      "contract_refs": [
+        "\u00a72.2.1.1 Critical Input Freshness",
+        "\u00a72.2.3 TradingMode Computation",
+        "\u00a72.2.3.3 TradingMode Resolution",
+        "\u00a72.2.3.4.1 Non\u2011Active OPEN Cancellation",
+        "AT-001",
+        "AT-112",
+        "AT-1048",
+        "AT-1050",
+        "AT-1051",
+        "AT-1052",
+        "AT-1053",
+        "AT-1054",
+        "AT-1055",
+        "AT-1065",
+        "AT-1066",
+        "AT-1067",
+        "AT-1068",
+        "AT-1069"
+      ],
+      "plan_refs": [
+        "S8.1",
+        "PL-3"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs",
+          "crates/soldier_core/src/analytics/mod.rs",
+          "crates/soldier_core/src/analytics/evidence_chain_state.rs",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/fixtures/F1_CERT.json",
+          "crates/soldier_core/tests/test_policy_guard.rs",
+          "crates/soldier_core/tests/test_policy_freshness.rs",
+          "crates/soldier_core/tests/test_order_cancel.rs",
+          "crates/soldier_core/tests/test_profile_isolation.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN mm_util or disk_used_pct missing/stale WHEN evaluated THEN TradingMode=ReduceOnly with REDUCEONLY_INPUT_MISSING_OR_STALE",
+        "GIVEN policy_age_sec == 300 WHEN evaluated THEN does NOT trip (boundary)",
+        "GIVEN policy_age_sec == 301 WHEN evaluated THEN trips ReduceOnly",
+        "GIVEN all 27 axis combinations WHEN evaluated THEN deterministic TradingMode outputs (AT-1048)",
+        "GIVEN TradingMode != Active WHEN evaluated THEN cancel all OPEN orders with reduce_only != true",
+        "GIVEN enforced_profile == CSP WHEN GOP inputs present THEN treat as nonexistent (AT-991, AT-992)"
+      ],
+      "steps": [
+        "Implement PolicyGuard.get_effective_mode() with input snapshot coherency",
+        "Add critical inputs: mm_util, disk_used_pct, rate_limit_session_kill_active, watchdog_last_heartbeat_ts_ms",
+        "Add corroboration inputs: loop_tick_last_ts_ms, disk_used_pct_secondary, 10028_count_5m",
+        "Implement policy_age_sec computation: floor((now_ms - python_policy_generated_ts_ms)/1000)",
+        "Implement 27-state axis resolver (MarketIntegrityAxis, CapitalRiskAxis, SystemIntegrityAxis)",
+        "Implement Non-Active OPEN cancellation with cancel_open_batch_max / cancel_open_budget_ms",
+        "Implement profile isolation: CSP ignores GOP-only inputs",
+        "Add all required tests (14 ATs)",
+        "Add observability: policy_age_sec gauge, policy_stale_reduceonly_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_policy_guard",
+        "cargo test -p soldier_core --lib --test test_policy_freshness",
+        "cargo test -p soldier_core --lib --test test_order_cancel",
+        "cargo test -p soldier_core --lib --test test_profile_isolation"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_policy_guard.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-001",
+        "AT-112",
+        "AT-1048",
+        "AT-1050",
+        "AT-1051",
+        "AT-1052",
+        "AT-1053",
+        "AT-1054",
+        "AT-1055",
+        "AT-1065",
+        "AT-1066",
+        "AT-1067",
+        "AT-1068",
+        "AT-1069"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "policy_age_sec",
+            "type": "gauge",
+            "unit": "s",
+            "labels": []
+          },
+          {
+            "name": "policy_stale_reduceonly_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_policy_guard.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "high",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-001",
+      "priority": 801,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.2 \u2014 Runtime F1 gate (HARD): artifacts/F1_CERT.json",
+      "category": "policy",
+      "description": "Implement runtime F1 certification gate: missing/stale/FAIL => ReduceOnly. Binding enforcement on contract_version, build_id, runtime_config_hash. Includes PL-2 canonical runtime_config_hash.",
+      "contract_refs": [
+        "\u00a72.2.1 Runtime F1 Certification Gate",
+        "AT-012",
+        "AT-020",
+        "AT-021"
+      ],
+      "plan_refs": [
+        "S8.2",
+        "PL-2"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs",
+          "crates/soldier_core/src/analytics/mod.rs",
+          "crates/soldier_core/src/analytics/evidence_chain_state.rs",
+          "crates/soldier_core/src/lib.rs",
+          "crates/soldier_core/tests/fixtures/F1_CERT.json",
+          "crates/soldier_core/tests/test_f1_gate.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN F1_CERT missing/unparseable WHEN evaluated THEN TradingMode=ReduceOnly",
+        "GIVEN F1_CERT.contract_version != runtime WHEN evaluated THEN TradingMode=ReduceOnly (AT-020)",
+        "GIVEN F1_CERT.build_id != runtime WHEN evaluated THEN TradingMode=ReduceOnly",
+        "GIVEN F1_CERT.runtime_config_hash != runtime WHEN evaluated THEN TradingMode=ReduceOnly",
+        "GIVEN F1_CERT stale WHEN evaluated THEN TradingMode=ReduceOnly with no last-known-good bypass (AT-021)",
+        "GIVEN contract_version format with 'v' prefix WHEN validated THEN reject (AT-012)"
+      ],
+      "steps": [
+        "Define runtime_config_hash = sha256(canonical_json_bytes(runtime_config))",
+        "Implement F1_CERT loading from artifacts/F1_CERT.json",
+        "Implement binding validation: contract_version, build_id, runtime_config_hash",
+        "Implement staleness check (no grace, no caching last-known-good)",
+        "Add contract_version format validation (numeric-only, no 'v' prefix)",
+        "Add test fixture: crates/soldier_core/tests/fixtures/F1_CERT.json",
+        "Add all required tests (5 exact names)",
+        "Add observability: f1_cert_age_s gauge, f1_cert_gate_block_opens_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_f1_gate"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_f1_gate.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-012",
+        "AT-020",
+        "AT-021"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "f1_cert_age_s",
+            "type": "gauge",
+            "unit": "s",
+            "labels": []
+          },
+          {
+            "name": "f1_cert_gate_block_opens_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_f1_gate.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "high",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-002",
+      "priority": 802,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.3 \u2014 EvidenceGuard (Patch B) enforcement + cooldown",
+      "category": "evidence",
+      "description": "Implement EvidenceGuard with strict >0.90 trip comparator, 60s rolling window, cooldown after recovery. Only enforced when enforced_profile != CSP. Includes PL-1 strict thresholds and AT-005 non-fill attribution exception.",
+      "contract_refs": [
+        "\u00a72.2.2 EvidenceGuard",
+        "AT-005",
+        "AT-105",
+        "AT-107"
+      ],
+      "plan_refs": [
+        "S8.3",
+        "PL-1"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/src/policy/mod.rs",
+          "crates/soldier_core/src/analytics/evidence_chain_state.rs",
+          "crates/soldier_core/tests/test_evidence_guard.rs",
+          "crates/soldier_core/src/analytics/mod.rs",
+          "crates/soldier_core/src/lib.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN parquet_queue_depth_pct > 0.90 for \u22655s WHEN evaluated THEN EvidenceChainState != GREEN",
+        "GIVEN parquet_queue_depth_pct == 0.90 WHEN evaluated THEN does NOT trip (strict comparator)",
+        "GIVEN parquet_queue_depth_pct == 0.9001 for \u22655s WHEN evaluated THEN trips",
+        "GIVEN EvidenceChainState != GREEN WHEN intent kind=OPEN THEN reject before WAL/dispatch",
+        "GIVEN queue_depth_pct < 0.70 for \u2265120s AND cooldown elapsed WHEN evaluated THEN clear to GREEN",
+        "GIVEN OPEN intent with zero fills WHEN checked THEN does NOT require attribution row (AT-005)",
+        "GIVEN enforced_profile == CSP WHEN EvidenceGuard evaluated THEN NOT_ENFORCED"
+      ],
+      "steps": [
+        "Implement EvidenceChainState computation over evidenceguard_window_s (60s)",
+        "Check: truth_capsule_write_errors == 0, decision_snapshot_write_errors == 0, wal_write_errors == 0",
+        "Implement strict trip comparator: parquet_queue_depth_pct > 0.90 (NOT >=)",
+        "Implement clear condition: < 0.70 for \u2265120s AND evidenceguard_global_cooldown elapsed",
+        "Implement fail-closed: missing queue depth => Evidence RED",
+        "Implement hot-path enforcement in build_order_intent()",
+        "Add profile isolation: EvidenceGuard NOT_ENFORCED when enforced_profile == CSP",
+        "Emit exact metric names: parquet_queue_overflow_count, evidence_guard_blocked_opens_count",
+        "Add all required tests including AT-005 non-fill attribution exception",
+        "Add observability: evidence_chain_state gauge, evidence_guard_blocked_opens_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_evidence_guard"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_evidence_guard.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-005",
+        "AT-105",
+        "AT-107"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "EvidenceGuard",
+      "failure_mode": [
+        "backpressure",
+        "stall"
+      ],
+      "observability": {
+        "metrics": [
+          {
+            "name": "evidence_chain_state",
+            "type": "gauge",
+            "unit": "count",
+            "labels": []
+          },
+          {
+            "name": "evidence_guard_blocked_opens_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_evidence_guard.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "med",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-003",
+      "priority": 803,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.4 \u2014 Bunker Mode network jitter monitor (Patch C)",
+      "category": "cortex",
+      "description": "Implement bunker mode based on ws_event_lag_ms > 2000 OR http_p95_ms > 750 for 3 consecutive windows OR request_timeout_rate > 0.02. Exit only after 120s stable. Fail-closed if ws_event_lag_ms missing.",
+      "contract_refs": [
+        "\u00a72.3.2 Network Jitter Monitor",
+        "AT-115",
+        "AT-205",
+        "AT-345"
+      ],
+      "plan_refs": [
+        "S8.4"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/risk/network_jitter.rs",
+          "crates/soldier_core/src/policy/guard.rs",
+          "crates/soldier_core/tests/test_bunker_mode.rs",
+          "crates/soldier_core/src/policy/mod.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN ws_event_lag_ms > 2000 WHEN evaluated THEN bunker_mode_active=true, block OPENs",
+        "GIVEN http_p95_ms > 750 for 3 consecutive windows WHEN evaluated THEN bunker_mode_active=true",
+        "GIVEN request_timeout_rate > 0.02 WHEN evaluated THEN bunker_mode_active=true",
+        "GIVEN ws_event_lag_ms missing/uncomputable WHEN evaluated THEN bunker_mode_active=true (fail-closed, AT-205)",
+        "GIVEN bunker_mode_active AND metrics stable < thresholds for 120s WHEN evaluated THEN exit bunker mode"
+      ],
+      "steps": [
+        "Implement network_jitter monitor with ws_event_lag_ms, http_p95_ms, request_timeout_rate inputs",
+        "Implement trip thresholds: ws_event_lag_ms > 2000, http_p95_ms > 750 for 3 windows, timeout_rate > 0.02",
+        "Implement 120s stable window for exit",
+        "Implement fail-closed: ws_event_lag_ms missing => bunker_mode_active=true",
+        "Add boundary tests for each threshold comparator",
+        "Add all required tests (AT-115, AT-205, AT-345)",
+        "Add observability: ws_event_lag_ms gauge, deribit_http_p95_ms gauge, bunker_mode_trip_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_bunker_mode"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_bunker_mode.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-115",
+        "AT-205",
+        "AT-345"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "ws_event_lag_ms",
+            "type": "gauge",
+            "unit": "ms",
+            "labels": []
+          },
+          {
+            "name": "deribit_http_p95_ms",
+            "type": "gauge",
+            "unit": "ms",
+            "labels": []
+          },
+          {
+            "name": "bunker_mode_trip_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_bunker_mode.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "med",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-004",
+      "priority": 804,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.5 \u2014 Cortex enforcement",
+      "category": "cortex",
+      "description": "Implement Reflexive Cortex: DVOL spike (\u226510% within 60s), spread_max_bps, depth_min triggers => ForceReduceOnly. WS gap blocks risk-increasing cancel/replace. Spread/depth extremes => ForceKill.",
+      "contract_refs": [
+        "\u00a72.3 Reflexive Cortex",
+        "AT-045",
+        "AT-119"
+      ],
+      "plan_refs": [
+        "S8.5"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/reflex/cortex.rs",
+          "crates/soldier_core/tests/test_cortex.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN dvol_jump_pct >= 0.10 within dvol_jump_window_s <= 60 WHEN evaluated THEN ForceReduceOnly",
+        "GIVEN spread >= spread_max_bps OR depth < depth_min for kill_window WHEN evaluated THEN ForceKill (AT-045)",
+        "GIVEN ws_gap_flag == true AND cancel/replace is risk-increasing WHEN evaluated THEN block at chokepoint (AT-119)",
+        "GIVEN ws_gap_flag == true AND cancel/replace is risk-reducing WHEN evaluated THEN allow"
+      ],
+      "steps": [
+        "Implement cortex.rs with DVOL, spread, depth monitors",
+        "Implement DVOL jump detection: dvol_jump_pct >= 0.10 within 60s window",
+        "Implement spread/depth thresholds: spread_max_bps, depth_min",
+        "Define risk-increasing cancel/replace: increases |net_exposure| or removes reduce_only protection",
+        "Implement ws_gap_flag enforcement: block risk-increasing cancel/replace",
+        "Add required test aliases: test_cortex_spread_max_bps_forces_reduceonly, test_cortex_depth_min_forces_reduceonly",
+        "Add all required tests (AT-045, AT-119)",
+        "Add observability: cortex_override_total{kind} counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_cortex"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_cortex.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-045",
+        "AT-119"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "cortex_override_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": [
+              "kind"
+            ]
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_cortex.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "med",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-005",
+      "priority": 805,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.6 \u2014 Exchange maintenance monitor",
+      "category": "cortex",
+      "description": "Monitor /public/get_announcements for maintenance within 60m => RiskState::Maintenance, PolicyGuard forces ReduceOnly. Fail-closed if announcements unreachable/invalid for exchange_health_stale_s (default 180s).",
+      "contract_refs": [
+        "\u00a72.3.1 Exchange Health Monitor",
+        "AT-204"
+      ],
+      "plan_refs": [
+        "S8.6"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/exchange_health.rs",
+          "crates/soldier_core/tests/test_exchange_health.rs",
+          "crates/soldier_core/src/risk/mod.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN maintenance announced within 60m WHEN evaluated THEN RiskState=Maintenance, TradingMode=ReduceOnly",
+        "GIVEN /public/get_announcements unreachable/invalid for >exchange_health_stale_s WHEN evaluated THEN cortex_override=ForceReduceOnly (AT-204)",
+        "GIVEN /api/v1/status called WHEN RiskState=Maintenance THEN returns risk_state=Maintenance"
+      ],
+      "steps": [
+        "Implement exchange_health monitor fetching /public/get_announcements",
+        "Parse announcements for maintenance within next 60m",
+        "Implement staleness check: unreachable/invalid for exchange_health_stale_s (default 180s)",
+        "Implement fail-closed: stale announcements => cortex_override=ForceReduceOnly",
+        "Set RiskState::Maintenance when maintenance imminent",
+        "Add required tests (AT-204)",
+        "Add observability for exchange health status"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_exchange_health"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_exchange_health.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-204"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "exchange_health_status",
+            "type": "gauge",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [
+          "risk_state"
+        ],
+        "status_contract_ats": [
+          "AT-204"
+        ]
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_exchange_health.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "med",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-006",
+      "priority": 806,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.7 \u2014 Endpoint: POST /api/v1/emergency/reduce_only",
+      "category": "endpoint",
+      "description": "Owner endpoint to flip to ReduceOnly with cooldown. Cancels non-reduce-only opens, preserves closes/hedges. Smart Watchdog triggers same handler on ws_silence_ms > 5000.",
+      "contract_refs": [
+        "\u00a72.2 PolicyGuard",
+        "\u00a73.2 Smart Watchdog"
+      ],
+      "plan_refs": [
+        "S8.7"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_infra/src/http/router.rs",
+          "crates/soldier_infra/tests/test_http_emergency.rs",
+          "crates/soldier_core/src/policy/watchdog.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN POST /api/v1/emergency/reduce_only WHEN called THEN set emergency_reduceonly_until_ts_ms",
+        "GIVEN emergency_reduceonly_active WHEN evaluated THEN cancel reduce_only==false orders, preserve closes/hedges",
+        "GIVEN emergency_reduceonly_active AND exposure > limit WHEN evaluated THEN submit reduce-only hedge",
+        "GIVEN ws_silence_ms > 5000 WHEN watchdog checked THEN invoke same emergency_reduceonly handler",
+        "GIVEN cooldown expired AND reconcile confirms safe WHEN evaluated THEN clear emergency_reduceonly_active"
+      ],
+      "steps": [
+        "Add POST /api/v1/emergency/reduce_only endpoint",
+        "Implement emergency_reduceonly_until_ts_ms = now_ms + emergency_reduceonly_cooldown_s*1000",
+        "PolicyGuard: treat emergency_reduceonly_active = (now_ms < emergency_reduceonly_until_ts_ms)",
+        "Cancel reduce_only==false orders while active",
+        "Preserve reduce_only closes/hedges",
+        "Smart Watchdog: if ws_silence_ms > 5000, invoke emergency_reduceonly handler",
+        "Add required endpoint-level test",
+        "Add observability: http_emergency_reduce_only_calls_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test --workspace"
+      ],
+      "evidence": [
+        "crates/soldier_infra/tests/test_http_S8-006.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "http_emergency_reduce_only_calls_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": []
+      },
+      "implementation_tests": [],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "low",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-007",
+      "priority": 807,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.8 \u2014 Owner endpoint: GET /api/v1/status (Patch D)",
+      "category": "endpoint",
+      "description": "Read-only status endpoint returning all required fields per \u00a77.0. Includes enforced_profile, trading_mode, risk_state, mode_reasons, open_permission state, policy/F1/disk/margin/cortex metrics. GOP extension keys when enforced_profile != CSP. Includes PL-5 f1_cert_expires_at semantics.",
+      "contract_refs": [
+        "\u00a77.0 Owner Control Plane Endpoints",
+        "AT-003",
+        "AT-022",
+        "AT-023",
+        "AT-024",
+        "AT-025",
+        "AT-026",
+        "AT-027",
+        "AT-028",
+        "AT-029",
+        "AT-405",
+        "AT-407",
+        "AT-419",
+        "AT-907",
+        "AT-927",
+        "AT-967"
+      ],
+      "plan_refs": [
+        "S8.8",
+        "PL-5"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_infra/src/http/router.rs",
+          "crates/soldier_infra/src/http/status.rs",
+          "crates/soldier_infra/tests/test_http_status.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN GET /api/v1/status WHEN called THEN HTTP 200 JSON with status_schema_version=1 (AT-405)",
+        "GIVEN GET /api/v1/status WHEN called THEN includes all required fields (AT-023)",
+        "GIVEN trading_mode == Active WHEN status checked THEN mode_reasons == [] (AT-024)",
+        "GIVEN mode_reasons returned WHEN checked THEN tier-pure and ordered (AT-025, AT-026)",
+        "GIVEN open_permission_blocked_latch WHEN status checked THEN open_permission_reason_codes != [] (AT-027)",
+        "GIVEN last_policy_update_ts WHEN status checked THEN equals python_policy_generated_ts_ms (AT-028)",
+        "GIVEN snapshot_coverage_pct WHEN status checked THEN computed over replay_window_hours (AT-029)",
+        "GIVEN enforced_profile == GOP WHEN status checked THEN includes GOP extension keys (AT-967)",
+        "GIVEN enforced_profile == CSP WHEN status checked THEN GOP keys omitted or NOT_ENFORCED",
+        "GIVEN F1_CERT present and parseable WHEN status checked THEN f1_cert_expires_at = generated_ts_ms + freshness_window_s*1000 (AT-003)"
+      ],
+      "steps": [
+        "Create GET /api/v1/status endpoint",
+        "Return required CSP fields: status_schema_version, supported_profiles, enforced_profile, trading_mode, risk_state, etc.",
+        "Return required metrics: policy_age_sec, disk_used_pct, mm_util, wal_queue_depth, atomic_naked_events_24h, 429_count_5m, 10028_count_5m",
+        "Return mode_reasons (tier-pure, ordered) and open_permission state",
+        "When enforced_profile != CSP: include GOP extension keys (evidence_chain_state, snapshot_coverage_pct, replay_quality, etc.)",
+        "Implement f1_cert_expires_at computation for any parseable F1_CERT (PL-5)",
+        "Add 16 required endpoint-level tests",
+        "Add observability: http_status_calls_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_infra --test test_http_status"
+      ],
+      "evidence": [
+        "crates/soldier_infra/tests/test_http_status.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-003",
+        "AT-022",
+        "AT-023",
+        "AT-024",
+        "AT-025",
+        "AT-026",
+        "AT-027",
+        "AT-028",
+        "AT-029",
+        "AT-405",
+        "AT-407",
+        "AT-419",
+        "AT-907",
+        "AT-927",
+        "AT-967"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "StatusEndpoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "http_status_calls_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [
+          "status_schema_version",
+          "supported_profiles",
+          "enforced_profile",
+          "trading_mode",
+          "risk_state",
+          "bunker_mode_active",
+          "connectivity_degraded",
+          "policy_age_sec",
+          "last_policy_update_ts",
+          "f1_cert_state",
+          "f1_cert_expires_at",
+          "disk_used_pct",
+          "mm_util",
+          "mode_reasons",
+          "open_permission_blocked_latch"
+        ],
+        "status_contract_ats": [
+          "AT-003",
+          "AT-023",
+          "AT-024",
+          "AT-025",
+          "AT-026",
+          "AT-027",
+          "AT-028",
+          "AT-029",
+          "AT-405",
+          "AT-967"
+        ]
+      },
+      "implementation_tests": [
+        "crates/soldier_infra/tests/test_http_status.rs"
+      ],
+      "dependencies": [],
+      "est_size": "S",
+      "risk": "low",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-008",
+      "priority": 808,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.9 \u2014 Owner endpoint: GET /api/v1/health (minimal, read-only)",
+      "category": "endpoint",
+      "description": "Minimal health endpoint returning ok=true, build_id, contract_version. Side-effect: update watchdog_last_heartbeat_ts_ms for PolicyGuard evaluation.",
+      "contract_refs": [
+        "\u00a77.0 Owner Control Plane Endpoints",
+        "\u00a72.2.3 TradingMode Computation",
+        "\u00a73.2 Smart Watchdog",
+        "AT-022"
+      ],
+      "plan_refs": [
+        "S8.9"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_infra/src/http/health.rs",
+          "crates/soldier_infra/tests/test_http_health.rs",
+          "crates/soldier_infra/src/http/router.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN GET /api/v1/health WHEN called THEN HTTP 200 JSON with ok=true, build_id, contract_version (AT-022)",
+        "GIVEN GET /api/v1/health successful WHEN called THEN update watchdog_last_heartbeat_ts_ms = now_ms",
+        "GIVEN non-GET request WHEN called THEN reject (AT-407)"
+      ],
+      "steps": [
+        "Create GET /api/v1/health endpoint",
+        "Return minimal payload: ok (bool, always true), build_id, contract_version",
+        "Side-effect: update watchdog_last_heartbeat_ts_ms = now_ms in memory",
+        "Add required endpoint-level test (AT-022)",
+        "Add observability: http_health_calls_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_infra --test test_http_health"
+      ],
+      "evidence": [
+        "crates/soldier_infra/tests/test_http_health.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-022"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "StatusEndpoint",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "http_health_calls_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": []
+          }
+        ],
+        "status_fields": [
+          "ok",
+          "build_id",
+          "contract_version"
+        ],
+        "status_contract_ats": [
+          "AT-022"
+        ]
+      },
+      "implementation_tests": [
+        "crates/soldier_infra/tests/test_http_health.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "low",
+      "needs_human_decision": false
+    },
+    {
+      "id": "S8-009",
+      "priority": 809,
+      "phase": 2,
+      "slice": 8,
+      "slice_ref": "Slice 8 \u2014 PolicyGuard + Cortex + Exchange Health + Bunker/Evidence/F1 + Owner Endpoints (Patch D)",
+      "story_ref": "S8.10 \u2014 Basis monitor (Mark/Index/Last liquidation reality guard)",
+      "category": "cortex",
+      "description": "Basis monitor for liquidation reality check: if max(basis_mark_last_bps, basis_mark_index_bps) >= basis_kill_bps for kill_window => ForceKill. >= basis_reduceonly_bps for reduceonly_window => ForceReduceOnly. Missing/stale prices => fail-closed ForceReduceOnly.",
+      "contract_refs": [
+        "\u00a72.3.3 Mark/Index/Last Basis Monitor",
+        "AT-951",
+        "AT-952",
+        "AT-954"
+      ],
+      "plan_refs": [
+        "S8.10"
+      ],
+      "scope": {
+        "touch": [
+          "crates/soldier_core/src/risk/mod.rs",
+          "crates/soldier_core/src/risk/basis_monitor.rs",
+          "crates/soldier_core/tests/test_basis_monitor.rs"
+        ],
+        "create": [],
+        "avoid": []
+      },
+      "acceptance": [
+        "GIVEN max(basis_mark_last_bps, basis_mark_index_bps) >= basis_kill_bps for kill_window WHEN evaluated THEN ForceKill (AT-952)",
+        "GIVEN max(...) >= basis_reduceonly_bps for reduceonly_window WHEN evaluated THEN ForceReduceOnly (AT-951)",
+        "GIVEN required price missing/unparseable OR stale > basis_price_max_age_ms WHEN evaluated THEN ForceReduceOnly (AT-954)"
+      ],
+      "steps": [
+        "Implement basis_monitor.rs with mark, index, last price inputs",
+        "Compute basis_mark_last_bps and basis_mark_index_bps",
+        "Implement kill threshold: max(...) >= basis_kill_bps for basis_kill_window_s",
+        "Implement reduceonly threshold: max(...) >= basis_reduceonly_bps for basis_reduceonly_window_s",
+        "Implement fail-closed: missing/stale price => ForceReduceOnly with cooldown",
+        "Add all required tests (AT-951, AT-952, AT-954)",
+        "Add observability: basis_trip_total counter"
+      ],
+      "passes": true,
+      "verify": [
+        "./plans/verify.sh",
+        "cargo test -p soldier_core --lib --test test_basis_monitor"
+      ],
+      "evidence": [
+        "crates/soldier_core/tests/test_basis_monitor.rs"
+      ],
+      "contract_must_evidence": [],
+      "enforcing_contract_ats": [
+        "AT-951",
+        "AT-952",
+        "AT-954"
+      ],
+      "reason_codes": {
+        "type": "",
+        "values": []
+      },
+      "enforcement_point": "PolicyGuard",
+      "failure_mode": [],
+      "observability": {
+        "metrics": [
+          {
+            "name": "basis_trip_total",
+            "type": "counter",
+            "unit": "count",
+            "labels": [
+              "reason"
+            ]
+          }
+        ],
+        "status_fields": [],
+        "status_contract_ats": [
+          "AT-951",
+          "AT-952",
+          "AT-954"
+        ]
+      },
+      "implementation_tests": [
+        "crates/soldier_core/tests/test_basis_monitor.rs"
+      ],
+      "dependencies": [],
+      "est_size": "XS",
+      "risk": "med",
+      "needs_human_decision": false
     }
   ]
 }

@@ -9,7 +9,6 @@ use super::RiskState;
 ///
 /// Rule: Stale trade feed => Degraded + latch blocks opens
 /// Rule: self_fraction/notional trip => reject with cooldown
-
 const FLOAT_EPSILON: f64 = 1e-9;
 const MIN_PUBLIC_VOLUME_USD: f64 = 1000.0; // Minimum public volume for fraction calculation
 

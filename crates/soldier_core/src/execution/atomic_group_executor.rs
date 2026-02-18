@@ -109,26 +109,17 @@ impl AtomicGroupExecutor {
     }
 
     fn lookup_rescue_attempts(&self, group: &AtomicGroup) -> u8 {
-        // Handle lock poisoning gracefully
         let map = match self.rescue_attempts.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                // Recover from poisoned lock by clearing it
-                eprintln!("rescue_attempts lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("rescue_attempts lock poisoned: {e}"),
         };
         map.get(group.group_id()).map(|e| e.count).unwrap_or(0)
     }
 
     fn bump_rescue_attempts(&self, group: &AtomicGroup) -> u8 {
-        // Handle lock poisoning gracefully
         let mut map = match self.rescue_attempts.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("rescue_attempts lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("rescue_attempts lock poisoned: {e}"),
         };
 
         // Evict stale entries (TTL-based cleanup)
@@ -149,13 +140,9 @@ impl AtomicGroupExecutor {
     }
 
     fn clear_rescue_attempts(&self, group: &AtomicGroup) {
-        // Handle lock poisoning gracefully
         let mut map = match self.rescue_attempts.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => {
-                eprintln!("rescue_attempts lock poisoned, recovering");
-                poisoned.into_inner()
-            }
+            Err(e) => panic!("rescue_attempts lock poisoned: {e}"),
         };
         map.remove(group.group_id());
     }

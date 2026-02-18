@@ -8,7 +8,6 @@ use std::time::{Duration, Instant};
 /// Rule: >2 flattens in 5m => 15m blacklist blocks opens for that key
 ///
 /// Thread-safety: All methods use interior mutability (Mutex) for safe concurrent access
-
 const FLATTEN_WINDOW: Duration = Duration::from_secs(5 * 60);
 const FLATTEN_TRIP_COUNT: usize = 2; // >2 means 3 or more
 const BLACKLIST_DURATION: Duration = Duration::from_secs(15 * 60);
@@ -90,6 +89,12 @@ impl ChurnBreaker {
             // Note: churn breaker trip logged via decision reject reason
             // Metric: churn_breaker_trip_total (exposed via trip_count())
         }
+
+        // Cleanup: Remove flatten_history entries with no recent events
+        // This prevents unbounded HashMap growth
+        state
+            .flatten_history
+            .retain(|_k, events| !events.is_empty());
     }
 
     /// Check if an OPEN intent should be allowed or blocked.
@@ -158,7 +163,7 @@ mod tests {
     #[test]
     fn test_churn_breaker_allows_opens_when_inactive() {
         // GIVEN: churn breaker inactive
-        let mut breaker = ChurnBreaker::new();
+        let breaker = ChurnBreaker::new();
         let key = test_key("strat1", "BTC-PERP-delta0.5");
         let now = Instant::now();
 
@@ -172,7 +177,7 @@ mod tests {
     #[test]
     fn test_churn_breaker_blacklists_after_three_flattens() {
         // GIVEN: 3 flattens in 5m window
-        let mut breaker = ChurnBreaker::new();
+        let breaker = ChurnBreaker::new();
         let key = test_key("strat1", "BTC-PERP-delta0.5");
         let now = Instant::now();
 
@@ -196,7 +201,7 @@ mod tests {
     #[test]
     fn test_churn_breaker_enforces_15m_blacklist_ttl() {
         // GIVEN: 3 flattens triggering blacklist
-        let mut breaker = ChurnBreaker::new();
+        let breaker = ChurnBreaker::new();
         let key = test_key("strat1", "BTC-PERP-delta0.5");
         let now = Instant::now();
 
@@ -222,7 +227,7 @@ mod tests {
     #[test]
     fn test_churn_breaker_prunes_old_flatten_events() {
         // GIVEN: 2 flattens within window, 1 outside
-        let mut breaker = ChurnBreaker::new();
+        let breaker = ChurnBreaker::new();
         let key = test_key("strat1", "BTC-PERP-delta0.5");
         let now = Instant::now();
 
@@ -242,7 +247,7 @@ mod tests {
     #[test]
     fn test_churn_breaker_isolates_keys() {
         // GIVEN: key1 trips, key2 doesn't
-        let mut breaker = ChurnBreaker::new();
+        let breaker = ChurnBreaker::new();
         let key1 = test_key("strat1", "BTC-PERP-delta0.5");
         let key2 = test_key("strat2", "ETH-PERP-delta0.3");
         let now = Instant::now();
@@ -264,7 +269,7 @@ mod tests {
     #[test]
     fn test_churn_breaker_trip_counter_increments() {
         // GIVEN: multiple trips across different keys
-        let mut breaker = ChurnBreaker::new();
+        let breaker = ChurnBreaker::new();
         let key1 = test_key("strat1", "BTC-PERP");
         let key2 = test_key("strat2", "ETH-PERP");
         let now = Instant::now();
