@@ -7,7 +7,8 @@
 mod evidence_chain_state;
 
 use evidence_chain_state::{
-    EvidenceGuard, EvidenceGuardConfig, EvidenceGuardDecision, EvidenceGuardInputs,
+    EvidenceEnforcedProfile, EvidenceGuard, EvidenceGuardConfig, EvidenceGuardDecision,
+    EvidenceGuardInputs,
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ fn healthy_inputs(now_ms: u64) -> EvidenceGuardInputs {
         parquet_queue_depth: Some(50),
         parquet_queue_capacity: Some(1000),
         counters_last_update_ts_ms: Some(now_ms),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     }
 }
 
@@ -40,7 +41,7 @@ fn inputs_with_depth_pct(now_ms: u64, depth_pct: f64) -> EvidenceGuardInputs {
         parquet_queue_depth: Some(depth),
         parquet_queue_capacity: Some(capacity),
         counters_last_update_ts_ms: Some(now_ms),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     }
 }
 
@@ -145,7 +146,7 @@ fn test_ac4_not_green_blocks_open_intent() {
         parquet_queue_depth: Some(50),
         parquet_queue_capacity: Some(1000),
         counters_last_update_ts_ms: Some(t0),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     };
     let d = guard.evaluate(&inp, &cfg);
     assert_eq!(d, EvidenceGuardDecision::NotGreen);
@@ -243,7 +244,7 @@ fn test_ac7_csp_profile_not_enforced() {
         parquet_queue_depth: None,
         parquet_queue_capacity: None,
         counters_last_update_ts_ms: None,
-        enforced_profile: "CSP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Csp,
     };
     let d = guard.evaluate(&inp, &cfg);
     assert_eq!(
@@ -359,7 +360,7 @@ fn test_missing_wal_errors_fail_closed() {
         parquet_queue_depth: Some(50),
         parquet_queue_capacity: Some(1000),
         counters_last_update_ts_ms: Some(now_ms),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     };
     let d = guard.evaluate(&inp, &cfg);
     assert_eq!(
@@ -384,7 +385,7 @@ fn test_missing_snapshot_errors_fail_closed() {
         parquet_queue_depth: Some(50),
         parquet_queue_capacity: Some(1000),
         counters_last_update_ts_ms: Some(now_ms),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     };
     let d = guard.evaluate(&inp, &cfg);
     assert_eq!(
@@ -410,7 +411,7 @@ fn test_missing_parquet_queue_metrics_fail_closed() {
         parquet_queue_depth: None, // missing
         parquet_queue_capacity: Some(1000),
         counters_last_update_ts_ms: Some(now_ms),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     };
     let d = guard.evaluate(&inp, &cfg);
     assert_eq!(
@@ -441,7 +442,7 @@ fn test_stale_counters_fail_closed() {
         parquet_queue_capacity: Some(1000),
         // last update was 61s ago → stale
         counters_last_update_ts_ms: Some(now_ms - 61_000),
-        enforced_profile: "GOP".to_string(),
+        enforced_profile: EvidenceEnforcedProfile::Gop,
     };
     let d = guard.evaluate(&inp, &cfg);
     assert_eq!(

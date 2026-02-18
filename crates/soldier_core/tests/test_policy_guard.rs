@@ -18,9 +18,9 @@ mod guard;
 
 use guard::{
     AxisResolver, CapitalRiskAxis, CortexOverride, EnforcedProfile, F1CertStatus,
-    MarketIntegrityAxis, ModeReasonCode, PolicyEvidenceState, PolicyGuardConfig, PolicyGuardInputs,
-    PolicyRiskState, PolicyTradingMode, SystemIntegrityAxis, compute_cancel_batch, is_open_intent,
-    resolve_trading_mode,
+    MarketIntegrityAxis, ModeReasonCode, PolicyBasisDecision, PolicyEvidenceState,
+    PolicyGuardConfig, PolicyGuardInputs, PolicyRiskState, PolicyTradingMode, SystemIntegrityAxis,
+    compute_cancel_batch, is_open_intent, resolve_trading_mode,
 };
 
 /// Build a "clean" input snapshot that results in Active (all good).
@@ -44,6 +44,7 @@ fn clean_inputs(now_ms: u64) -> PolicyGuardInputs {
         open_permission_blocked_latch: false,
         evidence_chain_state: PolicyEvidenceState::Green,
         f1_cert_status: F1CertStatus::Valid,
+        basis_decision: PolicyBasisDecision::Normal,
         fee_model_cache_age_s: None,
         policy_age_sec: 60,
         enforced_profile: EnforcedProfile::Csp,

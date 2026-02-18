@@ -12,7 +12,7 @@
 //!
 //! Self-contained: no dependency on crate module tree; safe to include via #[path] in tests.
 
-#![allow(dead_code)]
+// NOTE: items not yet wired into the integration produce dead_code warnings intentionally.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};

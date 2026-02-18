@@ -59,7 +59,7 @@ pub struct MarketData {
 
 /// Safety override emitted by the Cortex each tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CortexOverride {
+pub enum CortexSignal {
     /// No override — market conditions within thresholds.
     None,
     /// Force ReduceOnly for `cooldown_s` seconds.
@@ -68,18 +68,18 @@ pub enum CortexOverride {
     ForceKill,
 }
 
-impl CortexOverride {
+impl CortexSignal {
     /// Returns the severity level for aggregation (higher = more severe).
     fn severity(&self) -> u8 {
         match self {
-            CortexOverride::None => 0,
-            CortexOverride::ForceReduceOnly { .. } => 1,
-            CortexOverride::ForceKill => 2,
+            CortexSignal::None => 0,
+            CortexSignal::ForceReduceOnly { .. } => 1,
+            CortexSignal::ForceKill => 2,
         }
     }
 
     /// Returns the more severe of two overrides (ForceKill > ForceReduceOnly > None).
-    pub fn max_severity(a: CortexOverride, b: CortexOverride) -> CortexOverride {
+    pub fn max_severity(a: CortexSignal, b: CortexSignal) -> CortexSignal {
         if a.severity() >= b.severity() { a } else { b }
     }
 }
@@ -172,7 +172,7 @@ impl CortexMonitor {
     ///   3. DVOL jump >= dvol_jump_pct within dvol_jump_window_s → ForceReduceOnly
     ///   4. spread > spread_max_bps OR depth < depth_min → ForceReduceOnly
     ///   5. Otherwise → None
-    pub fn evaluate(&mut self, data: MarketData, config: &CortexConfig) -> CortexOverride {
+    pub fn evaluate(&mut self, data: MarketData, config: &CortexConfig) -> CortexSignal {
         // Step 1: Fail-closed on missing inputs
         let dvol = match data.dvol {
             Some(v) => v,
@@ -183,7 +183,7 @@ impl CortexMonitor {
                 self.spread_kill_window.trip_start_ms = Option::None;
                 self.depth_kill_window.trip_start_ms = Option::None;
                 self.dvol_history.clear();
-                return CortexOverride::ForceReduceOnly {
+                return CortexSignal::ForceReduceOnly {
                     cooldown_s: config.spread_depth_cooldown_s,
                 };
             }
@@ -196,7 +196,7 @@ impl CortexMonitor {
                 self.spread_kill_window.trip_start_ms = Option::None;
                 self.depth_kill_window.trip_start_ms = Option::None;
                 self.dvol_history.clear();
-                return CortexOverride::ForceReduceOnly {
+                return CortexSignal::ForceReduceOnly {
                     cooldown_s: config.spread_depth_cooldown_s,
                 };
             }
@@ -209,7 +209,7 @@ impl CortexMonitor {
                 self.spread_kill_window.trip_start_ms = Option::None;
                 self.depth_kill_window.trip_start_ms = Option::None;
                 self.dvol_history.clear();
-                return CortexOverride::ForceReduceOnly {
+                return CortexSignal::ForceReduceOnly {
                     cooldown_s: config.spread_depth_cooldown_s,
                 };
             }
@@ -217,7 +217,9 @@ impl CortexMonitor {
 
         let now_ms = data.now_ms;
 
-        // Step 2: Update DVOL history, prune samples outside the window
+        // Step 2: Update DVOL history, prune samples outside the window.
+        // Hard cap prevents unbounded growth if `now_ms` doesn't advance between ticks
+        // (same-millisecond calls or a stale monotonic source).
         self.dvol_history.push(DvolSample {
             dvol,
             ts_ms: now_ms,
@@ -225,6 +227,12 @@ impl CortexMonitor {
         let window_ms = config.dvol_jump_window_s * 1_000;
         self.dvol_history
             .retain(|s| now_ms.saturating_sub(s.ts_ms) <= window_ms);
+        // Safety cap: at most 10 samples/s × window_s. Removes oldest if still over limit.
+        let max_samples = (config.dvol_jump_window_s as usize).saturating_mul(10).max(128);
+        if self.dvol_history.len() > max_samples {
+            let drain = self.dvol_history.len() - max_samples;
+            self.dvol_history.drain(..drain);
+        }
 
         // Step 3: Check kill window for spread and depth
         let spread_kill_exceeds = spread_bps >= config.spread_kill_bps;
@@ -243,13 +251,13 @@ impl CortexMonitor {
 
         if spread_kill_tripped || depth_kill_tripped {
             self.counters.force_kill_total += 1;
-            return CortexOverride::ForceKill;
+            return CortexSignal::ForceKill;
         }
 
         // Step 4: Check DVOL jump within window
         if self.check_dvol_jump(dvol, now_ms, config) {
             self.counters.force_reduce_only_total += 1;
-            return CortexOverride::ForceReduceOnly {
+            return CortexSignal::ForceReduceOnly {
                 cooldown_s: config.dvol_cooldown_s,
             };
         }
@@ -260,12 +268,12 @@ impl CortexMonitor {
 
         if spread_ro_exceeds || depth_ro_exceeds {
             self.counters.force_reduce_only_total += 1;
-            return CortexOverride::ForceReduceOnly {
+            return CortexSignal::ForceReduceOnly {
                 cooldown_s: config.spread_depth_cooldown_s,
             };
         }
 
-        CortexOverride::None
+        CortexSignal::None
     }
 
     /// Check if DVOL has jumped >= dvol_jump_pct within dvol_jump_window_s ending at now_ms.
@@ -297,6 +305,23 @@ impl CortexMonitor {
     ///
     /// When ws_gap_flag is true (open_permission_blocked_latch active with WS gap reason),
     /// risk-increasing cancel/replace MUST be blocked.
+    ///
+    /// **Definition of `is_risk_increasing` per AT-119 (caller contract):**
+    /// A cancel/replace is "risk-increasing" if the replacement order results in larger
+    /// net exposure than the cancelled order — i.e., a larger quantity, a tighter limit
+    /// that is more likely to fill, or a switch from reduce-only to open. Specifically:
+    /// - Cancel + replace with larger qty on the OPEN side → risk-increasing.
+    /// - Cancel + replace with same or smaller qty → NOT risk-increasing.
+    /// - Cancel with no replacement → NOT risk-increasing (pure risk reduction).
+    /// - Cancel + replace a hedge (reduce_only=true) → NOT risk-increasing.
+    /// Callers must evaluate the net change in open interest commitment, not just
+    /// the absolute order size.
+    ///
+    /// **Supervision note (operational):** If kill mode is triggered by watchdog staleness,
+    /// recovery requires the watchdog process to restart and emit fresh heartbeats.
+    /// PolicyGuard has no automatic recovery mechanism — ensure the outermost system layer
+    /// runs a supervision tree (e.g. systemd restart policy) that restarts a crashed watchdog
+    /// rather than requiring manual operator intervention.
     pub fn evaluate_cancel_replace(
         ws_gap_flag: bool,
         is_risk_increasing: bool,
@@ -343,7 +368,7 @@ mod tests {
         let mut monitor = CortexMonitor::new();
         let config = CortexConfig::default();
         let data = make_data(0.80, 10.0, 500_000.0, 100_000);
-        assert_eq!(monitor.evaluate(data, &config), CortexOverride::None);
+        assert_eq!(monitor.evaluate(data, &config), CortexSignal::None);
     }
 
     #[test]
@@ -358,7 +383,7 @@ mod tests {
         };
         let result = monitor.evaluate(data, &config);
         assert!(
-            matches!(result, CortexOverride::ForceReduceOnly { .. }),
+            matches!(result, CortexSignal::ForceReduceOnly { .. }),
             "Missing dvol must trigger fail-closed ForceReduceOnly"
         );
         assert_eq!(monitor.counters.fail_closed_total, 1);
@@ -376,7 +401,7 @@ mod tests {
         };
         let result = monitor.evaluate(data, &config);
         assert!(
-            matches!(result, CortexOverride::ForceReduceOnly { .. }),
+            matches!(result, CortexSignal::ForceReduceOnly { .. }),
             "Missing spread must trigger fail-closed ForceReduceOnly"
         );
     }
@@ -393,7 +418,7 @@ mod tests {
         };
         let result = monitor.evaluate(data, &config);
         assert!(
-            matches!(result, CortexOverride::ForceReduceOnly { .. }),
+            matches!(result, CortexSignal::ForceReduceOnly { .. }),
             "Missing depth must trigger fail-closed ForceReduceOnly"
         );
     }

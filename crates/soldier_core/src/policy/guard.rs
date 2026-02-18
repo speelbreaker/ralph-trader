@@ -8,7 +8,9 @@
 //!
 //! Self-contained: no dependency on crate module tree; safe to include via #[path] in tests.
 
-#![allow(dead_code)]
+// NOTE: items in this module that are not yet wired into the integration (Slice 9+)
+// will produce dead_code warnings. That is intentional — remove the old module-wide
+// suppression so the compiler can flag unintegrated API surface.
 
 // ─── SHA-256 (pure Rust, no external deps) ────────────────────────────────────
 
@@ -145,8 +147,14 @@ fn write_canonical(buf: &mut Vec<u8>, val: &JsonValue) {
         }
         JsonValue::Int(n) => buf.extend_from_slice(n.to_string().as_bytes()),
         JsonValue::Float(f) => {
-            // Use repr that matches Python's json.dumps for numeric types.
-            let s = format!("{f}");
+            // Match Python's json.dumps behavior: whole-number floats get ".0" suffix (e.g. 1.0
+            // → "1.0"), fractional floats keep full precision (e.g. 1.5 → "1.5"). Without this,
+            // Rust's format!("{f}") produces "1" for 1.0_f64, causing a hash divergence vs Python.
+            let s = if f.is_finite() && f.fract() == 0.0 {
+                format!("{f:.1}")
+            } else {
+                format!("{f}")
+            };
             buf.extend_from_slice(s.as_bytes());
         }
         JsonValue::Str(s) => {
@@ -390,187 +398,99 @@ fn parse_f1_cert(json: &str) -> Option<F1CertFields> {
     })
 }
 
-/// Extract a string value from a flat JSON object by key. Handles basic escaping.
-fn extract_json_str(json: &str, key: &str) -> Option<String> {
-    let search = format!("\"{}\"", key);
-    let pos = json.find(&search)?;
-    let after_key = &json[pos + search.len()..];
-    // Find the colon.
-    let colon = after_key.find(':')? + 1;
-    let after_colon = after_key[colon..].trim_start();
-    if !after_colon.starts_with('"') {
-        return None;
-    }
-    // Find the closing quote (simple: no nested escape complexity needed for our fields).
-    let inner = &after_colon[1..];
-    let mut result = String::new();
-    let mut chars = inner.chars();
-    loop {
-        match chars.next()? {
-            '"' => break,
-            '\\' => match chars.next()? {
-                '"' => result.push('"'),
-                '\\' => result.push('\\'),
-                'n' => result.push('\n'),
-                'r' => result.push('\r'),
-                't' => result.push('\t'),
-                c => result.push(c),
-            },
-            c => result.push(c),
+/// Count unescaped double-quote characters in `s` (for JSON context detection).
+fn count_unescaped_quotes(s: &str) -> usize {
+    let mut count = 0;
+    let mut escaped = false;
+    for ch in s.chars() {
+        if escaped {
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == '"' {
+            count += 1;
         }
     }
-    Some(result)
+    count
+}
+
+/// Extract a string value from a flat JSON object by key. Handles basic escaping.
+///
+/// Uses unescaped-quote counting to verify that the found `"key"` is at an object-key
+/// position (even number of preceding quotes) rather than inside a string value.
+fn extract_json_str(json: &str, key: &str) -> Option<String> {
+    let search = format!("\"{}\"", key);
+    let mut start = 0;
+    loop {
+        let rel = json[start..].find(&search)?;
+        let pos = start + rel;
+        // If an even number of unescaped quotes precede `pos`, we are outside a string.
+        if count_unescaped_quotes(&json[..pos]) % 2 == 0 {
+            let after_key = &json[pos + search.len()..];
+            let colon = after_key.find(':')? + 1;
+            let after_colon = after_key[colon..].trim_start();
+            if !after_colon.starts_with('"') {
+                return None;
+            }
+            let inner = &after_colon[1..];
+            let mut result = String::new();
+            let mut chars = inner.chars();
+            loop {
+                match chars.next()? {
+                    '"' => break,
+                    '\\' => match chars.next()? {
+                        '"' => result.push('"'),
+                        '\\' => result.push('\\'),
+                        'n' => result.push('\n'),
+                        'r' => result.push('\r'),
+                        't' => result.push('\t'),
+                        c => result.push(c),
+                    },
+                    c => result.push(c),
+                }
+            }
+            return Some(result);
+        }
+        // Found inside a string value — skip past this match and keep searching.
+        start = pos + 1;
+    }
 }
 
 /// Extract a u64 value from a flat JSON object by key.
+///
+/// Parses the raw JSON numeric token as `f64` first, then converts to `u64`.
+/// This handles scientific notation (e.g. `1.7e12`) that a digit-only scan would
+/// misparse, which could cause `generated_ts_ms` to appear as epoch-ms = 1 and
+/// permanently trigger `F1CertStatus::Stale`.
 fn extract_json_u64(json: &str, key: &str) -> Option<u64> {
     let search = format!("\"{}\"", key);
-    let pos = json.find(&search)?;
-    let after_key = &json[pos + search.len()..];
-    let colon = after_key.find(':')? + 1;
-    let after_colon = after_key[colon..].trim_start();
-    // Read digits.
-    let digits: String = after_colon
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    if digits.is_empty() {
-        return None;
-    }
-    digits.parse().ok()
-}
-
-/// Configuration for the BunkerModeGuard.
-pub struct BunkerModeGuardConfig {
-    /// ws_event_lag_ms threshold for bunker entry (default 2000 ms)
-    pub bunker_jitter_threshold_ms: u64,
-    /// Stable period required before bunker exit (default 120 s)
-    pub bunker_exit_stable_s: u64,
-    /// deribit_http_p95_ms threshold (default 750 ms)
-    pub http_p95_threshold_ms: u64,
-    /// Consecutive http_p95 windows above threshold to trigger (default 3)
-    pub http_p95_consecutive_windows: u32,
-    /// request_timeout_rate threshold (default 0.02 = 2%)
-    pub timeout_rate_threshold: f64,
-}
-
-impl Default for BunkerModeGuardConfig {
-    fn default() -> Self {
-        Self {
-            bunker_jitter_threshold_ms: 2_000,
-            bunker_exit_stable_s: 120,
-            http_p95_threshold_ms: 750,
-            http_p95_consecutive_windows: 3,
-            timeout_rate_threshold: 0.02,
-        }
-    }
-}
-
-/// Jitter inputs for the BunkerModeGuard.
-pub struct BunkerJitterInputs {
-    pub ws_event_lag_ms: Option<u64>,
-    pub http_p95_ms: Option<u64>,
-    pub request_timeout_rate: Option<f64>,
-}
-
-/// BunkerModeGuard — PolicyGuard-compatible bunker mode evaluator (§2.3.2).
-///
-/// When `evaluate()` returns `true`:
-///   - PolicyGuard computes TradingMode::ReduceOnly (§2.2.3)
-///   - OPEN intents are blocked
-///   - CLOSE/HEDGE/CANCEL remain allowed (per §2.2.5)
-pub struct BunkerModeGuard {
-    bunker_mode_active: bool,
-    stable_start_ms: Option<u64>,
-    http_p95_consecutive: u32,
-    trip_total: u64,
-}
-
-impl BunkerModeGuard {
-    pub fn new() -> Self {
-        Self {
-            bunker_mode_active: false,
-            stable_start_ms: None,
-            http_p95_consecutive: 0,
-            trip_total: 0,
-        }
-    }
-
-    /// Evaluate bunker mode for the current tick. Returns true if bunker_mode_active.
-    pub fn evaluate(
-        &mut self,
-        inputs: BunkerJitterInputs,
-        now_ms: u64,
-        config: &BunkerModeGuardConfig,
-    ) -> bool {
-        let (ws_lag, http_p95, timeout_rate) = match (
-            inputs.ws_event_lag_ms,
-            inputs.http_p95_ms,
-            inputs.request_timeout_rate,
-        ) {
-            (Some(w), Some(h), Some(t)) => (w, h, t),
-            _ => {
-                let was_active = self.bunker_mode_active;
-                self.bunker_mode_active = true;
-                self.stable_start_ms = None;
-                if !was_active {
-                    self.trip_total += 1;
-                }
-                return true;
+    let mut start = 0;
+    loop {
+        let rel = json[start..].find(&search)?;
+        let pos = start + rel;
+        if count_unescaped_quotes(&json[..pos]) % 2 == 0 {
+            let after_key = &json[pos + search.len()..];
+            let colon = after_key.find(':')? + 1;
+            let after_colon = after_key[colon..].trim_start();
+            // Accept digits, '.', 'e', 'E', '+', '-' to cover scientific notation.
+            let raw: String = after_colon
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || matches!(c, '.' | 'e' | 'E' | '+' | '-'))
+                .collect();
+            if raw.is_empty() {
+                return None;
             }
-        };
-
-        let ws_trip = ws_lag > config.bunker_jitter_threshold_ms;
-        let timeout_trip = timeout_rate > config.timeout_rate_threshold;
-
-        if http_p95 > config.http_p95_threshold_ms {
-            self.http_p95_consecutive = self.http_p95_consecutive.saturating_add(1);
-        } else {
-            self.http_p95_consecutive = 0;
+            // Parse as f64 first to handle e-notation, then cast to u64.
+            return raw.parse::<f64>().ok().map(|f| f as u64);
         }
-        let http_trip = self.http_p95_consecutive >= config.http_p95_consecutive_windows;
-
-        let any_trip = ws_trip || http_trip || timeout_trip;
-
-        if any_trip {
-            let was_active = self.bunker_mode_active;
-            self.bunker_mode_active = true;
-            self.stable_start_ms = None;
-            if !was_active {
-                self.trip_total += 1;
-            }
-            return true;
-        }
-
-        if self.bunker_mode_active {
-            let start = self.stable_start_ms.get_or_insert(now_ms);
-            let stable_ms = now_ms.saturating_sub(*start);
-            let required_ms = config.bunker_exit_stable_s * 1_000;
-            if stable_ms >= required_ms {
-                self.bunker_mode_active = false;
-                self.stable_start_ms = None;
-            }
-        }
-
-        self.bunker_mode_active
-    }
-
-    pub fn is_active(&self) -> bool {
-        self.bunker_mode_active
-    }
-
-    pub fn trip_total(&self) -> u64 {
-        self.trip_total
-    }
-}
-
-impl Default for BunkerModeGuard {
-    fn default() -> Self {
-        Self::new()
+        start = pos + 1;
     }
 }
 
 // ─── PolicyGuard Axis Resolver (§2.2.3) ──────────────────────────────────────
+// NOTE: The BunkerModeGuard (§2.3.2) lives in crates/soldier_core/src/risk/network_jitter.rs
+// as NetworkJitterMonitor. Use that canonical implementation; the duplicate that
+// previously lived here has been removed to prevent maintenance divergence.
 
 /// Profile for enforcement scoping (§0.Z.7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -663,6 +583,29 @@ pub enum CortexOverride {
 pub enum PolicyEvidenceState {
     Green,
     NotGreen,
+}
+
+/// BasisDecision input to PolicyGuard (from BasisMonitor §2.3.3).
+///
+/// The BasisMonitor emits a decision each tick. PolicyGuard consumes it:
+/// - `Normal`           → no contribution to axis
+/// - `ForceReduceOnly`  → SystemIntegrityAxis::Degraded (→ ReduceOnly)
+/// - `ForceKill`        → CapitalRiskAxis::Critical (→ Kill)
+///
+/// Integration pathway: call `BasisMonitor::evaluate()` each tick and map the result:
+/// ```ignore
+/// let bd = match basis_monitor.evaluate(prices, now_ms, &config) {
+///     BasisDecision::Normal               => PolicyBasisDecision::Normal,
+///     BasisDecision::ForceReduceOnly {..} => PolicyBasisDecision::ForceReduceOnly,
+///     BasisDecision::ForceKill            => PolicyBasisDecision::ForceKill,
+/// };
+/// inputs.basis_decision = bd;
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyBasisDecision {
+    Normal,
+    ForceReduceOnly,
+    ForceKill,
 }
 
 /// ModeReasonCode — all valid reason codes (§2.2.3.5, deterministic order).
@@ -784,7 +727,10 @@ impl Default for PolicyGuardConfig {
             rate_limit_kill_min_10028: 3,
             cancel_open_batch_max: 50,
             cancel_open_budget_ms: 200,
-            fee_model_hard_stale_s: u64::MAX, // disabled by default
+            // Default: 1 hour. Set to u64::MAX to disable (not recommended in production
+            // — a stale fee model means economics assumptions are wrong; 3600s gives a
+            // 1-hour grace period before ReduceOnly is forced per §4.2).
+            fee_model_hard_stale_s: 3_600,
         }
     }
 }
@@ -833,6 +779,9 @@ pub struct PolicyGuardInputs {
     pub evidence_chain_state: PolicyEvidenceState,
     /// F1 cert status from F1Gate.
     pub f1_cert_status: F1CertStatus,
+    /// BasisMonitor decision (§2.3.3): Normal | ForceReduceOnly | ForceKill.
+    /// ForceReduceOnly → SystemIntegrityAxis::Degraded; ForceKill → CapitalRiskAxis::Critical.
+    pub basis_decision: PolicyBasisDecision,
     /// Fee model cache age in seconds (§4.2). None = not tracked.
     pub fee_model_cache_age_s: Option<u64>,
     /// Policy age in seconds (derived from python_policy_generated_ts_ms).
@@ -867,7 +816,7 @@ pub fn resolve_trading_mode(
 
 /// Compute the CapitalRiskAxis from inputs (§2.2.3.2).
 fn compute_capital_axis(inputs: &PolicyGuardInputs, config: &PolicyGuardConfig) -> CapitalRiskAxis {
-    // CRITICAL: mm_util >= mm_util_kill OR risk_state == Kill OR cortex ForceKill
+    // CRITICAL: mm_util >= mm_util_kill OR risk_state == Kill OR cortex/basis ForceKill
     let mm_util_kill = inputs
         .mm_util
         .map(|v| v >= config.mm_util_kill)
@@ -875,6 +824,7 @@ fn compute_capital_axis(inputs: &PolicyGuardInputs, config: &PolicyGuardConfig) 
     if mm_util_kill
         || inputs.risk_state == PolicyRiskState::Kill
         || inputs.cortex_override == CortexOverride::ForceKill
+        || inputs.basis_decision == PolicyBasisDecision::ForceKill
     {
         return CapitalRiskAxis::Critical;
     }
@@ -936,13 +886,42 @@ fn critical_inputs_missing_or_stale(
     false
 }
 
-/// Compute the SystemIntegrityAxis from inputs (§2.2.3.2).
-fn compute_system_axis(
-    inputs: &PolicyGuardInputs,
-    config: &PolicyGuardConfig,
-) -> SystemIntegrityAxis {
-    // FAILING check (§2.2.3.1.2 confirmed kill predicates)
-    // Watchdog Kill confirmed: both heartbeat AND loop_tick stale
+// ─── Shared staleness predicate helpers ─────────────────────────────────────
+// These are extracted to avoid the duplication between compute_system_axis and
+// collect_mode_reasons, which previously re-derived the same values independently,
+// creating a risk of mode/reason divergence when thresholds changed.
+
+struct KillPredicates {
+    watchdog_heartbeat_stale: bool,
+    loop_tick_stale: bool,
+    disk_primary_trip: bool,
+    disk_secondary_confirmed: bool,
+    session_kill_active: bool,
+    count_10028_sufficient: bool,
+}
+
+impl KillPredicates {
+    fn watchdog_kill_confirmed(&self) -> bool {
+        self.watchdog_heartbeat_stale && self.loop_tick_stale
+    }
+    fn disk_kill_confirmed(&self) -> bool {
+        self.disk_primary_trip && self.disk_secondary_confirmed
+    }
+    fn session_kill_confirmed(&self) -> bool {
+        self.session_kill_active && self.count_10028_sufficient
+    }
+    fn watchdog_unconfirmed(&self) -> bool {
+        self.watchdog_heartbeat_stale && !self.loop_tick_stale
+    }
+    fn disk_unconfirmed(&self) -> bool {
+        self.disk_primary_trip && !self.disk_secondary_confirmed
+    }
+    fn session_unconfirmed(&self) -> bool {
+        self.session_kill_active && !self.count_10028_sufficient
+    }
+}
+
+fn compute_kill_predicates(inputs: &PolicyGuardInputs, config: &PolicyGuardConfig) -> KillPredicates {
     let watchdog_heartbeat_stale = inputs
         .watchdog_last_heartbeat_ts_ms
         .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)
@@ -951,51 +930,48 @@ fn compute_system_axis(
         .loop_tick_last_ts_ms
         .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)
         .unwrap_or(true); // missing = stale
-    let watchdog_kill_confirmed = watchdog_heartbeat_stale && loop_tick_stale;
-
-    // Disk Kill confirmed: primary >= kill AND secondary >= kill (both fresh)
     let disk_primary_trip = inputs
         .disk_used_pct
         .map(|v| v >= config.disk_kill_pct)
         .unwrap_or(false);
-    let disk_secondary_fresh_and_trip = {
-        let secondary_val = inputs.disk_used_pct_secondary;
-        let secondary_ts = inputs.disk_used_secondary_last_update_ts_ms;
-        match (secondary_val, secondary_ts) {
-            (Some(v), Some(ts)) => {
-                let fresh = inputs.now_ms.saturating_sub(ts) <= config.disk_used_max_age_ms;
-                fresh && v >= config.disk_kill_pct
-            }
-            (Some(v), None) => v >= config.disk_kill_pct, // no timestamp = treat as fresh
-            _ => false,
+    let disk_secondary_confirmed = match (
+        inputs.disk_used_pct_secondary,
+        inputs.disk_used_secondary_last_update_ts_ms,
+    ) {
+        (Some(v), Some(ts)) => {
+            let fresh = inputs.now_ms.saturating_sub(ts) <= config.disk_used_max_age_ms;
+            fresh && v >= config.disk_kill_pct
         }
+        // No timestamp: treat as stale/unconfirmed (requires explicit freshness).
+        _ => false,
     };
-    let disk_kill_confirmed = disk_primary_trip && disk_secondary_fresh_and_trip;
-
-    // Session Termination Kill confirmed: flag AND 10028_count >= min
     let session_kill_active = inputs.rate_limit_session_kill_active.unwrap_or(false);
     let count_10028_sufficient = inputs
         .count_10028_5m
         .map(|c| c >= config.rate_limit_kill_min_10028)
         .unwrap_or(false);
-    let session_kill_confirmed = session_kill_active && count_10028_sufficient;
+    KillPredicates {
+        watchdog_heartbeat_stale,
+        loop_tick_stale,
+        disk_primary_trip,
+        disk_secondary_confirmed,
+        session_kill_active,
+        count_10028_sufficient,
+    }
+}
 
-    if watchdog_kill_confirmed || disk_kill_confirmed || session_kill_confirmed {
+/// Compute the SystemIntegrityAxis from inputs (§2.2.3.2).
+fn compute_system_axis(
+    inputs: &PolicyGuardInputs,
+    config: &PolicyGuardConfig,
+) -> SystemIntegrityAxis {
+    let kp = compute_kill_predicates(inputs, config);
+
+    if kp.watchdog_kill_confirmed() || kp.disk_kill_confirmed() || kp.session_kill_confirmed() {
         return SystemIntegrityAxis::Failing;
     }
 
     // DEGRADED checks (§2.2.3.2)
-    // - risk_state in {Degraded, Maintenance}
-    // - emergency_reduceonly_active
-    // - open_permission_blocked_latch
-    // - EvidenceChainState != GREEN (only when enforced_profile != CSP)
-    // - F1_CERT invalid/missing/stale/FAIL
-    // - cortex_override == ForceReduceOnly
-    // - fee_model_cache_age_s > fee_model_hard_stale_s
-    // - policy_age_sec > max_policy_age_sec
-    // - Any critical input missing/stale (§2.2.1.1)
-    // - Unconfirmed kills (watchdog/disk/session each partially true)
-
     let risk_degraded = matches!(
         inputs.risk_state,
         PolicyRiskState::Degraded | PolicyRiskState::Maintenance
@@ -1010,14 +986,10 @@ fn compute_system_axis(
         .unwrap_or(false);
     let policy_stale = inputs.policy_age_sec > config.max_policy_age_sec;
     let critical_missing = critical_inputs_missing_or_stale(inputs, config);
-
-    // Unconfirmed kills:
-    // Watchdog unconfirmed: heartbeat stale but loop_tick fresh (or vice versa — only one stale)
-    let watchdog_unconfirmed = watchdog_heartbeat_stale && !loop_tick_stale;
-    // Disk unconfirmed: primary >= kill but secondary is not confirmed
-    let disk_unconfirmed = disk_primary_trip && !disk_secondary_fresh_and_trip;
-    // Session unconfirmed: flag active but count insufficient
-    let session_unconfirmed = session_kill_active && !count_10028_sufficient;
+    let basis_trips = matches!(
+        inputs.basis_decision,
+        PolicyBasisDecision::ForceReduceOnly | PolicyBasisDecision::ForceKill
+    );
 
     if risk_degraded
         || inputs.emergency_reduceonly_active
@@ -1025,12 +997,13 @@ fn compute_system_axis(
         || evidence_not_green
         || f1_invalid
         || cortex_reduce
+        || basis_trips
         || fee_stale
         || policy_stale
         || critical_missing
-        || watchdog_unconfirmed
-        || disk_unconfirmed
-        || session_unconfirmed
+        || kp.watchdog_unconfirmed()
+        || kp.disk_unconfirmed()
+        || kp.session_unconfirmed()
     {
         return SystemIntegrityAxis::Degraded;
     }
@@ -1047,23 +1020,17 @@ fn collect_mode_reasons(
     config: &PolicyGuardConfig,
 ) -> Vec<ModeReasonCode> {
     let mut reasons: Vec<ModeReasonCode> = Vec::new();
+    // Use the shared predicate helper to avoid re-deriving the same values independently
+    // (which previously risked mode/reason divergence when threshold logic changed).
+    let kp = compute_kill_predicates(inputs, config);
 
     match mode {
         PolicyTradingMode::Active => {
             // Active → mode_reasons MUST be []
         }
         PolicyTradingMode::Kill => {
-            // Collect Kill-tier reasons
             // 1. KILL_WATCHDOG_HEARTBEAT_STALE (confirmed: both stale)
-            let watchdog_heartbeat_stale = inputs
-                .watchdog_last_heartbeat_ts_ms
-                .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)
-                .unwrap_or(true);
-            let loop_tick_stale = inputs
-                .loop_tick_last_ts_ms
-                .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)
-                .unwrap_or(true);
-            if watchdog_heartbeat_stale && loop_tick_stale {
+            if kp.watchdog_kill_confirmed() {
                 reasons.push(ModeReasonCode::KillWatchdogHeartbeatStale);
             }
             // 2. KILL_RISKSTATE_KILL
@@ -1079,42 +1046,21 @@ fn collect_mode_reasons(
                 reasons.push(ModeReasonCode::KillMarginMmUtilCritical);
             }
             // 4. KILL_RATE_LIMIT_SESSION_TERMINATION
-            let session_active = inputs.rate_limit_session_kill_active.unwrap_or(false);
-            let count_ok = inputs
-                .count_10028_5m
-                .map(|c| c >= config.rate_limit_kill_min_10028)
-                .unwrap_or(false);
-            if session_active && count_ok {
+            if kp.session_kill_confirmed() {
                 reasons.push(ModeReasonCode::KillRateLimitSessionTermination);
             }
             // 5. KILL_DISK_WATERMARK_KILL
-            let disk_primary_trip = inputs
-                .disk_used_pct
-                .map(|v| v >= config.disk_kill_pct)
-                .unwrap_or(false);
-            let disk_secondary_trip = {
-                match (
-                    inputs.disk_used_pct_secondary,
-                    inputs.disk_used_secondary_last_update_ts_ms,
-                ) {
-                    (Some(v), Some(ts)) => {
-                        inputs.now_ms.saturating_sub(ts) <= config.disk_used_max_age_ms
-                            && v >= config.disk_kill_pct
-                    }
-                    (Some(v), None) => v >= config.disk_kill_pct,
-                    _ => false,
-                }
-            };
-            if disk_primary_trip && disk_secondary_trip {
+            if kp.disk_kill_confirmed() {
                 reasons.push(ModeReasonCode::KillDiskWatermarkKill);
             }
             // 6. KILL_CORTEX_FORCE_KILL
-            if inputs.cortex_override == CortexOverride::ForceKill {
+            if inputs.cortex_override == CortexOverride::ForceKill
+                || inputs.basis_decision == PolicyBasisDecision::ForceKill
+            {
                 reasons.push(ModeReasonCode::KillCortexForceKill);
             }
         }
         PolicyTradingMode::ReduceOnly => {
-            // Collect ReduceOnly-tier reasons
             // 1. REDUCEONLY_RISKSTATE_MAINTENANCE
             if inputs.risk_state == PolicyRiskState::Maintenance {
                 reasons.push(ModeReasonCode::ReduceOnlyRiskstateMaintenance);
@@ -1141,8 +1087,10 @@ fn collect_mode_reasons(
             {
                 reasons.push(ModeReasonCode::ReduceOnlyEvidenceChainNotGreen);
             }
-            // 7. REDUCEONLY_CORTEX_FORCE_REDUCE_ONLY
-            if inputs.cortex_override == CortexOverride::ForceReduceOnly {
+            // 7. REDUCEONLY_CORTEX_FORCE_REDUCE_ONLY (also covers basis ForceReduceOnly)
+            if inputs.cortex_override == CortexOverride::ForceReduceOnly
+                || inputs.basis_decision == PolicyBasisDecision::ForceReduceOnly
+            {
                 reasons.push(ModeReasonCode::ReduceOnlyCortexForceReduceOnly);
             }
             // 8. REDUCEONLY_FEE_MODEL_HARD_STALE
@@ -1174,45 +1122,15 @@ fn collect_mode_reasons(
                 reasons.push(ModeReasonCode::ReduceOnlyInputMissingOrStale);
             }
             // 13. REDUCEONLY_WATCHDOG_UNCONFIRMED
-            let watchdog_heartbeat_stale = inputs
-                .watchdog_last_heartbeat_ts_ms
-                .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)
-                .unwrap_or(true);
-            let loop_tick_stale = inputs
-                .loop_tick_last_ts_ms
-                .map(|ts| inputs.now_ms.saturating_sub(ts) > config.watchdog_kill_s * 1_000)
-                .unwrap_or(true);
-            if watchdog_heartbeat_stale && !loop_tick_stale {
+            if kp.watchdog_unconfirmed() {
                 reasons.push(ModeReasonCode::ReduceOnlyWatchdogUnconfirmed);
             }
             // 14. REDUCEONLY_DISK_KILL_UNCONFIRMED
-            let disk_primary_trip = inputs
-                .disk_used_pct
-                .map(|v| v >= config.disk_kill_pct)
-                .unwrap_or(false);
-            let disk_secondary_trip = {
-                match (
-                    inputs.disk_used_pct_secondary,
-                    inputs.disk_used_secondary_last_update_ts_ms,
-                ) {
-                    (Some(v), Some(ts)) => {
-                        inputs.now_ms.saturating_sub(ts) <= config.disk_used_max_age_ms
-                            && v >= config.disk_kill_pct
-                    }
-                    (Some(v), None) => v >= config.disk_kill_pct,
-                    _ => false,
-                }
-            };
-            if disk_primary_trip && !disk_secondary_trip {
+            if kp.disk_unconfirmed() {
                 reasons.push(ModeReasonCode::ReduceOnlyDiskKillUnconfirmed);
             }
             // 15. REDUCEONLY_SESSION_KILL_UNCONFIRMED
-            let session_active = inputs.rate_limit_session_kill_active.unwrap_or(false);
-            let count_ok = inputs
-                .count_10028_5m
-                .map(|c| c >= config.rate_limit_kill_min_10028)
-                .unwrap_or(false);
-            if session_active && !count_ok {
+            if kp.session_unconfirmed() {
                 reasons.push(ModeReasonCode::ReduceOnlySessionKillUnconfirmed);
             }
         }

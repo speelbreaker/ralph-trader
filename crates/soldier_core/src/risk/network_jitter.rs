@@ -6,7 +6,7 @@
 //!
 //! Self-contained: no dependency on crate module tree; safe to include via #[path] in tests.
 
-#![allow(dead_code)]
+// NOTE: items not yet wired into the integration produce dead_code warnings intentionally.
 
 /// Configuration for the Network Jitter Monitor.
 ///
@@ -80,6 +80,12 @@ impl NetworkJitterMonitor {
     /// Evaluate bunker mode rules for the current tick.
     ///
     /// Returns `true` if bunker mode is (or remains) active.
+    ///
+    /// **`now_ms` must be monotonically non-decreasing** across calls. If `now_ms`
+    /// decreases (e.g. after a system restart with a non-monotonic clock), the stable-exit
+    /// timer (`saturating_sub`) silently resets to zero, keeping the monitor in bunker mode
+    /// indefinitely. Callers should use a monotonic clock source (e.g. `Instant`) and
+    /// convert to milliseconds rather than using wall-clock `SystemTime`.
     ///
     /// Rules per §2.3.2:
     /// 1. Any missing/uncomputable metric → bunker entry (fail-closed)

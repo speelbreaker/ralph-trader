@@ -11,7 +11,25 @@
 //!
 //! Self-contained: safe to include via #[path] in tests.
 
-#![allow(dead_code)]
+// NOTE: items not yet wired into the integration produce dead_code warnings intentionally.
+
+/// Enforcement profile — determines whether EvidenceGuard is active.
+/// Using an enum prevents typo-based bypasses (e.g. "csp" vs "CSP").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvidenceEnforcedProfile {
+    /// Contract Safety Profile only — EvidenceGuard is NOT enforced.
+    Csp,
+    /// General Operational Profile — EvidenceGuard IS enforced.
+    Gop,
+    /// Full profile — EvidenceGuard IS enforced.
+    Full,
+}
+
+impl EvidenceEnforcedProfile {
+    pub fn is_csp(&self) -> bool {
+        matches!(self, EvidenceEnforcedProfile::Csp)
+    }
+}
 
 /// EvidenceChainState as evaluated per tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,8 +67,8 @@ pub struct EvidenceGuardInputs {
     pub parquet_queue_capacity: Option<u64>,
     /// Timestamp of last counter update (ms) for freshness check.
     pub counters_last_update_ts_ms: Option<u64>,
-    /// Profile ("CSP", "GOP", "FULL").
-    pub enforced_profile: String,
+    /// Enforcement profile. Csp → guard not enforced; Gop/Full → enforced.
+    pub enforced_profile: EvidenceEnforcedProfile,
 }
 
 /// Configuration for EvidenceGuard.
@@ -165,7 +183,7 @@ impl EvidenceGuard {
         inputs: &EvidenceGuardInputs,
         config: &EvidenceGuardConfig,
     ) -> EvidenceGuardDecision {
-        if inputs.enforced_profile == "CSP" {
+        if inputs.enforced_profile.is_csp() {
             return EvidenceGuardDecision::NotEnforced;
         }
 

@@ -21,7 +21,7 @@
 mod cortex;
 
 use cortex::{
-    CancelReplacePermission, CortexConfig, CortexMonitor, CortexOverride, MarketData,
+    CancelReplacePermission, CortexConfig, CortexMonitor, CortexSignal, MarketData,
     compute_depth_top_n,
 };
 
@@ -43,14 +43,14 @@ fn test_at_231_dvol_jump_triggers_reduceonly() {
     // Tick 1: dvol = 0.80 at T=0
     let data1 = make_data(0.80, 10.0, 500_000.0, 0);
     let result1 = monitor.evaluate(data1, &config);
-    assert_eq!(result1, CortexOverride::None, "No jump yet");
+    assert_eq!(result1, CortexSignal::None, "No jump yet");
 
     // Tick 2: dvol = 0.90 at T=30s (within 60s window), jump = 12.5% (unambiguous >= 10%)
     let data2 = make_data(0.90, 10.0, 500_000.0, 30_000);
     let result2 = monitor.evaluate(data2, &config);
     assert_eq!(
         result2,
-        CortexOverride::ForceReduceOnly { cooldown_s: 300 },
+        CortexSignal::ForceReduceOnly { cooldown_s: 300 },
         "AT-231: 12.5% DVOL jump within 60s must trigger ForceReduceOnly with dvol_cooldown_s=300"
     );
 }
@@ -74,7 +74,7 @@ fn test_at_045_spread_kill_triggers_forcekill() {
         if i == 10 {
             assert_eq!(
                 result,
-                CortexOverride::ForceKill,
+                CortexSignal::ForceKill,
                 "AT-045: spread >= spread_kill_bps for kill_window must trigger ForceKill"
             );
         }
@@ -100,7 +100,7 @@ fn test_at_045_depth_kill_triggers_forcekill() {
         if i == 10 {
             assert_eq!(
                 result,
-                CortexOverride::ForceKill,
+                CortexSignal::ForceKill,
                 "AT-045: depth <= depth_kill_min for kill_window must trigger ForceKill"
             );
         }
@@ -136,16 +136,16 @@ fn test_at_119_ws_gap_allows_risk_reducing_cancel_replace() {
 /// AT-418: ForceKill wins over ForceReduceOnly in aggregation
 #[test]
 fn test_at_418_forcekill_wins_aggregation() {
-    let kill = CortexOverride::ForceKill;
-    let ro = CortexOverride::ForceReduceOnly { cooldown_s: 120 };
+    let kill = CortexSignal::ForceKill;
+    let ro = CortexSignal::ForceReduceOnly { cooldown_s: 120 };
     assert_eq!(
-        CortexOverride::max_severity(kill, ro),
-        CortexOverride::ForceKill,
+        CortexSignal::max_severity(kill, ro),
+        CortexSignal::ForceKill,
         "AT-418: ForceKill must win over ForceReduceOnly in max_severity"
     );
     assert_eq!(
-        CortexOverride::max_severity(ro, kill),
-        CortexOverride::ForceKill,
+        CortexSignal::max_severity(ro, kill),
+        CortexSignal::ForceKill,
         "AT-418: Order of args must not matter"
     );
 }
@@ -194,7 +194,7 @@ fn test_cortex_spread_max_bps_forces_reduceonly() {
     let result = monitor.evaluate(data, &config);
     assert_eq!(
         result,
-        CortexOverride::ForceReduceOnly {
+        CortexSignal::ForceReduceOnly {
             cooldown_s: config.spread_depth_cooldown_s
         },
         "AT-284: spread=26 > spread_max_bps=25 must trigger ForceReduceOnly"
@@ -211,7 +211,7 @@ fn test_cortex_depth_min_forces_reduceonly() {
     let result = monitor.evaluate(data, &config);
     assert_eq!(
         result,
-        CortexOverride::ForceReduceOnly {
+        CortexSignal::ForceReduceOnly {
             cooldown_s: config.spread_depth_cooldown_s
         },
         "AT-286: depth=299_999 < depth_min=300_000 must trigger ForceReduceOnly"
@@ -234,7 +234,7 @@ fn test_at_285_spread_kill_bps_triggers_forcekill() {
         if i == 10 {
             assert_eq!(
                 result,
-                CortexOverride::ForceKill,
+                CortexSignal::ForceKill,
                 "AT-285: spread >= spread_kill_bps for kill_window must trigger ForceKill"
             );
         }
@@ -257,7 +257,7 @@ fn test_at_288_depth_kill_min_triggers_forcekill() {
         if i == 10 {
             assert_eq!(
                 result,
-                CortexOverride::ForceKill,
+                CortexSignal::ForceKill,
                 "AT-288: depth <= depth_kill_min for kill_window must trigger ForceKill"
             );
         }
@@ -281,7 +281,7 @@ fn test_at_289_kill_window_threshold() {
         if i == 9 {
             assert_ne!(
                 result,
-                CortexOverride::ForceKill,
+                CortexSignal::ForceKill,
                 "AT-289: must not trip at 9s (window is 10s)"
             );
         }
@@ -293,7 +293,7 @@ fn test_at_289_kill_window_threshold() {
     let result = monitor.evaluate(data, &config);
     assert_eq!(
         result,
-        CortexOverride::ForceKill,
+        CortexSignal::ForceKill,
         "AT-289: must trip at 10s (== kill window)"
     );
 }
@@ -313,7 +313,7 @@ fn test_at_290_dvol_jump_pct_triggers_reduceonly() {
     let result = monitor.evaluate(data2, &config);
     assert_eq!(
         result,
-        CortexOverride::ForceReduceOnly { cooldown_s: 300 },
+        CortexSignal::ForceReduceOnly { cooldown_s: 300 },
         "AT-290: DVOL jump >= 10% must trigger ForceReduceOnly with cooldown_s=dvol_cooldown_s=300"
     );
 }
@@ -333,7 +333,7 @@ fn test_at_291_dvol_jump_window_boundary() {
         let result = monitor.evaluate(data2, &config);
         assert_ne!(
             result,
-            CortexOverride::ForceReduceOnly { cooldown_s: 300 },
+            CortexSignal::ForceReduceOnly { cooldown_s: 300 },
             "AT-291: DVOL jump over 61s must NOT trigger (outside 60s window)"
         );
     }
@@ -348,7 +348,7 @@ fn test_at_291_dvol_jump_window_boundary() {
         let result = monitor.evaluate(data2, &config);
         assert_eq!(
             result,
-            CortexOverride::ForceReduceOnly { cooldown_s: 300 },
+            CortexSignal::ForceReduceOnly { cooldown_s: 300 },
             "AT-291: DVOL jump over 59s must trigger (inside 60s window)"
         );
     }
@@ -377,7 +377,7 @@ fn test_forcekill_supersedes_forcereduceonly_same_tick() {
     let result = monitor.evaluate(data3, &config);
     assert_eq!(
         result,
-        CortexOverride::ForceKill,
+        CortexSignal::ForceKill,
         "ForceKill must supersede ForceReduceOnly when both triggered"
     );
 }
